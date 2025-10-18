@@ -1,0 +1,32 @@
+# --------------------
+# General ignores
+# --------------------
+.DS_Store
+.idea/
+*.log
+
+# --------------------
+# Security / Environment Variables
+# --------------------
+# 보안 민감 파일 (절대 깃에 올리면 안 됨)
+*.env
+backend/.env
+
+# --------------------
+# Python / Django / Conda
+# --------------------
+# 가상 환경 폴더
+backend/venv/
+backend/early_dot_env/ 
+backend/.conda/
+__pycache__/
+*.pyc
+
+# --------------------
+# Node / React
+# --------------------
+# Node 패키지 폴더 (매우 큼)
+frontend/node_modules/
+
+# 빌드 출력 폴더
+frontend/build/
