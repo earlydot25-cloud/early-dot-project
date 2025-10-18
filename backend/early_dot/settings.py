@@ -31,7 +31,7 @@ environ.Env.read_env(
 
 
 # SECRET_KEY와 DEBUG를 환경 변수에서 가져옵니다.
-SECRET_KEY = env('Django-SECRET_KEY')
+SECRET_KEY = env('Django_SECRET_KEY')
 DEBUG = env('DEBUG')
 
 
