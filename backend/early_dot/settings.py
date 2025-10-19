@@ -63,6 +63,7 @@ AUTH_USER_MODEL = 'users.User'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware', # <--- 이 줄을 추가하거나 위치 조정
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -159,3 +160,37 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        # 💡 JWT 토큰을 기본 인증 방식으로 사용
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+}
+
+# -------------------------------------------------------------------
+# 💡 리액트 FE 연동을 위한 CORS 설정
+# -------------------------------------------------------------------
+
+# 모든 호스트를 허용합니다 (배포 시에는 특정 도메인으로 제한해야 합니다).
+CORS_ALLOW_ALL_ORIGINS = False
+
+# 💡 리액트 FE 개발 서버 주소 허용
+# (FE가 http://localhost:3000에서 실행된다고 가정)
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    # 💡 (선택 사항) 만약 BE와 FE가 동일한 도메인을 사용하지만 포트가 다르다면
+    # CORS_ALLOW_CREDENTIALS = True
+]
+
+# 💡 CSRF 보호를 위한 설정
+# 리액트가 Django CSRF 쿠키를 사용해야 한다면 필요합니다.
+# 현재 JWT를 사용하므로 필수는 아니지만, 세션 인증을 위해 추가할 수 있습니다.
+# CSRF_TRUSTED_ORIGINS = [
+#     'http://localhost:3000',
+# ]
