@@ -1,16 +1,27 @@
-// frontend/src/components/Layout.tsx (배치 예시)
-
 import React from 'react';
-import Nav from './Nav';           // 상단 Nav
-import BottomNav from './BottomNav'; // 하단 Nav
+import Nav from './Nav';
+import BottomNav from './BottomNav';
+import '../App.css'; // 💡 App.css를 import하여 스타일 적용
 
-const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const Layout: React.FC<React.PropsWithChildren> = ({ children }) => {
     return (
-        <div className="app-layout">
-            <Nav />          {/* 화면 상단에 위치 */}
-            <main>{children}</main> {/* 중앙 콘텐츠 */}
-            <BottomNav />    {/* 화면 하단에 위치 */}
+        // 💡 1. App 컨테이너 고정 (width: 375px, height: 812px)
+        <div className="app-container">
+
+            {/* Nav와 BottomNav는 이미 fixed 속성으로 고정됩니다. */}
+            <Nav />
+
+            {/* 💡 2. 메인 콘텐츠 영역: 스크롤 가능하게 만듭니다. */}
+            <main className="main-content">
+                {/* App.tsx에서 Routes가 이 {children} 자리에 들어옵니다. */}
+                <div style={{ padding: '20px' }}> {/* App.tsx에서 가져온 내부 패딩 */}
+                    {children}
+                </div>
+            </main>
+
+            <BottomNav />
         </div>
     );
 };
+
 export default Layout;
