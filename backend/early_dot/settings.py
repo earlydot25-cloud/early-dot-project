@@ -45,7 +45,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.sites',
     'rest_framework',      # DRF 기본
-    'drf_simplejwt',       # JWT 인증
+    'rest_framework_simplejwt',  # JWT 인증
     'corsheaders',        # CORS 설정을 위해 필요
 
     # 💡 새로 만든 앱 4개 등록
