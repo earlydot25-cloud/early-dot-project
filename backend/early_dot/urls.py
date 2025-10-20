@@ -30,5 +30,6 @@ urlpatterns = [
 
     # 2. React 라우팅: API가 아닌 모든 요청은 React의 index.html로 전달
     #    (정규식에서 'api/'로 시작하지 않는 모든 경로를 잡도록 수정)
-    re_path(r'^(?!api/).*$', TemplateView.as_view(template_name='index.html'), name='react_app'),
+    # 이거는 개발 후에 수정하는 것
+    #re_path(r'^(?!api/).*$', TemplateView.as_view(template_name='index.html'), name='react_app'),
 ]
