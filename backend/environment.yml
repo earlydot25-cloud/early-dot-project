@@ -1,10 +1,8 @@
 name: early_dot_env
 channels:
   - pytorch
-  - defaults
   - conda-forge
-  - https://repo.anaconda.com/pkgs/main
-  - https://repo.anaconda.com/pkgs/r
+  - defaults
 dependencies:
   - aom=3.5.0=h7ea286d_0
   - blas=1.0=openblas
@@ -159,6 +157,8 @@ dependencies:
       - idna==3.11
       - jmespath==1.0.1
       - mysqlclient==2.2.7
+      - npm==0.1.1
+      - optional-django==0.1.0
       - pillow==12.0.0
       - pydantic==2.12.3
       - pydantic-core==2.41.4
@@ -175,4 +175,4 @@ dependencies:
       - uvloop==0.22.1
       - watchfiles==1.1.1
       - websockets==15.0.1
-prefix: /opt/anaconda3/envs/early_dot_env
+prefix: /opt/miniconda3/envs/early_dot_env

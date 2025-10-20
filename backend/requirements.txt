@@ -26,9 +26,11 @@ MarkupSafe @ file:///private/var/folders/nz/j6p8yfhx1mv_0grj5xl4650h0000gp/T/abs
 mpmath @ file:///private/var/folders/k1/30mswbxs7r1g6zwn8y4fyt500000gp/T/abs_17iu6a8a3m/croot/mpmath_1690848269369/work
 mysqlclient==2.2.7
 networkx @ file:///private/var/folders/k1/30mswbxs7r1g6zwn8y4fyt500000gp/T/abs_e6lt1dcyid/croot/networkx_1737040482044/work
+npm==0.1.1
 numpy @ file:///private/var/folders/k1/30mswbxs7r1g6zwn8y4fyt500000gp/T/abs_feerxblx2i/croot/numpy_and_numpy_base_1755590858426/work/dist/numpy-1.26.4-cp310-cp310-macosx_11_0_arm64.whl#sha256=9a72fea275d2ca42251ac234121964c16b0762205831e7b096e0db4284bcd151
 opencv-python==4.7.0
-Pillow @ file:///Users/runner/miniforge3/conda-bld/pillow_1675487373585/work
+optional-django==0.1.0
+pillow==12.0.0
 pycparser @ file:///opt/miniconda3/conda-bld/pycparser_1757496094255/work
 pydantic==2.12.3
 pydantic_core==2.41.4

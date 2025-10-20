@@ -8,3 +8,4 @@ export default ProfilePage;
 
 // 💡 TS1208 에러 해결을 위한 추가 구문: 빈 export를 추가하여 모듈임을 명시
 export {};
+// ㅎㅇ
