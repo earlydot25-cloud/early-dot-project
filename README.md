@@ -37,7 +37,7 @@
     # 2. 콘다 update  - 파일 내용의 변경이 있을 때만 사용
     conda env update -f unified_environment.yml
     
-    # 3. pip base 활성 
+    # 3. pip base 활성 - 자동으로 됌. 처음 시 바로 아래로
     pip install -r requirements_base.txt --upgrade # 업그레이드 
     
     # 3-1. 맥 사용자
