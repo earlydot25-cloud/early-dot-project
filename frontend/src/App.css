@@ -1,4 +1,14 @@
 /* frontend/src/App.css */
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.card {
+  padding: 2em;
+}
 
 /* 전체 앱 컨테이너 (Layout.tsx의 div) 스타일 */
 .app-container {
@@ -77,7 +87,5 @@
 }
 
 /* 💡 마우스 호버 및 포커스 시 색상을 파란색으로 변경 */
-.bottom-nav a:hover,
-.bottom-nav a:focus {
-    color: #1e90ff !important; /* 파란색으로 강제 변경 */
-}
+.bottom-nav a { color: #475569; }        /* 기본 (slate-600) */
+.bottom-nav a.active { color: #60A5FA; } /* 활성 (연한 파랑) */

@@ -1,52 +1,77 @@
-// frontend/src/components/BottomNav.tsx
-
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { FaHome, FaCamera, FaClipboardList, FaUser } from 'react-icons/fa';
+import { NavLink, useLocation } from 'react-router-dom';
+import { FaHome, FaCamera, FaClipboardList, FaUser, FaUserPlus } from 'react-icons/fa';
+import type { IconBaseProps } from 'react-icons';
 
-// 💡 react-icons 라이브러리 자체에서 IconType을 가져옵니다.
-import { IconType } from 'react-icons';
-// (Layout.tsx에서 App.css를 import했으므로 여기서는 추가 import가 필요하지 않습니다.)
+// 로그인 여부(임시): 실제 프로젝트 토큰 키에 맞춰 수정 가능
+const isAuthed = () =>
+  Boolean(
+    typeof window !== 'undefined' &&
+      (localStorage.getItem('accessToken') ||
+        localStorage.getItem('refreshToken') ||
+        localStorage.getItem('token') ||
+        localStorage.getItem('idToken'))
+  );
+
+// ---- react-icons 타입 안전 래퍼 ----
+type IconCmp = React.FC<IconBaseProps>;
+const HomeIcon: IconCmp = (props) => React.createElement(FaHome as any, props);
+const CameraIcon: IconCmp = (props) => React.createElement(FaCamera as any, props);
+const ClipIcon: IconCmp = (props) => React.createElement(FaClipboardList as any, props);
+const UserIcon: IconCmp = (props) => React.createElement(FaUser as any, props);
+const UserPlusIcon: IconCmp = (props) => React.createElement(FaUserPlus as any, props);
+// -----------------------------------
 
 const BottomNav: React.FC = () => {
-    // navItems 배열에 타입을 명시적으로 적용
-    const navItems: { path: string; label: string; Icon: IconType }[] = [
-        { path: '/', label: '홈', Icon: FaHome },
-        { path: '/diagnosis', label: '촬영', Icon: FaCamera },
-        { path: '/dashboard', label: '진단 내역', Icon: FaClipboardList },
-        { path: '/profile', label: '내 정보', Icon: FaUser },
-    ];
+  const location = useLocation();
+  const loggedIn = isAuthed();
 
-    return (
-        // 💡 1. 인라인 스타일을 제거하고 bottom-nav 클래스를 적용합니다.
-        <nav className="bottom-nav">
-            {navItems.map((item) => {
-                // 💡 item.Icon을 명시적으로 React.ElementType으로 변환하여 사용
-                const IconComponent = item.Icon as React.ElementType;
+  const iconStyle = { marginBottom: 3 };
 
-                return (
-                    <Link
-                        key={item.path}
-                        to={item.path}
-                        style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            textDecoration: 'none',
-                            // 💡 현재 경로에 따라 색상 변경 로직은 유지합니다.
-                            fontSize: '0.8em',
-                            padding: '5px'
-                        }}
-                    >
-                        {/* 💡 JSX 태그 형식으로 아이콘 컴포넌트 사용 */}
-                        <IconComponent size={24} style={{ marginBottom: '3px' }} />
+  const items: { key: string; path: string; label: string; Icon: IconCmp }[] = [
+    { key: 'home',      path: loggedIn ? '/home'      : '/',      label: '홈',       Icon: HomeIcon },
+    { key: 'diagnosis', path: loggedIn ? '/diagnosis' : '/',      label: '촬영',     Icon: CameraIcon },
+    { key: 'history',   path: loggedIn ? '/dashboard' : '/',      label: '진단 내역', Icon: ClipIcon },
+    {
+      key: 'profile',
+      path: loggedIn ? '/profile' : '/login',
+      label: loggedIn ? '내 정보' : '로그인',
+      Icon: loggedIn ? UserIcon : UserPlusIcon,
+    },
+  ];
 
-                        {item.label}
-                    </Link>
-                );
-            })}
-        </nav>
-    );
+  return (
+    <nav className="bottom-nav">
+      {items.map(({ key, path, label, Icon }) => (
+        <NavLink
+          key={key}
+          to={path}
+          // ✅ 활성 클래스 판정 로직
+          className={({ isActive }) => {
+            if (!loggedIn) {
+              // 로그아웃: 오직 홈(/)과 로그인(/login)만 선택 표시
+              if (label === '홈' && location.pathname === '/') return 'active';
+              if (label === '로그인' && location.pathname === '/login') return 'active';
+              return undefined;
+            }
+            // 로그인: NavLink의 isActive 그대로 사용
+            return isActive ? 'active' : undefined;
+          }}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textDecoration: 'none',
+            fontSize: '0.8em',
+            padding: '5px',
+          }}
+        >
+          <Icon size={24} style={iconStyle} />
+          {label}
+        </NavLink>
+      ))}
+    </nav>
+  );
 };
 
 export default BottomNav;
