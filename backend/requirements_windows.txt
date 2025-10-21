@@ -1,0 +1,3 @@
+# requirements_windows.txt (Windows 전용)
+# Windows 콘솔에서 색상 출력을 지원하는 패키지
+colorama==0.4.6

@@ -1,0 +1,3 @@
+# requirements_macos.txt (Mac/Linux 전용)
+# Uvicorn의 고성능 비동기 이벤트 루프 (Unix 계열 OS 최적화)
+uvloop==0.22.1
