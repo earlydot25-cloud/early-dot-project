@@ -1,0 +1,24 @@
+name: early_dot_env
+channels:
+  - pytorch       # Mac 환경의 Pytorch 채널 (Mac/Linux)
+  - conda-forge   # 주요 패키지들의 안정적인 빌드 지원 (공통)
+  - defaults      # 기본 채널 (공통)
+dependencies:
+  # Conda 설치가 권장되는 핵심 시스템/바이너리 패키지
+  - python=3.10
+  - numpy
+  - pytorch
+  - torchvision
+  - torchaudio
+  - opencv        # Conda 빌드의 opencv (더 안정적)
+
+# ❗ PyTorch와의 충돌 해결을 위해 sympy 버전을 명시적으로 고정 ❗
+  - sympy=1.13.1  # 충돌하는 버전을 PyTorch 요구사항(1.13.1)으로 고정
+  - fsspec        # PyTorch가 요구하지만 Conda/Pip이 놓치기 쉬운 종속성
+
+# pip 환경 설정을 위해 pip 패키지 포함
+  - pip
+  - pip:
+    # 모든 OS에서 공통으로 필요한 핵심 패키지 목록을 설치합니다.
+    # 이 파일은 아래 2-1. requirements_base.txt 파일입니다.
+    - -r requirements_base.txt
