@@ -26,6 +26,8 @@
     ```bash
     cd backend
     
+   # 현재 거 제거 필요  # 본인 환경 이름 제거 하면 다시 아래 것으로 생김
+   conda env remove -n early_dot_env
     # 0.최초 환경 생성	
     conda env create -f unified_environment.yml
    
