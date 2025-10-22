@@ -53,7 +53,7 @@ class Doctors(models.Model):
     name = models.CharField(max_length=100)
     specialty = models.CharField(max_length=100, blank=True, null=True)
     hospital = models.CharField(max_length=100, blank=True, null=True)
-    cert_path = models.CharField(max_length=255)
+    cert_path = models.ImageField(upload_to='certs/', blank=True, null=True)
     status = models.CharField(max_length=20)
 
     class Meta:
