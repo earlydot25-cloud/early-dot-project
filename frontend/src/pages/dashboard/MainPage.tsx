@@ -197,7 +197,7 @@ const MainPage: React.FC = () => {
   useEffect(() => {
     const fetchMainData = async () => {
       // 💡 백엔드 URL을 정확히 맞춰주세요. (예: process.env.REACT_APP_API_BASE_URL + '/dashboard/main/')
-      const API_URL = '/dashboard/main/';
+      const API_URL = 'api/dashboard/main/';
 
       try {
         const response = await axios.get<MainDashboardData>(API_URL, {
