@@ -16,6 +16,12 @@ import os
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# 사용자가 올린 파일(사진, 인증서 등)이 저장되는 디렉토리의 절대 경로
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# MEDIA 파일을 처리하는 URL
+MEDIA_URL = '/media/'
+
 
 # .env 파일 위치를 기반으로 환경 설정 로드
 env = environ.Env(
