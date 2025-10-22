@@ -57,8 +57,17 @@ const CheckCircleIcon: IconCmp = (props) => React.createElement(FaCheckCircle as
 interface DiagnosisCardProps {
   data: DiagnosisResult; // 🔴 실제 데이터 타입 사용
 }
-
 const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data }) => {
+  // 💡 1. useNavigate 훅 호출
+  const navigate = useNavigate(); // DiagnosisCard 내부에서 호출
+
+  // 💡 2. 버튼 클릭 핸들러 추가
+  const handleViewResult = () => {
+    // ResultDetailPage.tsx와 연동 (예: /diagnosis/detail/1)
+    // data.id는 해당 진단 결과의 고유 ID입니다.
+    navigate(`/diagnosis/detail/${data.id}`);
+  };
+
   // 🔴 API 응답 데이터로 로직 수정
   const hasDoctorNote = data.followup_check && data.followup_check.doctor_note && data.followup_check.doctor_risk_level !== '소견 대기';
   const isRequesting = data.followup_check && data.followup_check.current_status === '요청중' && !hasDoctorNote;
@@ -139,7 +148,10 @@ const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data }) => {
             ))}
           </div>
 
-          <button className="py-2 px-3 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition duration-150">
+          <button
+            onClick={handleViewResult} // 💡 수정: 이젠 스코프 내부에 정의된 함수
+            className="py-2 px-3 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition duration-150"
+          >
             {isRequesting ? '요청 처리 대기' : '결과 열람'}
           </button>
         </div>

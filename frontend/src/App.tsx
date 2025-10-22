@@ -9,6 +9,7 @@ import LoginPage from './pages/auth/LoginPage';
 import BodySelectionPage from './pages/diagnosis/BodySelectionPage';
 import HistoryPage from './pages/dashboard/HistoryPage';
 import ProfilePage from './pages/dashboard/ProfilePage';
+import ResultDetailPage from './pages/diagnosis/ResultDetailPage';
 
 // 간단한 로그인 판별(토큰 키는 실제 프로젝트에 맞춰 추가/수정 가능)
 const isAuthed = () =>
@@ -44,16 +45,24 @@ const App: React.FC = () => {
           <Route path="/dashboard" element={<RequireAuth><ProfilePage /></RequireAuth>} />
           */}
 
-          {/* 🟢 로그인 필요 없이 접근 가능하도록 임시 라우트 🟢
-              현재 BottomNav 클릭 시 페이지 이동 테스트를 위해 사용됩니다. */}
-          <Route path="/home" element={<MainPage />} />
-          <Route path="/diagnosis" element={<BodySelectionPage />} />
-          <Route path="/dashboard" element={<HistoryPage />} />
-          <Route path="/dashboard" element={<ProfilePage />} />
-
-          {/* 인증 관련 */}
+          {/* 로그인 이전 랜딩 및 인증 관련 유지 */}
+          <Route path="/" element={<BeforeLoginPage />} />
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<LoginPage />} /> {/* 추후 SignupPage로 교체 */}
+          <Route path="/signup" element={<LoginPage />} />
+
+          {/* 🟢 핵심 수정: 임시 라우트 🟢 */}
+          <Route path="/home" element={<MainPage />} />
+
+          {/* 진단 시작 경로는 유지 */}
+          <Route path="/diagnosis" element={<BodySelectionPage />} />
+
+          {/* 대시보드 경로는 기능별로 분리 */}
+          <Route path="/dashboard/history" element={<HistoryPage />} />
+          <Route path="/dashboard/profile" element={<ProfilePage />} />
+
+          {/* 진단 상세 결과 페이지 경로는 ID를 받아야 함 (이전에 MainPage에서 설정한 경로와 일치) */}
+          <Route path="/diagnosis/detail/:id" element={<ResultDetailPage />} />
+
         </Routes>
       </Layout>
     </BrowserRouter>
