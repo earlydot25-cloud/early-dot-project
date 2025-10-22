@@ -111,7 +111,7 @@ class Photos(models.Model):
     # 🌟 수정된 부분 🌟
     # 3개의 CharField 대신 ImageField를 사용합니다.
     # 'uploads/'는 settings.py의 MEDIA_ROOT 하위 폴더를 의미합니다.
-    image = models.ImageField(upload_to='uploads/', blank=True, null=True)
+    storage_path = models.ImageField(upload_to='uploads/', blank=True, null=True)
 
     # (주석 처리) ImageField가 이 정보들을 자동으로 관리합니다.
     # folder_name = models.CharField(max_length=100)
@@ -147,7 +147,7 @@ class Results(models.Model):
     analysis_date = models.DateTimeField(auto_now_add=True)
     risk_level = models.CharField(max_length=10)
     class_probs = models.JSONField()
-    grad_cam_path = models.CharField(max_length=255)
+    grad_cam_path = models.ImageField(upload_to='cams/', blank=True, null=True)
     vlm_analysis_text = models.TextField(blank=True, null=True)
     disease = models.ForeignKey(
         DiseaseInfo,
