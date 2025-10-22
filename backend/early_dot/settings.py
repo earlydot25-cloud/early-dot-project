@@ -21,7 +21,7 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # MEDIA 파일을 처리하는 URL
 MEDIA_URL = '/media/'
-
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # .env 파일 위치를 기반으로 환경 설정 로드
 env = environ.Env(

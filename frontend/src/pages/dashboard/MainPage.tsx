@@ -95,10 +95,24 @@ const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data }) => {
         {/* 좌측: 환부 이미지 및 기본 정보 */}
         <div className="flex">
           {/* 환부 이미지 Placeholder */}
-          <div className="w-16 h-16 bg-yellow-300 rounded mr-3 flex items-center justify-center text-xs font-bold text-gray-800">
-            {/* 🔴 data.photo.storage_path를 사용하여 이미지 렌더링 예정 */}
-            Lesion Image
-          </div>
+          <div className="w-16 h-16 rounded mr-3 flex items-center justify-center overflow-hidden">
+              {/* 💡 수정된 부분: storage_path를 사용하여 이미지 렌더링 */}
+              {data.photo && data.photo.storage_path ? (
+                // data.photo 객체와 storage_path 필드가 존재할 경우 <img> 태그 사용
+                <img
+                  // 프론트엔드에서 API_URL을 '/api/dashboard/main/'로 설정했으므로,
+                  // storage_path는 이미지를 직접 가리키는 경로(예: /media/photos/1.jpg)여야 합니다.
+                  src={data.photo.storage_path}
+                  alt={`${data.disease.name_ko} 이미지`}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                // storage_path가 없을 경우 대체 UI 표시
+                <div className="w-full h-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-800">
+                  이미지 없음
+                </div>
+              )}
+            </div>
 
           <div className="text-sm">
             {/* AI 예측 병변 */}
