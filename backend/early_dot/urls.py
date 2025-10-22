@@ -26,9 +26,9 @@ urlpatterns = [
 
     # 1. API 라우팅 (API prefix만 사용)
     path('api/auth/', include('users.urls')),  # users 앱 (인증)
-    path('api/diag/', include('diagnosis.urls')),  # diagnosis 앱 (실시간 진단)
-    path('api/data/', include('dashboard.urls')),  # dashboard 앱 (기록 조회)
-    path('api/mng/', include('admin_tools.urls')),  # admin_tools 앱 (관리자)
+    path('api/diagnosis/', include('diagnosis.urls')),  # diagnosis 앱 (실시간 진단)
+    path('api/dashboard/', include('dashboard.urls')),  # dashboard 앱 (기록 조회)
+    path('api/admin_tools/', include('admin_tools.urls')),  # admin_tools 앱 (관리자)
 
     # 2. React 라우팅: API가 아닌 모든 요청은 React의 index.html로 전달
     #    (정규식에서 'api/'로 시작하지 않는 모든 경로를 잡도록 수정)

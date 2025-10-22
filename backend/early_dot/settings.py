@@ -168,14 +168,14 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        # 💡 JWT 토큰을 기본 인증 방식으로 사용
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
-    ),
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',
-    ),
+    # 🔴 이 부분을 임시로 주석 처리하거나 AllowAny로 변경
+    # 'DEFAULT_AUTHENTICATION_CLASSES': (
+    #     'rest_framework_simplejwt.authentication.JWTAuthentication',
+    # ),
+    'DEFAULT_PERMISSION_CLASSES': [
+        # 'rest_framework.permissions.IsAuthenticated', # 🚨 주석 처리 또는 제거
+        'rest_framework.permissions.AllowAny',  # 💡 임시로 AllowAny로 변경
+    ]
 }
 
 # -------------------------------------------------------------------
