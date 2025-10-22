@@ -29,12 +29,31 @@ const BottomNav: React.FC = () => {
   const iconStyle = { marginBottom: 3 };
 
   const items: { key: string; path: string; label: string; Icon: IconCmp }[] = [
-    { key: 'home',      path: loggedIn ? '/home'      : '/',      label: '홈',       Icon: HomeIcon },
-    { key: 'diagnosis', path: loggedIn ? '/diagnosis' : '/',      label: '촬영',     Icon: CameraIcon },
-    { key: 'history',   path: loggedIn ? '/dashboard' : '/',      label: '진단 내역', Icon: ClipIcon },
+    {
+      key: 'home',
+      // path: loggedIn ? '/home' : '/',      // 🔴 주석 처리: 로그인 여부 무시
+      path: '/home', // 로그인 여부와 무관하게 고정
+      label: '홈',
+      Icon: HomeIcon
+    },
+    {
+      key: 'diagnosis',
+      // path: loggedIn ? '/diagnosis' : '/',      // 🔴 주석 처리: 로그인 여부 무시
+      path: '/diagnosis', // 로그인 여부와 무관하게 고정
+      label: '촬영',
+      Icon: CameraIcon
+    },
+    {
+      key: 'history',
+      // path: loggedIn ? '/dashboard' : '/',      // 🔴 주석 처리: 로그인 여부 무시
+      path: '/dashboard', // 로그인 여부와 무관하게 고정
+      label: '진단 내역',
+      Icon: ClipIcon
+    },
     {
       key: 'profile',
-      path: loggedIn ? '/profile' : '/login',
+      // path: loggedIn ? '/profile' : '/login', // 🔴 주석 처리: 로그인 여부 무시
+      path: '/profile', // 로그인 여부와 무관하게 '/profile'로 고정
       label: loggedIn ? '내 정보' : '로그인',
       Icon: loggedIn ? UserIcon : UserPlusIcon,
     },
@@ -46,15 +65,16 @@ const BottomNav: React.FC = () => {
         <NavLink
           key={key}
           to={path}
-          // ✅ 활성 클래스 판정 로직
+          // ✅ 활성 클래스 판정 로직 수정
           className={({ isActive }) => {
-            if (!loggedIn) {
-              // 로그아웃: 오직 홈(/)과 로그인(/login)만 선택 표시
-              if (label === '홈' && location.pathname === '/') return 'active';
-              if (label === '로그인' && location.pathname === '/login') return 'active';
-              return undefined;
-            }
-            // 로그인: NavLink의 isActive 그대로 사용
+            // 🔴 로그아웃 상태일 때 특정 경로로 강제하던 로직 주석 처리
+            // if (!loggedIn) {
+            //   // 로그아웃: 오직 홈(/)과 로그인(/login)만 선택 표시
+            //   if (label === '홈' && location.pathname === '/') return 'active';
+            //   if (label === '로그인' && location.pathname === '/login') return 'active';
+            //   return undefined;
+            // }
+            // 로그인/로그아웃 여부와 무관하게 NavLink의 isActive 그대로 사용
             return isActive ? 'active' : undefined;
           }}
           style={{
