@@ -16,7 +16,7 @@ interface FollowUpCheckData {
 interface PhotoData {
   body_part: string;
   folder_name: string;
-  storage_path: string;
+  upload_storage_path: string;
   capture_date: string;
 }
 interface DiseaseData {
@@ -106,12 +106,12 @@ const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data }) => {
           {/* 환부 이미지 Placeholder */}
           <div className="w-16 h-16 rounded mr-3 flex items-center justify-center overflow-hidden">
               {/* 💡 수정된 부분: storage_path를 사용하여 이미지 렌더링 */}
-              {data.photo && data.photo.storage_path ? (
+              {data.photo && data.photo.upload_storage_path ? (
                 // data.photo 객체와 storage_path 필드가 존재할 경우 <img> 태그 사용
                 <img
                   // 프론트엔드에서 API_URL을 '/api/dashboard/main/'로 설정했으므로,
                   // storage_path는 이미지를 직접 가리키는 경로(예: /media/photos/1.jpg)여야 합니다.
-                  src={data.photo.storage_path}
+                  src={data.photo.upload_storage_path}
                   alt={`${data.disease.name_ko} 이미지`}
                   className="w-full h-full object-cover"
                 />
@@ -197,7 +197,7 @@ const MainPage: React.FC = () => {
   useEffect(() => {
     const fetchMainData = async () => {
       // 💡 백엔드 URL을 정확히 맞춰주세요. (예: process.env.REACT_APP_API_BASE_URL + '/dashboard/main/')
-      const API_URL = '/api/dashboard/main/';
+      const API_URL = 'api/dashboard/main/';
 
       try {
         const response = await axios.get<MainDashboardData>(API_URL, {
