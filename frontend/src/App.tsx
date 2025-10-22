@@ -6,7 +6,7 @@ import Layout from './components/Layout';
 import BeforeLoginPage from './pages/BeforeLoginPage';
 import MainPage from './pages/dashboard/MainPage';
 import LoginPage from './pages/auth/LoginPage';
-import BodySelectionPage from './pages/diagnosis/BodySelectionPage';
+import BodySelectionPage from './pages/diagnosis/CapturePage'; // 나중에 바꿔야함 BodySelectionPage로
 import HistoryPage from './pages/dashboard/HistoryPage';
 import ProfilePage from './pages/dashboard/ProfilePage';
 import ResultDetailPage from './pages/diagnosis/ResultDetailPage';
