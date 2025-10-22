@@ -14,7 +14,7 @@ class PhotosSerializer(serializers.ModelSerializer):
         # 🔴 모델명 Photos 사용
         model = Photos
         # MainPage에 필요한 Photos 필드만 정의합니다.
-        fields = ['body_part', 'folder_name', 'capture_date', 'storage_path']
+        fields = ['body_part', 'folder_name', 'capture_date', 'upload_storage_path']
 
 class DiseaseInfoSerializer(serializers.ModelSerializer):
     """ResultMainSerializer에서 DiseaseInfo 정보를 중첩하기 위한 시리얼라이저"""
