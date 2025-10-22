@@ -20,6 +20,7 @@
    pip-compile requirements.in -o requirements_base.txt
 
    # 3. 변경된 파일(requirements.in, requirements_base.txt)을 Git에 커밋 후 공유
+   pip freeze > requirements_base.txt => 한 후 관리자한테 파일 전달 
    
    ```
 1. 환경 업데이트 적용 [팀원]
@@ -41,7 +42,7 @@
     # 2. 콘다 update  - 파일 내용의 변경이 있을 때만 사용
     conda env update -f unified_environment.yml
     
-    # 3. pip base 활성 - 자동으로 됌. 처음 시 바로 아래로
+    # 3. pip base 활성 - 자동으로 됌. 처음 시 바로 아래로 ### 이거 핍 업데이트 받기 
     pip install -r requirements_base.txt --upgrade # 업그레이드 
     
     # 3-1. 맥 사용자
@@ -86,7 +87,7 @@
 1.  프론트엔드 폴더로 이동 후 의존성 설치:
     ```bash
     cd frontend
-    # npm install #처음만 (최초 1회 또는 package.json 변경 시)
+    npm install #### npm 다운 받으면 이거 다시 해줘야 함  (최초 1회 또는 package.json 변경 시)
     npm start
     ```
 
