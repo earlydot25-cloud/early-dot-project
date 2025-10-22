@@ -18,6 +18,8 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.views.generic import TemplateView
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -33,3 +35,8 @@ urlpatterns = [
     # 이거는 개발 후에 수정하는 것
     #re_path(r'^(?!api/).*$', TemplateView.as_view(template_name='index.html'), name='react_app'),
 ]
+# *****************************************
+# 2. MEDIA 파일 서빙 설정 (DEBUG=True 일 때만)
+# *****************************************
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
