@@ -90,7 +90,7 @@ class PhotoUploadView(APIView):
                     {"error": f"Failed to save data: {str(e)}"},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
-
+            #테스트용
             # 저장이 성공하면, 저장된 객체의 상세 정보를 반환합니다.
             # (PhotoDetailSerializer를 사용해 더 많은 정보를 보여줄 수도 있습니다)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
