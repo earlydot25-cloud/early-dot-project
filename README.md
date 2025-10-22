@@ -63,6 +63,14 @@
    - 변경 된 앱만 migration 해도 됨 
     ```bash
     cd backend
+    # mysql 접속
+    mysql -u root -p # 이건 원하는 대로 
+    # db 지우고 다시 
+    DROP DATABASE early_dot_db;
+    # db 다시 생성 
+    CREATE DATABASE early_dot_db;
+   
+    # mysql 나와서 다시 ctrl+ d -> mysql 종료
     python manage.py makemigrations users
     python manage.py makemigrations diagnosis
     python manage.py makemigrations dashboard

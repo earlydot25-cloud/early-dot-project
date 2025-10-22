@@ -49,17 +49,17 @@ INSTALLED_APPS = [
     'corsheaders',        # CORS 설정을 위해 필요
 
     # 💡 새로 만든 앱 4개 등록
-    'users.apps.UsersConfig',
-    'diagnosis.apps.DiagnosisConfig',
-    'dashboard.apps.DashboardConfig',
-    'admin_tools.apps.AdminToolsConfig',
+    'users',
+    'diagnosis',
+    'dashboard',
+    'admin_tools',
 ]
 
 #SITE_ID 설정 추가 (django.contrib.sites를 사용하면 필수)
 SITE_ID = 1
 
 # 커스텀 유저 사용
-AUTH_USER_MODEL = 'users.User'
+AUTH_USER_MODEL = 'users.Users'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
