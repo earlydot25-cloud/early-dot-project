@@ -21,7 +21,6 @@ const isAuthed = () =>
   );
 
 // 보호 라우트: 미로그인 시 BeforeLoginPage로
-// 보호 라우트: 미로그인 시 BeforeLoginPage로
 type RequireAuthProps = { children: React.ReactElement };
 
 const RequireAuth: React.FC<RequireAuthProps> = ({ children }) => {
@@ -37,11 +36,20 @@ const App: React.FC = () => {
           {/* 로그인 이전 랜딩 */}
           <Route path="/" element={<BeforeLoginPage />} />
 
-          {/* 로그인 필요한 화면들 */}
-          <Route path="/home" element={<RequireAuth><MainPage /></RequireAuth>} />
+          {/* 🔴 보호 라우트 (RequireAuth 적용) - 주석 처리 🔴
+              로그인 기능 구현 후 필요할 때 주석을 해제하고 아래 임시 라우트를 삭제하세요. */}
+          {/* <Route path="/home" element={<RequireAuth><MainPage /></RequireAuth>} />
           <Route path="/diagnosis" element={<RequireAuth><BodySelectionPage /></RequireAuth>} />
-          <Route path="/dashboard" element={<RequireAuth><HistoryPage /></RequireAuth>} />
-          <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
+          <Route path="/dashboard" element={<RequireAuth><HistoryPage />/RequireAuth>}< />
+          <Route path="/dashboard" element={<RequireAuth><ProfilePage /></RequireAuth>} />
+          */}
+
+          {/* 🟢 로그인 필요 없이 접근 가능하도록 임시 라우트 🟢
+              현재 BottomNav 클릭 시 페이지 이동 테스트를 위해 사용됩니다. */}
+          <Route path="/home" element={<MainPage />} />
+          <Route path="/diagnosis" element={<BodySelectionPage />} />
+          <Route path="/dashboard" element={<HistoryPage />} />
+          <Route path="/dashboard" element={<ProfilePage />} />
 
           {/* 인증 관련 */}
           <Route path="/login" element={<LoginPage />} />
