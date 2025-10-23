@@ -7,7 +7,11 @@ import { FiArrowLeft, FiZap, FiZapOff, FiImage } from 'react-icons/fi';
 const MAX_STAGE_WIDTH = 430; // 예: 상/하단 네비가 430px max-width면 430으로
 // ===============================================================
 
+// ✅ 백엔드 업로드 엔드포인트 (urls.py 기준)
 const API_URL = 'http://127.0.0.1:8000/api/diagnosis/upload/';
+
+// 바디파트 기본값(임시) — 실제로는 신체부위 선택 탭에서 값 받아오면 교체
+const DEFAULT_BODY_PART = '머리/목'; // TODO: 신체부위 선택 화면 값으로 대체
 
 // 상/하단 네비 실제 높이를 측정하는 훅
 function useNavInsets() {
@@ -57,23 +61,23 @@ const styles: Record<string, React.CSSProperties> = {
   /** 화면 전체 래퍼 — 네비 폭과 동일하게 중앙에 stage를 배치 */
   outerWrapper: {
     position: 'fixed',
-    inset: 0,                 // top:0, right:0, bottom:0, left:0
+    inset: 0,
     display: 'flex',
-    justifyContent: 'center', // 중앙 정렬
+    justifyContent: 'center',
     alignItems: 'stretch',
-    background: 'transparent' // 검정색이 바깥으로 새는걸 방지(배경은 stage가 가짐)
+    background: 'transparent'
   },
 
   /** 실제 카메라 스테이지(네비 폭과 일치하도록 maxWidth 제한) */
   stage: {
     position: 'relative',
     width: '100%',
-    maxWidth: `${MAX_STAGE_WIDTH}px`, // ← 네비의 max-width와 동일하게
+    maxWidth: `${MAX_STAGE_WIDTH}px`,
     margin: '0 auto',
     backgroundColor: '#000',
     color: 'white',
-    overflow: 'hidden', // 내부 스크롤/넘침 방지
-    borderRadius: 12,   // 선택: 네비와 동일하게 라운드 주고싶으면 유지
+    overflow: 'hidden',
+    borderRadius: 12,
     fontFamily: 'system-ui, sans-serif',
   },
 
@@ -116,7 +120,7 @@ const CapturePage: React.FC = () => {
   const [torchOn, setTorchOn] = useState(false);
   const [guideOn, setGuideOn] = useState(true);
   const webcamRef = useRef<Webcam>(null);
-  const { top, bottom } = useNavInsets(); // ✅ 상/하단 네비 실제 높이
+  const { top, bottom } = useNavInsets();
 
   // 바디 스크롤 잠금
   useEffect(() => {
@@ -141,25 +145,38 @@ const CapturePage: React.FC = () => {
     return new File([u8], filename, { type: mime });
   };
 
-  const sendImageToBackend = async (file: File) => {
-    const formData = new FormData();
-    formData.append('image', file, 'captured_image.jpg');
-    formData.append('body_part', 'face');
-    formData.append('onset_date', '2025-10-22');
-    formData.append('meta_age', '30');
-    formData.append('meta_sex', 'male');
-    const token = localStorage.getItem('accessToken');
-    if (!token) { alert('로그인이 필요합니다.'); return; }
+  // ✅ 업로드 함수
+    const sendImageToBackend = async (file: File) => {
+      const fd = new FormData();
+      fd.append('upload_storage_path', file, file.name || 'captured_image.jpg');
+      fd.append('body_part', DEFAULT_BODY_PART);
+      fd.append('onset_date', '1달 내');
+      fd.append('meta_age', String(30));
+      fd.append('meta_sex', '남성');
 
-    try {
-      const res = await fetch(API_URL, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData });
-      if (!res.ok) throw await res.json();
-      alert('사진이 성공적으로 업로드되었습니다!');
-    } catch (e) {
-      console.error('업로드 실패:', e);
-      alert('업로드 실패');
-    }
-  };
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          body: fd,
+        });
+
+        // ✅ 여기에 추가 (이게 중요!)
+        if (!res.ok) {
+          const errText = await res.text();   // ← 서버 응답 전체를 문자열로 받아옴
+          console.error('업로드 실패 (응답 전체):', errText);  // 콘솔에 그대로 출력
+          alert('업로드 실패');
+          return;
+        }
+
+        const data = await res.json();
+        console.log('업로드 성공:', data);
+        alert('사진이 성공적으로 업로드되었습니다!');
+      } catch (e) {
+        console.error('업로드 중 예외:', e);
+        alert('업로드 실패');
+      }
+    };
+
 
   const handleCapture = useCallback(() => {
     const shot = webcamRef.current?.getScreenshot();
@@ -199,7 +216,7 @@ const CapturePage: React.FC = () => {
     if (!caps.torch) { console.warn('torch 미지원'); return; }
 
     try {
-      await (track.applyConstraints as any)({ advanced: [{ torch: enable }] });
+      await (track as any).applyConstraints({ advanced: [{ torch: enable }] });
     } catch (err) {
       console.error('토치 적용 실패:', err);
     }
@@ -208,9 +225,7 @@ const CapturePage: React.FC = () => {
 
   // 네비 사이만 정확히 차도록 stage 위치/크기 동적 지정
   const stageDynamicStyle: React.CSSProperties = {
-    // 상단바 바로 아래부터
     marginTop: top,
-    // 하단바 위까지 (100dvh: 모바일 주소창 변화 대응)
     height: `calc(100dvh - ${top + bottom}px)`,
   };
 

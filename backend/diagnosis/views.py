@@ -43,18 +43,17 @@
 
 # backend/diagnosis/views.py
 
+# backend/diagnosis/views.py
+
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-# IsAuthenticated: 로그인한 사용자만 접근 가능하게 함
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from django.contrib.auth import get_user_model  # ✅ 추가 (더미 유저용)
 
 from .models import Photos
 from .serializers import PhotoUploadSerializer, PhotoDetailSerializer
-
-
-# (만약 기존에 views.py에 다른 코드가 있었다면 그 아래에 추가하세요)
 
 
 class PhotoUploadView(APIView):
@@ -62,41 +61,36 @@ class PhotoUploadView(APIView):
     React에서 보낸 사진(File)과 데이터(FormData)를 받아
     Photos 모델에 저장하는 API 뷰
     """
-    # MultiPartParser: 'image' 같은 파일 데이터를 처리
-    # FormParser: 'body_part' 같은 폼 데이터를 처리
     parser_classes = (MultiPartParser, FormParser)
 
-    # 🌟 중요: 이 API는 로그인한 사용자만 호출할 수 있도록 설정
-    # (만약 테스트 중이라 로그인이 필요 없다면 이 줄을 주석 처리)
-    permission_classes = [IsAuthenticated]
+    # ⚙️ 현재 테스트 중이므로 로그인 불필요
+    permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
-        # 🌟 중요: 'user' 필드를 request에서 자동으로 가져와 주입
-        # 시리얼라이저는 'user'를 제외한 나머지 데이터를 받음
-
-        # request.data는 프론트에서 보낸 FormData 객체를 담고 있습니다.
-        # many=False (기본값) : 단일 객체를 생성합니다.
         serializer = PhotoUploadSerializer(data=request.data)
 
         if serializer.is_valid():
-            # serializer.save()를 호출하기 전에 'user'를 추가합니다.
-            # request.user는 IsAuthenticated 권한을 통해 인증된 사용자 객체입니다.
-            # (만약 IsAuthenticated를 주석 처리했다면, user를 임시로 지정해야 합니다)
             try:
-                serializer.save(user=request.user)
+                # ✅ AllowAny 모드에서는 로그인 안 했으므로 임시 유저 지정
+                User = get_user_model()
+                if request.user.is_authenticated:
+                    current_user = request.user
+                else:
+                    # id=1 유저를 기본으로 (DB에 patient1@ex.com 존재하므로)
+                    current_user = User.objects.get(id=1)
+
+                # ✅ user를 명시적으로 주입
+                photo = serializer.save(user=current_user)
+
+                # 저장 완료 후 상세 데이터 반환
+                detail_data = PhotoDetailSerializer(photo).data
+                return Response(detail_data, status=status.HTTP_201_CREATED)
+
             except Exception as e:
-                # (디버깅용) user 할당에 실패하거나 다른 DB 오류가 발생한 경우
                 return Response(
                     {"error": f"Failed to save data: {str(e)}"},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
-            #테스트용
-            # 저장이 성공하면, 저장된 객체의 상세 정보를 반환합니다.
-            # (PhotoDetailSerializer를 사용해 더 많은 정보를 보여줄 수도 있습니다)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         else:
-            # 유효성 검사 실패 시 (예: 필수 필드가 누락된 경우)
-            # 프론트엔드에 어떤 필드가 잘못되었는지 오류 메시지를 반환합니다.
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-

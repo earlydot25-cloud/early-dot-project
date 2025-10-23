@@ -2,29 +2,26 @@
 
 from rest_framework import serializers
 from .models import Photos
+import os
+from datetime import datetime
 
 
 class PhotoUploadSerializer(serializers.ModelSerializer):
     """
     이미지 업로드 전용 시리얼라이저.
-    React(프론트)에서 'image'와 'body_part' 등 Photos 모델 필드를 받는다고 가정합니다.
+    React(프론트)에서 FormData로 보낸 이미지 및 정보(body_part 등)를 받아
+    Photos 테이블에 저장합니다.
     """
 
-    # user 필드를 읽기 전용으로 설정 (request.user에서 받아올 것이기 때문)
+    # user는 request.user로 자동 주입되므로 프론트에서는 안 보냄
     user = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = Photos
-
-        # 🌟 중요: React의 FormData.append()에서 사용하는 'key'와 일치해야 함
-        # 'user'는 request에서 직접 받아 처리하므로 'fields'에 포함시키되,
-        # 'read_only_fields'로 지정하여 유효성 검사에서는 제외할 수 있습니다.
-        # 하지만 여기서는 'fields'에서 'user'를 아예 빼고, view에서 직접 주입하는 것이 더 명확합니다.
-
-        # 'capture_date'는 auto_now_add=True이므로 제외
         fields = [
             'id',
-            'image',
+            'user',
+            'upload_storage_path',   # 파일 (FormData key와 일치해야 함)
             'body_part',
             'symptoms_itch',
             'symptoms_pain',
@@ -33,20 +30,45 @@ class PhotoUploadSerializer(serializers.ModelSerializer):
             'symptoms_blood',
             'onset_date',
             'meta_age',
-            'meta_sex'
+            'meta_sex',
+            'folder_name',           # 자동 생성
+            'file_name',             # 자동 생성
         ]
+        read_only_fields = ['folder_name', 'file_name']
 
-        # (참고) 만약 프론트에서 'image'와 'body_part'만 먼저 보낸다면,
-        # 'fields'를 ['id', 'image', 'body_part']로 줄이면 됩니다.
-        # (이 경우, 나머지 필드들은 models.py에서 null=True, blank=True여야 함)
+    # ✅ 파일 저장 시 folder_name / file_name 자동 생성
+    def create(self, validated_data):
+        """
+        1) 업로드된 파일 이름에 user.id를 반영하여 폴더 구조를 정리합니다.
+           → uploads/<user.id>/<파일명>
+        2) DB 저장 후 file_name / folder_name을 자동으로 채웁니다.
+        """
+        user = validated_data.get('user', None)
+        file_field = validated_data.get('upload_storage_path', None)
+
+        # 1️⃣ 실제 저장 경로를 user.id 기반으로 설정
+        if user and file_field:
+            original_name = os.path.basename(file_field.name)
+            file_field.name = f"{user.id}/{original_name}"
+
+        # 2️⃣ DB에 우선 저장
+        photo = super().create(validated_data)
+
+        # 3️⃣ 저장 완료 후 file_name / folder_name 자동 채움
+        photo.file_name = os.path.basename(photo.upload_storage_path.name)
+        uname = getattr(user, 'name', None) or getattr(user, 'email', 'user')
+        photo.folder_name = f"{uname}_{datetime.now().strftime('%y')}"
+        photo.save(update_fields=['file_name', 'folder_name'])
+
+        return photo
 
 
 class PhotoDetailSerializer(serializers.ModelSerializer):
     """
-    (선택 사항) 저장된 사진의 상세 정보를 보여줄 때 사용
+    저장된 사진의 상세 정보를 보여주는 시리얼라이저.
     """
-    user = serializers.StringRelatedField()  # ID 대신 사용자 이름(username)을 보여줌
+    user = serializers.StringRelatedField()  # user의 이름(또는 __str__)으로 표시
 
     class Meta:
         model = Photos
-        fields = '__all__'  # 모든 필드를 보여줌
+        fields = '__all__'
