@@ -245,7 +245,7 @@ const MainPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4 space-y-6">
+    <div className="p-1 space-y-3">
 
       {/* 1. AI 진단 사용 안내 */}
       <section className="p-4 bg-blue-50 border-l-4 border-blue-600 rounded-lg shadow-sm">
