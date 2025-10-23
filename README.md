@@ -70,6 +70,9 @@
     cd backend
     # mysql 접속
     mysql -u root -p # 이건 원하는 대로 
+   
+   # users, diagnosis, dashboard 폴더의 마이그레이션 폴더 제거 
+   
     # db 지우고 다시 
     DROP DATABASE early_dot_db;
     # db 다시 생성 
@@ -80,6 +83,8 @@
     python manage.py makemigrations diagnosis
     python manage.py makemigrations dashboard
     python manage.py migrate
+   
+    # 디비버에서 예시 덤프 sql 실행시킬 것.
     ```
 
 ### 1.2. 프론트엔드 환경 (Node/NPM)
@@ -87,7 +92,7 @@
 1.  프론트엔드 폴더로 이동 후 의존성 설치:
     ```bash
     cd frontend
-    npm install #### npm 다운 받으면 이거 다시 해줘야 함  (최초 1회 또는 package.json 변경 시)
+    npm install # 새로 할 때마다 이거 해줄 것 
     npm start
     ```
 
