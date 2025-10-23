@@ -56,9 +56,10 @@ const CheckCircleIcon: IconCmp = (props) => React.createElement(FaCheckCircle as
 // --- [컴포넌트] 진단 내역 카드 ---
 interface DiagnosisCardProps {
   data: DiagnosisResult; // 🔴 실제 데이터 타입 사용
+  isDoctorView?: boolean; // 👈 의사 뷰 모드 추가
 }
-const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data }) => {
-  // 💡 1. useNavigate 훅 호출
+
+const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data, isDoctorView = false }) => {  // 💡 1. useNavigate 훅 호출
   const navigate = useNavigate(); // DiagnosisCard 내부에서 호출
 
   // 💡 2. 버튼 클릭 핸들러 추가
@@ -94,82 +95,117 @@ const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data }) => {
     riskColor = 'text-green-600';
   }
 
+// 🔴 버튼 텍스트 분기 처리
+  const buttonText = isDoctorView
+    ? (isRequesting ? '소견 작성 대기' : '소견 작성/보기')
+    : (isRequesting ? '요청 처리 대기' : '결과 열람');
+
   // 날짜 포맷팅 (YYYY-MM-DDT... 형식 가정)
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('ko-KR');
 
   // UI 이미지와 유사하게 구조화
-  return (
+return (
     <div className={`p-4 border rounded-lg shadow-sm w-80 flex-shrink-0 bg-white ${isAttentionNeeded ? 'border-red-400' : 'border-gray-200'}`}>
+
+      {/* 🔴 최상위 flex 컨테이너 유지 (좌/우 분할) */}
       <div className="flex justify-between items-start">
-        {/* 좌측: 환부 이미지 및 기본 정보 */}
-        <div className="flex">
-          {/* 환부 이미지 Placeholder */}
-          <div className="w-16 h-16 rounded mr-3 flex items-center justify-center overflow-hidden">
-              {/* 💡 수정된 부분: storage_path를 사용하여 이미지 렌더링 */}
-              {data.photo && data.photo.upload_storage_path ? (
-                // data.photo 객체와 storage_path 필드가 존재할 경우 <img> 태그 사용
-                <img
-                  // 프론트엔드에서 API_URL을 '/api/dashboard/main/'로 설정했으므로,
-                  // storage_path는 이미지를 직접 가리키는 경로(예: /media/photos/1.jpg)여야 합니다.
-                  src={data.photo.upload_storage_path}
-                  alt={`${data.disease.name_ko} 이미지`}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                // storage_path가 없을 경우 대체 UI 표시
-                <div className="w-full h-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-800">
-                  이미지 없음
+
+        {/* 1. 좌측 핵심 정보 블록 (이미지, 병변명) */}
+        <div className="flex flex-col flex-grow">
+
+            {/* 1-1. 이미지와 AI 예측 병변 (가로 배치) */}
+            <div className="flex items-start mb-3">
+                {/* 환부 이미지 Placeholder: 이전 버전 크기 유지 (w-16 h-16) */}
+                <div className="w-16 h-16 rounded mr-3 flex items-center justify-center overflow-hidden flex-shrink-0">
+                    {/* 💡 이미지 경로 유지 */}
+                    {data.photo && data.photo.upload_storage_path ? (
+                        <img
+                            src={data.photo.upload_storage_path}
+                            alt={`${data.disease.name_ko} 이미지`}
+                            className="w-full h-full object-cover"
+                        />
+                    ) : (
+                        // 이미지 없을 경우 대체 UI
+                        <div className="w-full h-full bg-blue-500 flex items-center justify-center text-xs font-bold text-white">
+                            이미지 없음
+                        </div>
+                    )}
                 </div>
-              )}
+
+                {/* AI 예측 병변 텍스트 */}
+                <div className="text-left flex-grow">
+                    <p className="text-xs font-medium text-gray-500">AI 예측 병변</p>
+                    <p className="text-lg font-bold text-gray-900 leading-tight">{data.disease.name_ko}</p>
+                </div>
             </div>
 
-          <div className="text-sm">
-            {/* AI 예측 병변 */}
-            <p className="text-xs font-medium text-gray-500">AI 예측 병변</p>
-            <p className="text-lg font-bold text-gray-900 leading-tight">{data.disease.name_ko}</p>
 
-            {/* 저장 폴더명 등 */}
-            <div className="text-xs text-gray-700 space-y-0.5 mt-2">
-                <p>저장 폴더: {data.photo.folder_name}</p>
-                <p>위치: {data.photo.body_part}</p>
-                <p>최초 생성: {formatDate(data.photo.capture_date)}</p>
-                <p>마지막 수정: {formatDate(data.analysis_date)}</p>
+            {/* 1-2. 🔴 저장 폴더/날짜 정보 (아래 세로 배치) */}
+            {/* 굵은 글씨 및 왼쪽 정렬 유지 */}
+            <div className="text-sm text-gray-700 space-y-1 mt-3 border-t pt-3 border-gray-100">
+                <p className="text-left">
+                    <span className="font-bold text-gray-900">저장 폴더:</span> {data.photo.folder_name}
+                </p>
+                <p className="text-left">
+                    <span className="font-bold text-gray-900">위치:</span> {data.photo.body_part}
+                </p>
+                <p className="text-left">
+                    <span className="font-bold text-gray-900">최초 생성:</span> {formatDate(data.photo.capture_date)}
+                </p>
+                <p className="text-left">
+                    <span className="font-bold text-gray-900">마지막 수정:</span> {formatDate(data.analysis_date)}
+                </p>
             </div>
-          </div>
         </div>
 
         {/* 우측: 위험도 및 버튼 */}
         <div className="ml-2 flex flex-col items-end">
-          <div className="text-xs font-semibold text-right mb-2">
-            {riskDisplay.split(' - ').map((line, index) => (
-              <p key={index} className={index === 1 ? riskColor : 'text-gray-500'}>
-                {line}
-              </p>
-            ))}
-          </div>
+          {/* 🔴 수정: 의사 뷰가 아닐 때만 위험도 표시 (환자에게는 결과 열람 후 보여주는 것이 일반적) */}
+          {(!isDoctorView || hasDoctorNote) && (
+            <div className="text-xs font-semibold text-right mb-2">
+              {riskDisplay.split(' - ').map((line, index) => (
+                <p key={index} className={index === 1 ? riskColor : 'text-gray-500'}>
+                  {line}
+                </p>
+              ))}
+            </div>
+          )}
 
           <button
             onClick={handleViewResult} // 💡 수정: 이젠 스코프 내부에 정의된 함수
             className="py-2 px-3 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition duration-150"
           >
-            {isRequesting ? '요청 처리 대기' : '결과 열람'}
+            {buttonText} {/* 🔴 수정된 버튼 텍스트 사용 */}
           </button>
         </div>
       </div>
 
-      {/* 하단: 의사 소견 영역 / AI 분석 결과 (요청 사항 반영) */}
-      <div className={`mt-4 pt-3 border-t border-gray-100 ${hasDoctorNote ? 'bg-indigo-50 p-2 rounded' : ''}`}>
-        <p className={`text-xs font-medium mb-1 ${hasDoctorNote ? 'text-indigo-700 flex items-center' : 'text-gray-700'}`}>
-            {hasDoctorNote ? <UserMdIcon className="mr-1" /> : 'AI 분석 결과'}
-        </p>
-        <p className="text-xs text-gray-700 line-clamp-2">
-            {hasDoctorNote
-                ? data.followup_check!.doctor_note || '의사 소견이 아직 작성되지 않았습니다.'
-                : data.vlm_analysis_text || 'AI 분석 결과 텍스트가 없습니다.'}
-        </p>
-      </div>
-
-      {/* 의사 소견 대기 상태 (별도로 표시할 필요 없음. 위에서 '요청 처리 대기' 버튼으로 대체됨) */}
+{/* 하단: 의사 소견 영역 / AI 분석 결과 (요청 사항 반영) */}
+      {/* 🔴 수정: 의사 뷰일 때만 AI 분석 결과를 상시 표시. 환자 뷰일 때는 의사 소견(있는 경우)만 표시 */}
+      {isDoctorView ? (
+        <div className={`mt-4 pt-3 border-t border-gray-100 bg-indigo-50 p-2 rounded`}>
+             <p className={`text-xs font-medium mb-1 text-indigo-700 flex items-center`}>
+                <UserMdIcon className="mr-1" /> 최종 소견
+            </p>
+            <p className="text-xs text-gray-700 line-clamp-2">
+                {hasDoctorNote
+                    ? data.followup_check!.doctor_note || '의사 소견이 아직 작성되지 않았습니다.'
+                    : data.vlm_analysis_text || 'AI 분석 결과 텍스트만 있습니다.'}
+            </p>
+        </div>
+      ) : (
+          // 환자 뷰: 의사 소견이 있을 경우에만 표시
+          hasDoctorNote && (
+            <div className={`mt-4 pt-3 border-t border-gray-100 bg-indigo-50 p-2 rounded`}>
+                <p className={`text-xs font-medium mb-1 text-indigo-700 flex items-center`}>
+                    <UserMdIcon className="mr-1" /> 의사 소견
+                </p>
+                <p className="text-xs text-gray-700 line-clamp-2">
+                    {data.followup_check!.doctor_note || '의사 소견이 아직 작성되지 않았습니다.'}
+                </p>
+            </div>
+          )
+      )}
     </div>
   );
 };
@@ -285,6 +321,7 @@ const MainPage: React.FC = () => {
             <DiagnosisCard
                 key={item.id}
                 data={item}
+                isDoctorView={false} // 🔴 수정: MainPage는 환자 뷰이므로 false 명시
             />
           ))}
           {history.length === 0 && (
