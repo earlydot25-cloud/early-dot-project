@@ -6,7 +6,10 @@ import Layout from './components/Layout';
 import BeforeLoginPage from './pages/BeforeLoginPage';
 import MainPage from './pages/dashboard/MainPage';
 import LoginPage from './pages/auth/LoginPage';
-import BodySelectionPage from './pages/diagnosis/CapturePage'; // 나중에 바꿔야함 BodySelectionPage로
+import SignupPage from "./pages/auth/SignupPage";
+import BodySelectionPage from './pages/diagnosis/CapturePage';
+// import BodySelectionPage from './pages/diagnosis/BodySelectionPage';
+// import CapturePage from './pages/diagnosis/CapturePage'; // 나중에 바꿔야함 BodySelectionPage로
 import HistoryPage from './pages/dashboard/HistoryPage';
 import ProfilePage from './pages/dashboard/ProfilePage';
 import ResultDetailPage from './pages/diagnosis/ResultDetailPage';
@@ -48,9 +51,7 @@ const App: React.FC = () => {
           {/* 로그인 이전 랜딩 및 인증 관련 유지 */}
           <Route path="/" element={<BeforeLoginPage />} />
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<LoginPage />} />
-
-          {/* 🟢 핵심 수정: 임시 라우트 🟢 */}
+          <Route path="/signup" element={<SignupPage />} />
           <Route path="/home" element={<MainPage />} />
 
           {/* 진단 시작 경로는 유지 */}
