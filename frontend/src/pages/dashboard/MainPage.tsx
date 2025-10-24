@@ -27,7 +27,7 @@ interface DiagnosisResult {
   photo: PhotoData;
   disease: DiseaseData;
   analysis_date: string;
-  risk_level: '높음' | '보통' | '낮음' | '정상';
+  risk_level: '높음' | '보통' | '낮음';
   vlm_analysis_text: string | null;
   followup_check: FollowUpCheckData | null;
 }
@@ -91,7 +91,7 @@ const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data, isDoctorView = fals
     riskDisplay = `${riskLabel} - 경과 관찰`;
     riskColor = 'text-yellow-600';
   } else {
-    riskDisplay = `${riskLabel} - 정상`;
+    riskDisplay = `${riskLabel} - 낮음`;
     riskColor = 'text-green-600';
   }
 
