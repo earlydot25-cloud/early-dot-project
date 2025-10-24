@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
+import SavePhotoPage from './pages/diagnosis/SavePhotoPage';
 
 // Pages
 import BeforeLoginPage from './pages/BeforeLoginPage';
@@ -46,6 +47,8 @@ const App: React.FC = () => {
           <Route path="/diagnosis" element={<Navigate to="/diagnosis/body-select" replace />} />
           <Route path="/diagnosis/body-select" element={<BodySelectionPage />} />
           <Route path="/diagnosis/capture" element={<CapturePage />} />
+          <Route path="/diagnosis/save" element={<SavePhotoPage />} />
+
 
           {/* 대시보드 */}
           <Route path="/dashboard/history" element={<HistoryPage />} />
