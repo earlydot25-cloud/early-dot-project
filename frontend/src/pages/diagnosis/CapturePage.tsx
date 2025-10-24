@@ -1,17 +1,15 @@
 // frontend/src/pages/diagnosis/CapturePage.tsx
 import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 import Webcam from 'react-webcam';
+import { useLocation } from 'react-router-dom';
 import { FiArrowLeft, FiZap, FiZapOff, FiImage } from 'react-icons/fi';
 
 // ===== 앱의 중앙 컨테이너(네비 폭)과 맞추려면 여기를 네비와 동일하게 =====
-const MAX_STAGE_WIDTH = 430; // 예: 상/하단 네비가 430px max-width면 430으로
+const MAX_STAGE_WIDTH = 430;
 // ===============================================================
 
 // ✅ 백엔드 업로드 엔드포인트 (urls.py 기준)
 const API_URL = 'http://127.0.0.1:8000/api/diagnosis/upload/';
-
-// 바디파트 기본값(임시) — 실제로는 신체부위 선택 탭에서 값 받아오면 교체
-const DEFAULT_BODY_PART = '머리/목'; // TODO: 신체부위 선택 화면 값으로 대체
 
 // 상/하단 네비 실제 높이를 측정하는 훅
 function useNavInsets() {
@@ -42,7 +40,6 @@ function useNavInsets() {
 
     window.addEventListener('resize', measure);
     window.addEventListener('orientationchange', measure);
-    // 모바일 주소창/안전영역 변동 대비
     const t = window.setInterval(measure, 500);
 
     return () => {
@@ -58,7 +55,6 @@ function useNavInsets() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  /** 화면 전체 래퍼 — 네비 폭과 동일하게 중앙에 stage를 배치 */
   outerWrapper: {
     position: 'fixed',
     inset: 0,
@@ -67,8 +63,6 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'stretch',
     background: 'transparent'
   },
-
-  /** 실제 카메라 스테이지(네비 폭과 일치하도록 maxWidth 제한) */
   stage: {
     position: 'relative',
     width: '100%',
@@ -80,14 +74,11 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 12,
     fontFamily: 'system-ui, sans-serif',
   },
-
   webcamWrapper: { position: 'absolute', inset: 0, zIndex: 1 },
   webcam: { objectFit: 'cover', width: '100%', height: '100%' },
   overlay: { position: 'absolute', inset: 0, zIndex: 10, pointerEvents: 'none' },
-
   gridLineV: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(255,255,255,0.3)' },
   gridLineH: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.3)' },
-
   guideBox: {
     position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
     width: 120, height: 120, border: '3px solid #4CAF50', borderRadius: 10 as any,
@@ -96,14 +87,12 @@ const styles: Record<string, React.CSSProperties> = {
   guideText: {
     position: 'absolute', bottom: 180, width: '100%', textAlign: 'center', fontSize: 16, fontWeight: 500, zIndex: 11,
   },
-
   topBar: { position: 'absolute', top: 0, left: 0, right: 0, display: 'flex', justifyContent: 'space-between', padding: 20, zIndex: 20 },
   sideBar: { position: 'absolute', top: 100, right: 20, display: 'flex', flexDirection: 'column', gap: 20, zIndex: 20 },
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0, height: 150,
     display: 'flex', justifyContent: 'space-around', alignItems: 'center', paddingBottom: 28, zIndex: 20,
   },
-
   iconButton: {
     backgroundColor: 'rgba(30,30,30,0.7)', border: 'none', color: 'white', padding: 12,
     borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
@@ -117,6 +106,10 @@ const styles: Record<string, React.CSSProperties> = {
 };
 
 const CapturePage: React.FC = () => {
+  // 👉 BodySelectionPage에서 넘어온 선택값 받기
+  const location = useLocation() as { state?: { bodyPart?: string } };
+  const selectedBodyPart = location.state?.bodyPart || '머리/목';
+
   const [torchOn, setTorchOn] = useState(false);
   const [guideOn, setGuideOn] = useState(true);
   const webcamRef = useRef<Webcam>(null);
@@ -145,38 +138,38 @@ const CapturePage: React.FC = () => {
     return new File([u8], filename, { type: mime });
   };
 
-  // ✅ 업로드 함수
-    const sendImageToBackend = async (file: File) => {
-      const fd = new FormData();
-      fd.append('upload_storage_path', file, file.name || 'captured_image.jpg');
-      fd.append('body_part', DEFAULT_BODY_PART);
-      fd.append('onset_date', '1달 내');
-      fd.append('meta_age', String(30));
-      fd.append('meta_sex', '남성');
+  // ✅ 업로드 함수: 여기서 FormData 키를 'upload_storage_path'로 맞춘다
+  const sendImageToBackend = async (file: File) => {
+    const fd = new FormData();
+    fd.append('upload_storage_path', file, file.name || 'captured_image.jpg');
 
-      try {
-        const res = await fetch(API_URL, {
-          method: 'POST',
-          body: fd,
-        });
+    // 🔥 BodySelection에서 넘어온 최종 부위 사용
+    fd.append('body_part', String(selectedBodyPart));
 
-        // ✅ 여기에 추가 (이게 중요!)
-        if (!res.ok) {
-          const errText = await res.text();   // ← 서버 응답 전체를 문자열로 받아옴
-          console.error('업로드 실패 (응답 전체):', errText);  // 콘솔에 그대로 출력
-          alert('업로드 실패');
-          return;
-        }
+    // 메타(임시 값; 필요 시 실제 폼값으로 교체)
+    fd.append('onset_date', '1달 내');
+    fd.append('meta_age', String(30));
+    fd.append('meta_sex', '남성');
 
-        const data = await res.json();
-        console.log('업로드 성공:', data);
-        alert('사진이 성공적으로 업로드되었습니다!');
-      } catch (e) {
-        console.error('업로드 중 예외:', e);
+    try {
+      const res = await fetch(API_URL, { method: 'POST', body: fd });
+
+      // 실패 디버깅을 위해 텍스트 먼저 찍기
+      if (!res.ok) {
+        const errText = await res.text(); // ← 여기서 전체 응답 로그
+        console.error('업로드 실패 (응답 전체):', errText);
         alert('업로드 실패');
+        return;
       }
-    };
 
+      const data = await res.json();
+      console.log('업로드 성공:', data);
+      alert('사진이 성공적으로 업로드되었습니다!');
+    } catch (e) {
+      console.error('업로드 중 예외:', e);
+      alert('업로드 실패');
+    }
+  };
 
   const handleCapture = useCallback(() => {
     const shot = webcamRef.current?.getScreenshot();

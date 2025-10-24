@@ -6,7 +6,8 @@ import Layout from './components/Layout';
 import BeforeLoginPage from './pages/BeforeLoginPage';
 import MainPage from './pages/dashboard/MainPage';
 import LoginPage from './pages/auth/LoginPage';
-import BodySelectionPage from './pages/diagnosis/CapturePage'; // 나중에 바꿔야함 BodySelectionPage로
+import BodySelectionPage from './pages/diagnosis/BodySelectionPage'; // ✅ 올바른 import
+import CapturePage from './pages/diagnosis/CapturePage';             // ✅ 촬영 페이지 별도 import
 import HistoryPage from './pages/dashboard/HistoryPage';
 import ProfilePage from './pages/dashboard/ProfilePage';
 import ResultDetailPage from './pages/diagnosis/ResultDetailPage';
@@ -23,46 +24,38 @@ const isAuthed = () =>
 
 // 보호 라우트: 미로그인 시 BeforeLoginPage로
 type RequireAuthProps = { children: React.ReactElement };
-
-const RequireAuth: React.FC<RequireAuthProps> = ({ children }) => {
-  return isAuthed() ? children : <Navigate to="/" replace />;
-};
-
+const RequireAuth: React.FC<RequireAuthProps> = ({ children }) =>
+  isAuthed() ? children : <Navigate to="/" replace />;
 
 const App: React.FC = () => {
   return (
-    <BrowserRouter>
+    <BrowserRouter> {/* ⚠ index.tsx에서 이미 감싸고 있다면 이 줄/닫는 줄 제거 */}
       <Layout>
         <Routes>
-          {/* 로그인 이전 랜딩 */}
+          {/* 로그인 이전 랜딩 (하나만 남김) */}
           <Route path="/" element={<BeforeLoginPage />} />
 
-          {/* 🔴 보호 라우트 (RequireAuth 적용) - 주석 처리 🔴
-              로그인 기능 구현 후 필요할 때 주석을 해제하고 아래 임시 라우트를 삭제하세요. */}
-          {/* <Route path="/home" element={<RequireAuth><MainPage /></RequireAuth>} />
-          <Route path="/diagnosis" element={<RequireAuth><BodySelectionPage /></RequireAuth>} />
-          <Route path="/dashboard" element={<RequireAuth><HistoryPage />/RequireAuth>}< />
-          <Route path="/dashboard" element={<RequireAuth><ProfilePage /></RequireAuth>} />
-          */}
-
-          {/* 로그인 이전 랜딩 및 인증 관련 유지 */}
-          <Route path="/" element={<BeforeLoginPage />} />
+          {/* 인증 관련 */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<LoginPage />} />
 
-          {/* 🟢 핵심 수정: 임시 라우트 🟢 */}
+          {/* 임시로 보호 해제한 라우트들 */}
           <Route path="/home" element={<MainPage />} />
 
-          {/* 진단 시작 경로는 유지 */}
-          <Route path="/diagnosis" element={<BodySelectionPage />} />
+          {/* 🔑 진단 플로우 분리 */}
+          <Route path="/diagnosis" element={<Navigate to="/diagnosis/body-select" replace />} />
+          <Route path="/diagnosis/body-select" element={<BodySelectionPage />} />
+          <Route path="/diagnosis/capture" element={<CapturePage />} />
 
-          {/* 대시보드 경로는 기능별로 분리 */}
+          {/* 대시보드 */}
           <Route path="/dashboard/history" element={<HistoryPage />} />
           <Route path="/dashboard/profile" element={<ProfilePage />} />
 
-          {/* 진단 상세 결과 페이지 경로는 ID를 받아야 함 (이전에 MainPage에서 설정한 경로와 일치) */}
+          {/* 결과 상세 */}
           <Route path="/diagnosis/detail/:id" element={<ResultDetailPage />} />
 
+          {/* 그 외 → 랜딩으로 */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
     </BrowserRouter>
