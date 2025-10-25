@@ -34,7 +34,7 @@ class PhotoUploadSerializer(serializers.ModelSerializer):
             'folder_name',           # 자동 생성
             'file_name',             # 자동 생성
         ]
-        read_only_fields = ['folder_name', 'file_name']
+        read_only_fields = ['user'] # body_part ?
 
     # ✅ 파일 저장 시 folder_name / file_name 자동 생성
     def create(self, validated_data):
@@ -43,22 +43,27 @@ class PhotoUploadSerializer(serializers.ModelSerializer):
            → uploads/<user.id>/<파일명>
         2) DB 저장 후 file_name / folder_name을 자동으로 채웁니다.
         """
-        user = validated_data.get('user', None)
-        file_field = validated_data.get('upload_storage_path', None)
+        user = validated_data.get('user')
+        file_field = validated_data.get('upload_storage_path')
 
+        photo = Photos.objects.create(**validated_data)
+        print(f'user : {user}, '
+              f'file_field : {file_field}')
         # 1️⃣ 실제 저장 경로를 user.id 기반으로 설정
         if user and file_field:
             original_name = os.path.basename(file_field.name)
-            file_field.name = f"{user.id}/{original_name}"
+            print(f'original_name : {original_name}, '
+                  f'file_field : {file_field.name}')
 
         # 2️⃣ DB에 우선 저장
         photo = super().create(validated_data)
-
-        # 3️⃣ 저장 완료 후 file_name / folder_name 자동 채움
-        photo.file_name = os.path.basename(photo.upload_storage_path.name)
-        uname = getattr(user, 'name', None) or getattr(user, 'email', 'user')
-        photo.folder_name = f"{uname}_{datetime.now().strftime('%y')}"
-        photo.save(update_fields=['file_name', 'folder_name'])
+        # print(validated_data)
+        # print(validated_data["upload_storage_path"])
+        # # 3️⃣ 저장 완료 후 file_name / folder_name 자동 채움
+        # photo.file_name = os.path.basename(photo.upload_storage_path.name)
+        # uname = getattr(user, 'name', None) or getattr(user, 'email', 'user')
+        # photo.folder_name = f"{uname}_{datetime.now().strftime('%y')}"
+        # photo.save(update_fields=['file_name', 'folder_name'])
 
         return photo
 

@@ -7,6 +7,7 @@ import SavePhotoPage from './pages/diagnosis/SavePhotoPage';
 import BeforeLoginPage from './pages/BeforeLoginPage';
 import MainPage from './pages/dashboard/MainPage';
 import LoginPage from './pages/auth/LoginPage';
+import SignupPage from './pages/auth/SignupPage';
 import BodySelectionPage from './pages/diagnosis/BodySelectionPage'; // ✅ 올바른 import
 import CapturePage from './pages/diagnosis/CapturePage';             // ✅ 촬영 페이지 별도 import
 import HistoryPage from './pages/dashboard/HistoryPage';
@@ -39,6 +40,8 @@ const App: React.FC = () => {
           <Route path="/dashboard/history" element={<RequireAuth><HistoryPage /></RequireAuth>} />
           <Route path="/dashboard/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
           <Route path="/diagnosis/detail/:id" element={<RequireAuth><ResultDetailPage /></RequireAuth>} />
+          <Route path="/diagnosis/capture" element={<RequireAuth><CapturePage /></RequireAuth>}/>
+          <Route path="/diagnosis/save" element={<RequireAuth><SavePhotoPage /></RequireAuth>}/>
         </Routes>
       </Layout>
     </BrowserRouter>

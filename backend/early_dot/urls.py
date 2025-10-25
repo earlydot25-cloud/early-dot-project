@@ -32,4 +32,6 @@ urlpatterns = [
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path('api/dashboard/', include('dashboard.urls')),  # dashboard 앱 (기록 조회)
     path('api/admin_tools/', include('admin_tools.urls')),  # admin_tools 앱 (관리자)
+    path('api/diagnosis/', include('diagnosis.urls')),
+
  ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

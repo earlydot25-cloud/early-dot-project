@@ -61,23 +61,28 @@ class PhotoUploadView(APIView):
     React에서 보낸 사진(File)과 데이터(FormData)를 받아
     Photos 모델에 저장하는 API 뷰
     """
-    parser_classes = (MultiPartParser, FormParser)
-
     # ⚙️ 현재 테스트 중이므로 로그인 불필요
-    permission_classes = [AllowAny]
+    parser_classes = (MultiPartParser, FormParser)
+    permission_classes = [IsAuthenticated]  # AllowAny -> IsAuthenticated
 
     def post(self, request, *args, **kwargs):
         serializer = PhotoUploadSerializer(data=request.data)
-
+        User = get_user_model()
+        print("User model:", User)  # <class 'users.models.User'> 이런 식으로 나올 것
+        print("request.user:", request.user)
+        print("is_authenticated:", request.user.is_authenticated)
         if serializer.is_valid():
             try:
                 # ✅ AllowAny 모드에서는 로그인 안 했으므로 임시 유저 지정
                 User = get_user_model()
                 if request.user.is_authenticated:
+                    print("if 탔음")
                     current_user = request.user
                 else:
                     # id=1 유저를 기본으로 (DB에 patient1@ex.com 존재하므로)
                     current_user = User.objects.get(id=1)
+                    print("else 탔음;;")
+
 
                 # ✅ user를 명시적으로 주입
                 photo = serializer.save(user=current_user)
@@ -88,7 +93,7 @@ class PhotoUploadView(APIView):
 
             except Exception as e:
                 return Response(
-                    {"error": f"Failed to save data: {str(e)}"},
+                    {"error": f"[SERVER ERROR] {str(e)}"},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 

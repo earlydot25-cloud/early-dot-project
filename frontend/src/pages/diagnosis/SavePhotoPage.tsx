@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import PhotoPreview from '@/components/PhotoPreview';
-import { useCaptureStore } from '@/hooks/useCaptureStore';
-import { uploadCase } from '@/services/uploadService';
+import PhotoPreview from '../../components/PhotoPreview';
+import { useCaptureStore } from '../../hooks/useCaptureStore';
+import { uploadCase } from '../../services/uploadService';
 
 // =======================
 // 타입 정의
@@ -109,26 +109,47 @@ export default function SavePhotoPage() {
   };
 
   const onSubmit = async () => {
-    if (!fileBlobRef.current) {
-      alert('이미지 변환 중입니다. 잠시 후 다시 시도해 주세요.');
-      return;
-    }
-    if (!form.folderName || !form.fileName) {
-      alert('폴더명과 사진명을 입력해 주세요.');
-      return;
-    }
+  if (!fileBlobRef.current) {
+    alert('이미지 변환 중입니다. 잠시 후 다시 시도해 주세요.');
+    return;
+  }
+  if (!form.folderName || !form.fileName) {
+    alert('폴더명과 사진명을 입력해 주세요.');
+    return;
+  }
 
-    setSubmitting(true);
-    try {
-      const { caseId } = await uploadCase(form, fileBlobRef.current);
-      navigate(`/diagnosis/detail/${caseId}`);
-    } catch (error) {
-      console.error(error);
-      alert('업로드 중 오류가 발생했습니다.');
-    } finally {
-      setSubmitting(false);
-    }
+  // 1. 나이 계산 (단순 연 나이)
+  const birthYear = Number(form.birth.split('-')[0]);
+  const nowYear = new Date().getFullYear();
+  const ageGuess = nowYear - birthYear;
+
+  // 2. 백엔드에서 요구하는 key로 다시 매핑
+  const backendPayload = {
+    body_part: form.bodyPart,
+    symptoms_itch: form.itch,
+    symptoms_pain: form.pain,
+    symptoms_color: form.colorChange,
+    symptoms_infection: form.infection,
+    symptoms_blood: form.bleeding,
+    onset_date: form.onset,
+    meta_age: ageGuess.toString(),
+    meta_sex: form.gender,
+    folder_name: form.folderName,
+    file_name: form.fileName,
   };
+
+  setSubmitting(true);
+  try {
+    const { caseId } = await uploadCase(backendPayload, fileBlobRef.current);
+    navigate(`/diagnosis/detail/${caseId}`);
+  } catch (error) {
+    console.error(error);
+    alert('업로드 중 오류가 발생했습니다.');
+  } finally {
+    setSubmitting(false);
+  }
+};
+
 
   // =======================
   // 렌더링

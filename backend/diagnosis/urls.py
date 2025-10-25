@@ -30,6 +30,7 @@ urlpatterns = [
     # PhotoUploadView(views.py의 클래스)가 실행되도록 연결합니다.
     path('upload/', PhotoUploadView.as_view(), name='photo-upload'),
 
+
     # (기존 임시 URL 주석 처리)
     # path('upload/', ImageUploadView.as_view(), name='image-upload'),
 

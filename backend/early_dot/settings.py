@@ -18,6 +18,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
+APPEND_SLASH = False
 
 # =============================================
 # 📄 .env 환경 변수 로드
@@ -169,6 +170,8 @@ CORS_ALLOW_ALL_ORIGINS = True   # 개발 한정임
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:3002",
+    "http://127.0.0.1:3002",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     # 네트워크(IP) 바뀌어도 접속되게 하려면 .local 추가(주석 해제)
@@ -181,6 +184,8 @@ CORS_ALLOWED_ORIGINS = [
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:3002",
+    "http://127.0.0.1:3002",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     # 네트워크(IP) 바뀌어도 접속되게 하려면 .local 추가(주석 해제)

@@ -9,7 +9,7 @@ import React, {
 import Webcam from 'react-webcam';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiZap, FiZapOff, FiImage } from 'react-icons/fi';
-import { useCaptureStore } from '@/hooks/useCaptureStore';
+import { useCaptureStore } from '../../hooks/useCaptureStore';
 import type { BodyPart } from '@/hooks/useCaptureStore';
 
 // ===== 앱의 중앙 컨테이너(네비 폭)과 맞추려면 여기를 네비와 동일하게 =====
