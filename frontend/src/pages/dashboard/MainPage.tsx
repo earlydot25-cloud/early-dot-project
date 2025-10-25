@@ -297,7 +297,7 @@ const MainPage: React.FC = () => {
   // 로그인한 사용자 정보 (localStorage에 로그인 시 저장되어 있어야 함)
   const currentUserId = Number(localStorage.getItem('userId'));          // Users.id
   const currentDoctorUid = Number(localStorage.getItem('doctorUid'));    // Doctors.uid
-  const isDoctor = localStorage.getItem('isDoctor') === 'true';
+  const isDoctor = localStorage.getItem('isDoctor') === '1';
 
   // 내 소유만 남기기
   const filteredHistory: DiagnosisResult[] = history.filter((item) => {

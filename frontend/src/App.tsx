@@ -20,32 +20,30 @@ const RequireAuth: React.FC<{ children: React.ReactElement }> = ({ children }) =
   return isAuthed() ? children : <Navigate to="/" replace />;
 }
 
-// user 역할 판별 훅 (is_doctor 시뮬레이션)
+// user 역할 판별 훅 (DB 0/1 매핑)
 const useUserRole = () => {
-    // 💡 'userRole' 키 대신, 백엔드 is_doctor에 더 가까운 'isDoctor' 키를 사용하도록 권장
-    //    값이 'doctor' 문자열인지 확인
-    const role = localStorage.getItem('userRole');
+    // 💡 Local Storage에서 'isDoctor' 키를 가져옵니다.
+    // 로그인 시 DB의 1 (의사) 또는 0 (환자) 값이 문자열 "1" 또는 "0"으로 저장되어야 합니다.
+    const isDoctorString = localStorage.getItem('isDoctor');
 
-    // isDoctor는 'doctor' 문자열일 때만 true가 됩니다.
-    // 만약 로그인 시 is_doctor=True를 localStorage에 'isDoctor' : 'true'로 저장했다면 아래 로직으로 변경
-    // const isDoctor = (typeof window !== 'undefined' && localStorage.getItem('isDoctor') === 'true');
+    // isDoctor는 "1" 문자열일 때만 true가 됩니다.
+    // (Local Storage에 저장된 문자열 "1"을 DB의 1(의사)로 간주)
+    const isDoctor = (typeof window !== 'undefined' && isDoctorString === '1');
 
-    // 현재 코드에 맞춰 유지
-    const isDoctor = (typeof window !== 'undefined' && role === 'doctor');
     return { isDoctor };
 };
 
-// HomeRedirector 컴포넌트 (조건부 렌더링)
-// users.is_doctor가 Y이면 DoctorMainPage로 라우팅
+// 🟢 [수정됨] HomeRedirector 컴포넌트를 Navigate 컴포넌트로 변경
+// 역할에 따라 다른 경로로 리다이렉트합니다.
 const HomeRedirector: React.FC = () => {
     const { isDoctor } = useUserRole();
 
-    // isDoctor (users.is_doctor === 'Y' 시뮬레이션) 이면 DoctorMainPage
+    // isDoctor 이면 '/dashboard/doctor/main'으로 리다이렉트
     if (isDoctor) {
-        return <DoctorMainPage />;
+        return <Navigate to="/dashboard/doctor/main" replace />;
     }
-    // isDoctor가 아니면 (일반 사용자) MainPage
-    return <MainPage />;
+    // isDoctor가 아니면 '/dashboard/main' (환자 대시보드)으로 리다이렉트
+    return <Navigate to="/dashboard/main" replace />;
 };
 
 // -----------------------------------
@@ -72,12 +70,15 @@ const App: React.FC = () => {
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/signup" element={<SignupPage />} />
 
-                    {/* 🟢 핵심: /home 경로에서 역할에 따라 페이지 분기 (HomeRedirector 사용) 🟢 */}
-                    {/* 이 하나의 라우트가 로그인 상태와 역할에 따른 분기를 모두 처리합니다. */}
+                    {/* 🟢 핵심: '/home' 경로에서 역할에 따라 페이지 분기 (HomeRedirector 사용) 🟢 */}
+                    {/* HomeRedirector는 컴포넌트 렌더링 대신 경로 리다이렉트를 수행합니다. */}
                     <Route path="/home" element={<RequireAuth><HomeRedirector /></RequireAuth>} />
 
-                    {/* 2) 로그인 후만 접근 가능 (다른 라우트들) */}
-                    {/* 이 라우트들은 모두 RequireAuth로 감싸져 있습니다. */}
+                    {/* 2) 대시보드 메인 페이지 (실제 컴포넌트 렌더링은 여기서) */}
+                    <Route path="/dashboard/main" element={<RequireAuth><MainPage /></RequireAuth>} />
+                    <Route path="/dashboard/doctor/main" element={<RequireAuth><DoctorMainPage /></RequireAuth>} />
+
+                    {/* 3) 로그인 후만 접근 가능 (다른 라우트들) */}
                     <Route path="/diagnosis" element={<RequireAuth><BodySelectionPage /></RequireAuth>} />
                     <Route path="/dashboard/history" element={<RequireAuth><HistoryPage /></RequireAuth>} />
                     <Route path="/dashboard/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />

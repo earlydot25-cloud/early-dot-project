@@ -285,6 +285,18 @@ const DoctorMainPage: React.FC = () => {
 
         } catch (err) {
             console.error("Failed to fetch doctor dashboard data:", err);
+
+            // 💡 타입 단언을 사용하여 403 에러 안전하게 처리
+            // err를 `{ response: { status: number } }` 타입을 가진 객체로 단언합니다.
+            const errorWithResponse = err as { response?: { status: number } };
+
+            if (errorWithResponse.response && errorWithResponse.response.status === 403) {
+                // 로그인한 사용자가 의사 계정이 아님 -> 환자 대시보드로 리다이렉션
+                navigate('dashboard/main/');
+                return;
+            }
+
+            // 그 외 에러 (401, 500 등) 처리
             setError('의사 대시보드 데이터를 불러오는 데 실패했습니다. 서버 상태 및 인증을 확인하세요.');
         } finally {
             setIsLoading(false);
@@ -341,7 +353,7 @@ const DoctorMainPage: React.FC = () => {
         </div>
 
         {/* 2. 소견 작성 및 확인 대기 진단 내역 */}
-        <h3 className="text-lg font-bold mb-3">소견 작성 및 확인 대기 진단 내역 (총 {attentionHistory.length}건)</h3>
+        <h3 className="text-lg font-bold mb-3">진단 내역 (총 {attentionHistory.length}건)</h3>
         <div className="flex space-x-4 overflow-x-scroll pb-3 scrollbar-hide">
           {attentionHistory.length > 0 ? (
             attentionHistory.map(item => (

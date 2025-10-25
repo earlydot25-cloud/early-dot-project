@@ -43,6 +43,13 @@ const LoginPage: React.FC = () => {
       const displayName = user?.name || user?.email || '';
       localStorage.setItem('userName', displayName);
 
+      // 🎯 [핵심 추가]: HomeRedirector가 사용할 isDoctor 역할 정보 저장
+      // user.is_doctor가 0 또는 1의 숫자 값이라고 가정하고 문자열로 변환하여 저장
+      if (user && typeof user.is_doctor !== 'undefined') {
+        // user.is_doctor (숫자 0 또는 1)을 문자열 "0" 또는 "1"로 저장
+        localStorage.setItem('isDoctor', String(user.is_doctor));
+      }
+
       // ✅ Nav가 즉시 갱신되도록 커스텀 이벤트를 쏜다
       window.dispatchEvent(new Event('auth:update'));
       // 3) 이동
