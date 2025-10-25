@@ -17,7 +17,7 @@ import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # 사용자가 올린 파일(사진, 인증서 등)이 저장되는 디렉토리의 절대 경로
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+#MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # MEDIA 파일을 처리하는 URL
 MEDIA_URL = '/media/'
@@ -182,37 +182,34 @@ REST_FRAMEWORK = {
 # 💡 리액트 FE 연동을 위한 CORS 설정
 # -------------------------------------------------------------------
 
-# 추가/수정 - 개발중 같은 네트워크에 있는 모바일 기기 접속을 위해 추가
-ALLOWED_HOSTS = ["127.0.0.1", "localhost", "192.168.21.163"]
+# [기본값: 로컬만 허용]
+#ALLOWED_HOSTS = ["127.0.0.1", "localhost", "*"]    #<- mac 기준으로 이거 주석 풀고, 아래 주석 달면 됨.
+ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
 # 모든 호스트를 허용합니다 (배포 시에는 특정 도메인으로 제한해야 합니다).
-CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_ALL_ORIGINS = True   # 개발 한정임
+#CORS_ALLOW_ALL_ORIGINS = False
 
+# 로컬 FE 오리진만 허용
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000", "http://127.0.0.1:3000",
-    "http://localhost:5173", "http://127.0.0.1:5173",
-    "http://192.168.21.163:3000",
-    "http://192.168.21.163:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    # 네트워크(IP) 바뀌어도 접속되게 하려면 .local 추가(주석 해제)
+    # sondongbin-ui-MacBookPro 으로 되어 있는 부분이 mac 사용자의 macbook 이름이 들어가면 됨,
+    #"http://sondongbin-ui-MacBookPro.local:3000",
+    #"http://sondongbin-ui-MacBookPro.local:5173",
 ]
 
-# 💡 리액트 FE 개발 서버 주소 허용
-# ✅ CORS: Vite 기본 포트(5173)도 허용
-#CORS_ALLOWED_ORIGINS = [
-#    'http://localhost:3000',
-#    'http://127.0.0.1:3000',
-#    'http://localhost:5173',
-#    'http://127.0.0.1:5173',
-#]
-
-
-
-# 💡 CSRF 보호를 위한 설정
-# 리액트가 Django CSRF 쿠키를 사용해야 한다면 필요합니다.
-# 현재 JWT를 사용하므로 필수는 아니지만, 세션 인증을 위해 추가할 수 있습니다.
+# CSRF 신뢰 오리진
 CSRF_TRUSTED_ORIGINS = [
-    "http://192.168.21.163:3000",
-    "http://192.168.21.163:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    # 네트워크(IP) 바뀌어도 접속되게 하려면 .local 추가(주석 해제)
+    # sondongbin-ui-MacBookPro 으로 되어 있는 부분이 mac 사용자의 macbook 이름이 들어가면 됨,
+    #http://sondongbin-ui-MacBookPro.local:3000",
+    #http://sondongbin-ui-MacBookPro.local:5173",
 ]
-# CSRF_TRUSTED_ORIGINS = [
-#     'http://localhost:3000',
-# ]
