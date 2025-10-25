@@ -169,9 +169,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     # 🔴 이 부분을 임시로 주석 처리하거나 AllowAny로 변경
-    # 'DEFAULT_AUTHENTICATION_CLASSES': (
-    #     'rest_framework_simplejwt.authentication.JWTAuthentication',
-    # ),
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
     'DEFAULT_PERMISSION_CLASSES': [
         # 'rest_framework.permissions.IsAuthenticated', # 🚨 주석 처리 또는 제거
         'rest_framework.permissions.AllowAny',  # 💡 임시로 AllowAny로 변경
@@ -182,21 +182,37 @@ REST_FRAMEWORK = {
 # 💡 리액트 FE 연동을 위한 CORS 설정
 # -------------------------------------------------------------------
 
+# 추가/수정 - 개발중 같은 네트워크에 있는 모바일 기기 접속을 위해 추가
+ALLOWED_HOSTS = ["127.0.0.1", "localhost", "192.168.21.163"]
+
 # 모든 호스트를 허용합니다 (배포 시에는 특정 도메인으로 제한해야 합니다).
 CORS_ALLOW_ALL_ORIGINS = False
 
-# 💡 리액트 FE 개발 서버 주소 허용
-# (FE가 http://localhost:3000에서 실행된다고 가정)
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    # 💡 (선택 사항) 만약 BE와 FE가 동일한 도메인을 사용하지만 포트가 다르다면
-    # CORS_ALLOW_CREDENTIALS = True
+    "http://localhost:3000", "http://127.0.0.1:3000",
+    "http://localhost:5173", "http://127.0.0.1:5173",
+    "http://192.168.21.163:3000",
+    "http://192.168.21.163:5173",
 ]
+
+# 💡 리액트 FE 개발 서버 주소 허용
+# ✅ CORS: Vite 기본 포트(5173)도 허용
+#CORS_ALLOWED_ORIGINS = [
+#    'http://localhost:3000',
+#    'http://127.0.0.1:3000',
+#    'http://localhost:5173',
+#    'http://127.0.0.1:5173',
+#]
+
+
 
 # 💡 CSRF 보호를 위한 설정
 # 리액트가 Django CSRF 쿠키를 사용해야 한다면 필요합니다.
 # 현재 JWT를 사용하므로 필수는 아니지만, 세션 인증을 위해 추가할 수 있습니다.
+CSRF_TRUSTED_ORIGINS = [
+    "http://192.168.21.163:3000",
+    "http://192.168.21.163:5173",
+]
 # CSRF_TRUSTED_ORIGINS = [
 #     'http://localhost:3000',
 # ]

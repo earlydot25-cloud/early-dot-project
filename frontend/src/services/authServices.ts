@@ -1,8 +1,12 @@
-// ---------------------------------------------------------------------------
-// authServices.ts
-// ---------------------------------------------------------------------------
-
-const API_BASE = 'http://localhost:8000';
+// src/services/authServices.ts
+// -----------------------------------------------------------------------------
+// 인증 관련 서비스 모듈
+// - login: 이메일/비밀번호로 토큰 발급
+// - refresh: 갱신
+// - me: 현재 사용자 프로필 가져오기
+// - saveTokens / clearAuth: 로컬 스토리지 관리
+// -----------------------------------------------------------------------------
+import { API_BASE, STORAGE, http } from './http';
 
 // DRF 에러 평탄화
 export function parseDjangoErrors(data: any): Record<string, string> {
@@ -144,4 +148,58 @@ export async function signupUserMultipart(payload: SignupMultipartPayload) {
     }
     return { ok: false as const, status: 0, errors: { _error: e?.message || 'Network error' } };
   }
+}
+
+export type Tokens = { access: string; refresh: string };
+export type User = {
+  id: number;
+  email: string;
+  name: string;
+  is_doctor: boolean;
+  doctor_uid: number | null;
+};
+
+export async function login(params: { email: string; password: string }): Promise<Tokens> {
+  // SimpleJWT: /api/auth/login/ 에 { email, password } 전송 (커스텀 유저 email 로그인)
+  const data = await fetch(`${API_BASE}/api/auth/login/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  }).then(async (res) => {
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = json?.detail || '이메일 또는 비밀번호를 확인하세요.';
+      const e = new Error(msg) as any;
+      e.payload = json;
+      e.status = res.status;
+      throw e;
+    }
+    return json as Tokens;
+  });
+
+  return data;
+}
+
+export async function refresh(refreshToken: string): Promise<Pick<Tokens, 'access'>> {
+  return http.post<Pick<Tokens, 'access'>>('/api/auth/refresh/', { refresh: refreshToken });
+}
+
+export async function me(): Promise<User> {
+  // /api/auth/profile/ 는 IsAuthenticated 보호 (백엔드에서 설정) :contentReference[oaicite:8]{index=8}
+  return http.get<User>('/api/auth/profile/');
+}
+
+export function saveTokens(tokens: Tokens) {
+  localStorage.setItem(STORAGE.access, tokens.access);
+  localStorage.setItem(STORAGE.refresh, tokens.refresh);
+}
+
+export function saveUser(user: User) {
+  localStorage.setItem(STORAGE.user, JSON.stringify(user));
+}
+
+export function clearAuth() {
+  localStorage.removeItem(STORAGE.access);
+  localStorage.removeItem(STORAGE.refresh);
+  localStorage.removeItem(STORAGE.user);
 }

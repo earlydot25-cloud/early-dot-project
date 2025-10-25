@@ -2,68 +2,41 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 
-// Pages
 import BeforeLoginPage from './pages/BeforeLoginPage';
 import MainPage from './pages/dashboard/MainPage';
 import LoginPage from './pages/auth/LoginPage';
 import SignupPage from "./pages/auth/SignupPage";
 import BodySelectionPage from './pages/diagnosis/CapturePage';
-// import BodySelectionPage from './pages/diagnosis/BodySelectionPage';
-// import CapturePage from './pages/diagnosis/CapturePage'; // 나중에 바꿔야함 BodySelectionPage로
 import HistoryPage from './pages/dashboard/HistoryPage';
 import ProfilePage from './pages/dashboard/ProfilePage';
 import ResultDetailPage from './pages/diagnosis/ResultDetailPage';
 
-// 간단한 로그인 판별(토큰 키는 실제 프로젝트에 맞춰 추가/수정 가능)
-const isAuthed = () =>
-  Boolean(
-    typeof window !== 'undefined' &&
-      (localStorage.getItem('accessToken') ||
-        localStorage.getItem('refreshToken') ||
-        localStorage.getItem('token') ||
-        localStorage.getItem('idToken'))
-  );
+// 간단한 로그인 판별
+const isAuthed = () => !!localStorage.getItem('accessToken');
 
-// 보호 라우트: 미로그인 시 BeforeLoginPage로
-type RequireAuthProps = { children: React.ReactElement };
-
-const RequireAuth: React.FC<RequireAuthProps> = ({ children }) => {
+// 보호 라우트: 미로그인 시 / 로 리다이렉트
+const RequireAuth: React.FC<{ children: React.ReactElement }> = ({ children }) => {
   return isAuthed() ? children : <Navigate to="/" replace />;
 };
-
 
 const App: React.FC = () => {
   return (
     <BrowserRouter>
       <Layout>
         <Routes>
-          {/* 로그인 이전 랜딩 */}
+          {/* 0) 로그인 전 랜딩 */}
           <Route path="/" element={<BeforeLoginPage />} />
 
-          {/* 🔴 보호 라우트 (RequireAuth 적용) - 주석 처리 🔴
-              로그인 기능 구현 후 필요할 때 주석을 해제하고 아래 임시 라우트를 삭제하세요. */}
-          {/* <Route path="/home" element={<RequireAuth><MainPage /></RequireAuth>} />
-          <Route path="/diagnosis" element={<RequireAuth><BodySelectionPage /></RequireAuth>} />
-          <Route path="/dashboard" element={<RequireAuth><HistoryPage />/RequireAuth>}< />
-          <Route path="/dashboard" element={<RequireAuth><ProfilePage /></RequireAuth>} />
-          */}
-
-          {/* 로그인 이전 랜딩 및 인증 관련 유지 */}
-          <Route path="/" element={<BeforeLoginPage />} />
+          {/* 1) 인증 관련 */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
-          <Route path="/home" element={<MainPage />} />
 
-          {/* 진단 시작 경로는 유지 */}
-          <Route path="/diagnosis" element={<BodySelectionPage />} />
-
-          {/* 대시보드 경로는 기능별로 분리 */}
-          <Route path="/dashboard/history" element={<HistoryPage />} />
-          <Route path="/dashboard/profile" element={<ProfilePage />} />
-
-          {/* 진단 상세 결과 페이지 경로는 ID를 받아야 함 (이전에 MainPage에서 설정한 경로와 일치) */}
-          <Route path="/diagnosis/detail/:id" element={<ResultDetailPage />} />
-
+          {/* 2) 로그인 후만 접근 가능 */}
+          <Route path="/home" element={<RequireAuth><MainPage /></RequireAuth>} />
+          <Route path="/diagnosis" element={<RequireAuth><BodySelectionPage /></RequireAuth>} />
+          <Route path="/dashboard/history" element={<RequireAuth><HistoryPage /></RequireAuth>} />
+          <Route path="/dashboard/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
+          <Route path="/diagnosis/detail/:id" element={<RequireAuth><ResultDetailPage /></RequireAuth>} />
         </Routes>
       </Layout>
     </BrowserRouter>
@@ -71,4 +44,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-export {};
