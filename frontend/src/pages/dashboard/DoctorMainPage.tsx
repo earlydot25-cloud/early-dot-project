@@ -254,14 +254,14 @@ const DoctorMainPage: React.FC = () => {
         const API_URL = 'api/dashboard/doctor/main/';
 
         try {
-            const token = localStorage.getItem('accessToken');
-            if (!token) {
-                throw new Error('인증 토큰이 없습니다. 로그인이 필요합니다.');
-            }
+//             const token = localStorage.getItem('accessToken');
+//             if (!token) {
+//                 throw new Error('인증 토큰이 없습니다. 로그인이 필요합니다.');
+//             }
 
             const response = await axios.get<MainDashboardData>(API_URL, {
                 headers: {
-                    Authorization: `Bearer ${token}`,
+//                     Authorization: `Bearer ${token}`,
                 },
             });
 
