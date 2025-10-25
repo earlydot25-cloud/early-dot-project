@@ -86,11 +86,11 @@ class RegisterSerializer(serializers.ModelSerializer):
         except django_exceptions.ValidationError as e:
             raise serializers.ValidationError({"password": list(e.messages)})
 
-        # 1) sex / family_history 정규화 (family_history는 기본 'N')
+        # 1) sex / family_history 정규화
         attrs["sex"] = self._norm_sex(self.initial_data.get("sex", attrs.get("sex")))
         attrs["family_history"] = self._norm_fh(self.initial_data.get("family_history", attrs.get("family_history")))
 
-        # 2) 공통 필수(가족력은 기본값 있으니 제외)
+        # 2) 공통 필수
         required = ["email", "password", "name", "sex", "age"]
         missing = [k for k in required if not attrs.get(k)]
         if missing:
@@ -100,19 +100,20 @@ class RegisterSerializer(serializers.ModelSerializer):
         if User._default_manager.filter(email=attrs["email"]).exists():
             raise serializers.ValidationError({"email": ["이미 사용 중입니다."]})
 
-        # 4) 의사/환자 분기
+        # 4) 의사/환자 분기 (여기서는 절대 return 하지 말 것!)
         is_doctor = self._to_bool(self.initial_data.get("is_doctor", attrs.get("is_doctor", False)))
         attrs["is_doctor"] = is_doctor
 
         if is_doctor:
-            # 의사일 때만 필수
+            # 의사 필수 3종
             specialty = self.initial_data.get("specialty") or attrs.get("specialty")
             hospital = self.initial_data.get("hospital") or attrs.get("hospital")
             license_file = self.initial_data.get("license_file") or attrs.get("license_file")
             if not specialty or not hospital or license_file is None:
                 raise serializers.ValidationError({"doctor": ["specialty / hospital / license_file 모두 필요합니다."]})
+            # ⚠ 여기서 return 금지
         else:
-            # 환자 경로: referral_uid는 선택 (권고 가입일 때만 프론트에서 보냄)
+            # 환자 권고가입 uid 검증 (있을 때만)
             ref_raw = self.initial_data.get("referral_uid", attrs.get("referral_uid"))
             if ref_raw not in (None, "", "null"):
                 try:
@@ -121,46 +122,54 @@ class RegisterSerializer(serializers.ModelSerializer):
                         raise ValueError()
                 except ValueError:
                     raise serializers.ValidationError({"referral_uid": ["식별 코드는 양의 정수여야 합니다."]})
+                doctor_obj = Doctors.objects.filter(uid=n).first()
+                if not doctor_obj:
+                    raise serializers.ValidationError({"referral_uid": ["유효하지 않은 의사 식별번호(uid)입니다."]})
+                attrs["doctor"] = doctor_obj
+            else:
+                attrs.pop("doctor", None)
 
+        # ✅ 모든 분기 끝난 후 "항상" attrs 리턴
+        assert isinstance(attrs, dict), "internal: attrs must be dict"
         return attrs
 
-    # --------- create ---------
     def create(self, validated_data):
-        # Users 모델에 없는 필드는 먼저 제거(pop)해서 Users()에 안 들어가게 한다.
+        # 1️⃣ 공통 필드 분리
         is_doctor = validated_data.pop("is_doctor", False)
-        referral_uid = validated_data.pop("referral_uid", None)
+        doctor_obj = validated_data.pop("doctor", None)
+        validated_data.pop("referral_uid", None)
+        password = validated_data.pop("password")
+
+        # 2️⃣ Users 모델에 없는 의사 전용 필드 제거
         specialty = validated_data.pop("specialty", None)
         hospital = validated_data.pop("hospital", None)
         license_file = validated_data.pop("license_file", None)
 
-        # Users 생성
-        password = validated_data.pop("password")
+        # 3️⃣ Users 객체 생성
         user = User.objects.create(**validated_data, is_doctor=is_doctor)
         user.set_password(password)
         user.save()
 
-        if referral_uid:
-            try:
-                doctor = Doctors.objects.get(uid=referral_uid)
-                # User에 FK 필드명이 다르다면 그에 맞춰 바꿔줘 (예: user.referral = doctor)
-                user.doctor = doctor
-                user.save()
-            except Doctors.DoesNotExist:
-                pass  # 존재하지 않으면 그냥 무시
+        # 4️⃣ 환자 권고가입인 경우 doctor FK 연결
+        if doctor_obj is not None:
+            user.doctor = doctor_obj
+            user.save()
 
-        # 의사 정보 저장
+        # 5️⃣ 의사 본인 가입일 경우 Doctors 프로필 생성
         if is_doctor:
             saved_path = ""
             if license_file:
                 filename = f"certs/{uuid4().hex}_{getattr(license_file, 'name', 'license')}"
                 saved_path = default_storage.save(filename, license_file)
+
             Doctors.objects.create(
-                uid=user,
+                uid=user,  # ✅ uid는 ForeignKey(=User) 필드
                 name=user.name,
                 specialty=specialty or "",
                 hospital=hospital or "",
-                cert_path=saved_path,
+                cert_path=saved_path,  # ✅ 모델 필드명과 일치
                 status="pending",
             )
 
         return user
+
