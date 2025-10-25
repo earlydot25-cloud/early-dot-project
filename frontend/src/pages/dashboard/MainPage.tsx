@@ -1,8 +1,19 @@
-import React, { useState, useEffect } from 'react';
+// src/pages/dashboard/MainPage.tsx
+// ----------------------------------------------------------------------------------
+// ✅ 요구사항 요약 반영
+// - 로그인한 계정(환자/의사)에 "속한" 진단만 보이게 필터링
+// - 첫 가입 등 "내 진단 0건"이면 상단 요약/전체보기/헤더 전부 숨김
+// - 대신 CTA 문구만 노출: "조회 가능한 진단내역이 존재하지 않습니다! 지금 바로 새로운 진단을 시작해보세요!"
+// - 타입스크립트, 빌드 에러/경고 정리
+// - axios 예외 처리에서 버전/타입 차이로 인한 isAxiosError 의존 제거
+// ----------------------------------------------------------------------------------
+
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+// 아이콘 (react-icons는 TS에서 컴포넌트 제네릭 충돌이 가끔 나서 안전 래퍼 사용)
 import { FaCamera, FaChevronRight, FaExclamationTriangle, FaCheckCircle, FaUserMd } from 'react-icons/fa';
 import type { IconBaseProps } from 'react-icons';
-// 💡 axios 임포트 (프로젝트에 axios가 설치되어 있어야 합니다)
 import axios from 'axios';
 
 // -----------------------------------
@@ -10,27 +21,37 @@ import axios from 'axios';
 // -----------------------------------
 interface FollowUpCheckData {
   current_status: '요청중' | '확인 완료';
+  // 의사 위험도는 보통 '소견 대기' | '즉시 주의' | '경과 관찰' | '정상'만 내려옴
   doctor_risk_level: '소견 대기' | '즉시 주의' | '경과 관찰' | '정상';
   doctor_note: string | null;
 }
+
 interface PhotoData {
   body_part: string;
   folder_name: string;
-  upload_storage_path: string;
-  capture_date: string;
+  upload_storage_path: string; // 이미지 절대/상대 경로
+  capture_date: string;        // ISO 문자열
 }
+
 interface DiseaseData {
   name_ko: string;
 }
+
 interface DiagnosisResult {
   id: number;
   photo: PhotoData;
   disease: DiseaseData;
-  analysis_date: string;
+  analysis_date: string;                     // ISO 문자열
+  // AI 위험도 스펙
   risk_level: '높음' | '보통' | '낮음' | '정상';
   vlm_analysis_text: string | null;
   followup_check: FollowUpCheckData | null;
+
+  // 🔻 소유 식별자(반드시 백엔드 필드명과 일치하도록 선언)
+  user_id?: number;     // 환자 Users.id
+  doctor_uid?: number;  // 의사 Doctors.uid
 }
+
 interface MainDashboardData {
   summary: {
     total_count: number;
@@ -38,11 +59,9 @@ interface MainDashboardData {
   };
   history: DiagnosisResult[];
 }
-// -----------------------------------
-
 
 // -----------------------------------
-// 🔴 TS2786 에러 해결을 위한 타입 안전 래퍼 추가 🔴
+// 🔴 아이콘 안전 래퍼 (TS2786 방지) 🔴
 // -----------------------------------
 type IconCmp = React.FC<IconBaseProps>;
 const UserMdIcon: IconCmp = (props) => React.createElement(FaUserMd as any, props);
@@ -50,37 +69,35 @@ const CameraIcon: IconCmp = (props) => React.createElement(FaCamera as any, prop
 const ChevronRightIcon: IconCmp = (props) => React.createElement(FaChevronRight as any, props);
 const ExclamationTriangleIcon: IconCmp = (props) => React.createElement(FaExclamationTriangle as any, props);
 const CheckCircleIcon: IconCmp = (props) => React.createElement(FaCheckCircle as any, props);
+
 // -----------------------------------
-
-
-// --- [컴포넌트] 진단 내역 카드 ---
+// [카드 컴포넌트] DiagnosisCard
+// -----------------------------------
 interface DiagnosisCardProps {
-  data: DiagnosisResult; // 🔴 실제 데이터 타입 사용
+  data: DiagnosisResult;
+  isDoctorView?: boolean; // 의사 모드 여부
 }
-const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data }) => {
-  // 💡 1. useNavigate 훅 호출
-  const navigate = useNavigate(); // DiagnosisCard 내부에서 호출
 
-  // 💡 2. 버튼 클릭 핸들러 추가
+const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data, isDoctorView = false }) => {
+  const navigate = useNavigate();
+
   const handleViewResult = () => {
-    // ResultDetailPage.tsx와 연동 (예: /diagnosis/detail/1)
-    // data.id는 해당 진단 결과의 고유 ID입니다.
+    // 상세 페이지로 이동 (라우팅은 프로젝트 라우트에 맞춰 조정)
     navigate(`/diagnosis/detail/${data.id}`);
   };
 
-  // 🔴 API 응답 데이터로 로직 수정
-  const hasDoctorNote = data.followup_check && data.followup_check.doctor_note && data.followup_check.doctor_risk_level !== '소견 대기';
-  const isRequesting = data.followup_check && data.followup_check.current_status === '요청중' && !hasDoctorNote;
+  // 의사 소견이 있고 '소견 대기'가 아니면 의사 위험도 우선
+  const hasDoctorNote =
+    !!data.followup_check?.doctor_note &&
+    data.followup_check?.doctor_risk_level !== '소견 대기';
 
-  // 최종 위험도 결정 (의사 소견이 있으면 의사 소견 위험도 사용)
-  const finalRiskLevel = hasDoctorNote
-    ? data.followup_check!.doctor_risk_level
-    : data.risk_level;
+  const finalRiskLevel =
+    hasDoctorNote ? data.followup_check!.doctor_risk_level : data.risk_level;
 
   const riskLabel = hasDoctorNote ? '의사' : 'AI';
   const isAttentionNeeded = finalRiskLevel === '높음' || finalRiskLevel === '즉시 주의';
 
-  let riskDisplay;
+  let riskDisplay: string;
   let riskColor = 'text-gray-700';
 
   if (finalRiskLevel === '높음' || finalRiskLevel === '즉시 주의') {
@@ -94,88 +111,112 @@ const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data }) => {
     riskColor = 'text-green-600';
   }
 
-  // 날짜 포맷팅 (YYYY-MM-DDT... 형식 가정)
-  const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('ko-KR');
+  const buttonText = isDoctorView
+    ? hasDoctorNote
+      ? '소견 작성/보기'
+      : '소견 작성 대기'
+    : hasDoctorNote
+    ? '결과 열람'
+    : '요청 처리 대기';
 
-  // UI 이미지와 유사하게 구조화
+  const formatDate = (iso: string) => new Date(iso).toLocaleDateString('ko-KR');
+
   return (
     <div className={`p-4 border rounded-lg shadow-sm w-80 flex-shrink-0 bg-white ${isAttentionNeeded ? 'border-red-400' : 'border-gray-200'}`}>
       <div className="flex justify-between items-start">
-        {/* 좌측: 환부 이미지 및 기본 정보 */}
-        <div className="flex">
-          {/* 환부 이미지 Placeholder */}
-          <div className="w-16 h-16 rounded mr-3 flex items-center justify-center overflow-hidden">
-              {/* 💡 수정된 부분: storage_path를 사용하여 이미지 렌더링 */}
-              {data.photo && data.photo.upload_storage_path ? (
-                // data.photo 객체와 storage_path 필드가 존재할 경우 <img> 태그 사용
+        {/* 좌측: 이미지 + 병변명 */}
+        <div className="flex flex-col flex-grow">
+          <div className="flex items-start mb-3">
+            <div className="w-16 h-16 rounded mr-3 flex items-center justify-center overflow-hidden flex-shrink-0">
+              {data.photo?.upload_storage_path ? (
                 <img
-                  // 프론트엔드에서 API_URL을 '/api/dashboard/main/'로 설정했으므로,
-                  // storage_path는 이미지를 직접 가리키는 경로(예: /media/photos/1.jpg)여야 합니다.
                   src={data.photo.upload_storage_path}
                   alt={`${data.disease.name_ko} 이미지`}
                   className="w-full h-full object-cover"
                 />
               ) : (
-                // storage_path가 없을 경우 대체 UI 표시
-                <div className="w-full h-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-800">
+                <div className="w-full h-full bg-blue-500 flex items-center justify-center text-xs font-bold text-white">
                   이미지 없음
                 </div>
               )}
             </div>
 
-          <div className="text-sm">
-            {/* AI 예측 병변 */}
-            <p className="text-xs font-medium text-gray-500">AI 예측 병변</p>
-            <p className="text-lg font-bold text-gray-900 leading-tight">{data.disease.name_ko}</p>
-
-            {/* 저장 폴더명 등 */}
-            <div className="text-xs text-gray-700 space-y-0.5 mt-2">
-                <p>저장 폴더: {data.photo.folder_name}</p>
-                <p>위치: {data.photo.body_part}</p>
-                <p>최초 생성: {formatDate(data.photo.capture_date)}</p>
-                <p>마지막 수정: {formatDate(data.analysis_date)}</p>
+            <div className="text-left flex-grow">
+              <p className="text-xs font-medium text-gray-500">AI 예측 병변</p>
+              <p className="text-lg font-bold text-gray-900 leading-tight">{data.disease.name_ko}</p>
             </div>
+          </div>
+
+          {/* 폴더/위치/날짜 */}
+          <div className="text-sm text-gray-700 space-y-1 mt-3 border-t pt-3 border-gray-100">
+            <p className="text-left">
+              <span className="font-bold text-gray-900">저장 폴더:</span> {data.photo.folder_name}
+            </p>
+            <p className="text-left">
+              <span className="font-bold text-gray-900">위치:</span> {data.photo.body_part}
+            </p>
+            <p className="text-left">
+              <span className="font-bold text-gray-900">최초 생성:</span> {formatDate(data.photo.capture_date)}
+            </p>
+            <p className="text-left">
+              <span className="font-bold text-gray-900">마지막 수정:</span> {formatDate(data.analysis_date)}
+            </p>
           </div>
         </div>
 
-        {/* 우측: 위험도 및 버튼 */}
+        {/* 우측: 위험도/버튼 */}
         <div className="ml-2 flex flex-col items-end">
-          <div className="text-xs font-semibold text-right mb-2">
-            {riskDisplay.split(' - ').map((line, index) => (
-              <p key={index} className={index === 1 ? riskColor : 'text-gray-500'}>
-                {line}
-              </p>
-            ))}
-          </div>
+          {/* 환자 뷰에서는 결과 열람 전 위험도 노출 최소화(의사 소견이 있으면 노출) */}
+          {(!isDoctorView || hasDoctorNote) && (
+            <div className="text-xs font-semibold text-right mb-2">
+              {riskDisplay.split(' - ').map((line, idx) => (
+                <p key={idx} className={idx === 1 ? riskColor : 'text-gray-500'}>
+                  {line}
+                </p>
+              ))}
+            </div>
+          )}
 
           <button
-            onClick={handleViewResult} // 💡 수정: 이젠 스코프 내부에 정의된 함수
+            onClick={handleViewResult}
             className="py-2 px-3 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition duration-150"
           >
-            {isRequesting ? '요청 처리 대기' : '결과 열람'}
+            {buttonText}
           </button>
         </div>
       </div>
 
-      {/* 하단: 의사 소견 영역 / AI 분석 결과 (요청 사항 반영) */}
-      <div className={`mt-4 pt-3 border-t border-gray-100 ${hasDoctorNote ? 'bg-indigo-50 p-2 rounded' : ''}`}>
-        <p className={`text-xs font-medium mb-1 ${hasDoctorNote ? 'text-indigo-700 flex items-center' : 'text-gray-700'}`}>
-            {hasDoctorNote ? <UserMdIcon className="mr-1" /> : 'AI 분석 결과'}
-        </p>
-        <p className="text-xs text-gray-700 line-clamp-2">
+      {/* 하단: 소견/분석 텍스트 */}
+      {isDoctorView ? (
+        <div className="mt-4 pt-3 border-t border-gray-100 bg-indigo-50 p-2 rounded">
+          <p className="text-xs font-medium mb-1 text-indigo-700 flex items-center">
+            <UserMdIcon className="mr-1" /> 최종 소견
+          </p>
+          <p className="text-xs text-gray-700 line-clamp-2">
             {hasDoctorNote
-                ? data.followup_check!.doctor_note || '의사 소견이 아직 작성되지 않았습니다.'
-                : data.vlm_analysis_text || 'AI 분석 결과 텍스트가 없습니다.'}
-        </p>
-      </div>
-
-      {/* 의사 소견 대기 상태 (별도로 표시할 필요 없음. 위에서 '요청 처리 대기' 버튼으로 대체됨) */}
+              ? data.followup_check!.doctor_note || '의사 소견이 아직 작성되지 않았습니다.'
+              : data.vlm_analysis_text || 'AI 분석 결과 텍스트만 있습니다.'}
+          </p>
+        </div>
+      ) : (
+        hasDoctorNote && (
+          <div className="mt-4 pt-3 border-t border-gray-100 bg-indigo-50 p-2 rounded">
+            <p className="text-xs font-medium mb-1 text-indigo-700 flex items-center">
+              <UserMdIcon className="mr-1" /> 의사 소견
+            </p>
+            <p className="text-xs text-gray-700 line-clamp-2">
+              {data.followup_check!.doctor_note || '의사 소견이 아직 작성되지 않았습니다.'}
+            </p>
+          </div>
+        )
+      )}
     </div>
   );
 };
 
-
-// --- [보조 함수] ABCDE 항목 렌더링 ---
+// -----------------------------------
+// 보조 컴포넌트: ABCDE 설명 아이템
+// -----------------------------------
 const renderABCDEItem = (key: string, title: string, description: string) => (
   <div key={key} className="p-3 bg-white border rounded-lg shadow-sm">
     <p className="text-md font-semibold text-gray-800 mb-1">{title}</p>
@@ -183,75 +224,122 @@ const renderABCDEItem = (key: string, title: string, description: string) => (
   </div>
 );
 
-
-// --- [메인 컴포넌트] MainPage ---
-
+// -----------------------------------
+// 메인 컴포넌트
+// -----------------------------------
 const MainPage: React.FC = () => {
   const navigate = useNavigate();
-  // 🔴 API 응답을 저장할 상태 정의
+
+  // API 데이터/상태
   const [data, setData] = useState<MainDashboardData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 🔴 API 호출 로직 (useEffect)
+  // ✨ 메인 데이터 로드
   useEffect(() => {
-    const fetchMainData = async () => {
-      // 💡 백엔드 URL을 정확히 맞춰주세요. (예: process.env.REACT_APP_API_BASE_URL + '/dashboard/main/')
-      const API_URL = 'api/dashboard/main/';
-
+    async function fetchMainData() {
       try {
-        const response = await axios.get<MainDashboardData>(API_URL, {
-            // 💡 인증 토큰 전송 설정 (예시: localStorage에서 토큰 가져오기)
-            headers: {
-                Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
-            },
+        // 개발 프록시가 세팅되어 있으면 상대 경로로 호출 가능
+        const API_URL = '/api/dashboard/main/';
+        const res = await axios.get<MainDashboardData>(API_URL, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
         });
 
-        setData(response.data);
-      } catch (err) {
-        console.error("Failed to fetch dashboard data:", err);
+        setData(
+          (res.data as MainDashboardData) ?? {
+            summary: { total_count: 0, attention_count: 0 },
+            history: [],
+          }
+        );
+        setError(null);
+      } catch (err: any) {
+        // axios 버전/타입에 상관없이 안전하게 상태코드만 뽑기
+        const status = (err as any)?.response?.status as number | undefined;
+
+        if (status === 401) {
+          // 인증 안 됨 → 로그인으로
+          navigate('/login');
+          return;
+        }
+        if (status === 404 || status === 204) {
+          // 데이터 없음 → 정상 플로우(빈 상태)
+          setData({ summary: { total_count: 0, attention_count: 0 }, history: [] });
+          setError(null);
+          return;
+        }
+
         setError('데이터를 불러오는 데 실패했습니다. 서버 상태를 확인하세요.');
       } finally {
         setIsLoading(false);
       }
-    };
+    }
 
     fetchMainData();
-  }, []); // 컴포넌트 마운트 시 한 번만 실행
+  }, [navigate]);
 
-
-  // 로딩 및 에러 처리 UI
+  // 로딩/에러 처리
   if (isLoading) {
     return <div className="p-4 text-center text-lg">데이터를 불러오는 중...</div>;
   }
-
   if (error) {
     return <div className="p-4 text-center text-red-600 text-lg">{error}</div>;
   }
+  if (!data) {
+    // 이 케이스는 드뭄(네트워크 예외 등)
+    return <div className="p-4 text-center text-gray-600">표시할 데이터가 없습니다.</div>;
+  }
 
-  // 데이터가 성공적으로 로드되면 렌더링
-  const summary = data!.summary;
-  const history = data!.history;
+  // -----------------------------------
+  // 🔎 “내 것만” 필터링 + 요약 계산 (=> 이 숫자만 UI에 사용)
+  // -----------------------------------
+  const history = data.history ?? [];
 
+  // 로그인한 사용자 정보 (localStorage에 로그인 시 저장되어 있어야 함)
+  const currentUserId = Number(localStorage.getItem('userId'));          // Users.id
+  const currentDoctorUid = Number(localStorage.getItem('doctorUid'));    // Doctors.uid
+  const isDoctor = localStorage.getItem('isDoctor') === 'true';
 
-  // AI 진단 촬영 안내 버튼 클릭 핸들러
-  const handleDiagnosisClick = () => {
-    navigate('/diagnosis');
+  // 내 소유만 남기기
+  const filteredHistory: DiagnosisResult[] = history.filter((item) => {
+    if (!isDoctor) {
+      // 환자: 내 Users.id와 일치하는 기록만
+      return item.user_id === currentUserId;
+    }
+    // 의사: 내 Doctors.uid와 연결된 기록만
+    return item.doctor_uid === currentDoctorUid;
+  });
+
+  // 최종 위험도 타입(의사/AI 통합 관점)
+  type FinalRisk = '즉시 주의' | '높음' | '경과 관찰' | '보통' | '낮음' | '정상';
+
+  // 최종 위험도(의사 소견 우선)
+  const getFinalRisk = (item: DiagnosisResult): FinalRisk => {
+    const dr = item.followup_check?.doctor_risk_level;
+    if (dr && dr !== '소견 대기') {
+      return dr as FinalRisk; // TS 좁힘 한계로 안전 캐스팅
+    }
+    return item.risk_level as FinalRisk;
   };
 
-  // 진단 내역 전체보기 버튼 클릭 핸들러
-  const handleViewAllHistory = () => {
-    navigate('/dashboard');
-  };
+  // 요약 수치(반드시 filtered 기준)
+  const visibleTotal = filteredHistory.length;
+  const visibleAttention = filteredHistory.filter((i) => {
+    const r = getFinalRisk(i);
+    return r === '즉시 주의' || r === '높음';
+  }).length;
+
+  // 버튼 핸들러
+  const handleDiagnosisClick = () => navigate('/diagnosis');
+  const handleViewAllHistory = () => navigate('/dashboard');
 
   return (
-    <div className="p-4 space-y-6">
-
+    <div className="p-1 space-y-3">
       {/* 1. AI 진단 사용 안내 */}
       <section className="p-4 bg-blue-50 border-l-4 border-blue-600 rounded-lg shadow-sm">
         <h2 className="text-lg font-bold text-blue-800 mb-2">AI 진단 사용 안내</h2>
         <p className="text-sm text-gray-700 mb-4">
-          'EARLY-DOT' AI는 **"AI 예측 병변 및 임상 데이터"**를 기반으로 훈련되었으며, 병변의 형태, 크기, 색상 등의 정보를 종합적으로 분석하여 위험도를 예측합니다.
+          'EARLY-DOT' AI는 <strong>"AI 예측 병변 및 임상 데이터"</strong>를 기반으로 훈련되었으며,
+          병변의 형태, 크기, 색상 등의 정보를 종합적으로 분석하여 위험도를 예측합니다.
         </p>
         <button
           onClick={handleDiagnosisClick}
@@ -261,34 +349,41 @@ const MainPage: React.FC = () => {
         </button>
       </section>
 
-      {/* 2. AI 진단 내역 상단 고정 및 요약 */}
+      {/* 2. AI 진단 내역 (상단 요약/헤더는 “내 것”이 0건이면 숨김) */}
       <section>
-        {/* 상단 요약 (개수, 주의 개수, 전체보기) */}
-        <div className="flex justify-between items-center mb-3 p-2 bg-gray-50 rounded-md shadow-inner">
-          <div className="text-sm font-medium text-gray-700 flex items-center space-x-4">
-            <span className="flex items-center">
-              <CheckCircleIcon className="text-green-500 mr-1" /> 전체 {summary.total_count}건
-            </span>
-            <span className="flex items-center text-red-600 font-bold">
-              <ExclamationTriangleIcon className="mr-1" /> 주의 {summary.attention_count}건
-            </span>
+        {visibleTotal > 0 && (
+          <div className="flex justify-between items-center mb-3 p-2 bg-gray-50 rounded-md shadow-inner">
+            <div className="text-sm font-medium text-gray-700 flex items-center space-x-4">
+              <span className="flex items-center">
+                <CheckCircleIcon className="text-green-500 mr-1" /> 전체 {visibleTotal}건
+              </span>
+              <span className="flex items-center text-red-600 font-bold">
+                <ExclamationTriangleIcon className="mr-1" /> 주의 {visibleAttention}건
+              </span>
+            </div>
+            <button
+              onClick={handleViewAllHistory}
+              className="flex items-center text-sm text-blue-600 font-medium hover:text-blue-800"
+            >
+              진단 내역 전체보기 <ChevronRightIcon className="ml-1 text-xs" />
+            </button>
           </div>
-          <button onClick={handleViewAllHistory} className="flex items-center text-sm text-blue-600 font-medium hover:text-blue-800">
-            진단 내역 전체보기 <ChevronRightIcon className="ml-1 text-xs" />
-          </button>
-        </div>
+        )}
 
-        {/* 진단 내역 카드 (옆으로 스크롤) */}
-        <h3 className="text-lg font-bold mb-3">AI 진단 내역 (최근 {history.length}건)</h3>
+        {visibleTotal > 0 && (
+          <h3 className="text-lg font-bold mb-3">AI 진단 내역 (최근 {visibleTotal}건)</h3>
+        )}
+
         <div className="flex space-x-4 overflow-x-scroll pb-3 scrollbar-hide">
-          {history.map(item => (
-            <DiagnosisCard
-                key={item.id}
-                data={item}
-            />
-          ))}
-          {history.length === 0 && (
-            <p className="text-gray-500">아직 진단 내역이 없습니다. 새로운 진단을 시작하세요.</p>
+          {visibleTotal > 0 ? (
+            filteredHistory.map((item) => (
+              <DiagnosisCard key={item.id} data={item} isDoctorView={isDoctor} />
+            ))
+          ) : (
+            // 🔻 요구한 문구: 0건일 때만 노출
+            <p className="text-gray-700 font-medium">
+              조회 가능한 진단내역이 존재하지 않습니다! 지금 바로 새로운 진단을 시작해보세요!
+            </p>
           )}
         </div>
       </section>
@@ -300,26 +395,14 @@ const MainPage: React.FC = () => {
           ABCDE 기법이란? 내 피부를 스스로 점검할 수 있는 5가지 기준입니다.
         </p>
 
-        {/* ABCDE 설명 항목 */}
         <div className="space-y-3">
           {renderABCDEItem('A', 'A. 비대칭 (Asymmetry)', '환부 모양을 반으로 접었을 때 대칭인지 확인합니다. 비대칭일수록 악성일 가능성이 높습니다.')}
           {renderABCDEItem('B', 'B. 경계 (Border)', '경계선이 울퉁불퉁하거나 불규칙한지 확인합니다. 불규칙할수록 위험합니다.')}
           {renderABCDEItem('C', 'C. 색상 (Color)', '한 병변 내에 2가지 이상의 색상이 섞여 있는지 확인합니다. 색상 변화가 클수록 위험합니다.')}
-
-          {/* D, E 기법 (사용자 관찰 유도) */}
-          {renderABCDEItem(
-            'D',
-            'D. 크기 (Diameter)',
-            '해당 환부 부위가 6mm 가 넘는지 직접 확인하세요. 6mm 이상일 경우 변화 속도를 기록하며 주의 깊은 관찰이 필요합니다.'
-          )}
-          {renderABCDEItem(
-            'E',
-            'E. 변화 (Evolving)',
-            '해당 환부 부위가 최근 경계가 넓어지거나, 가려움, 통증, 출혈을 동반하는지 환자 스스로 관찰하여 변화를 기록하세요.'
-          )}
+          {renderABCDEItem('D', 'D. 크기 (Diameter)', '해당 환부 부위가 6mm가 넘는지 직접 확인하세요. 6mm 이상일 경우 변화 속도를 기록하며 주의 깊은 관찰이 필요합니다.')}
+          {renderABCDEItem('E', 'E. 변화 (Evolving)', '해당 환부 부위가 최근 경계가 넓어지거나, 가려움/통증/출혈이 있는지 스스로 관찰하여 변화를 기록하세요.')}
         </div>
       </section>
-
     </div>
   );
 };

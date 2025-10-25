@@ -15,28 +15,21 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+# early_dot/urls.py
 from django.contrib import admin
-from django.urls import path, include, re_path
-from django.views.generic import TemplateView
+from django.urls import path, include
+from users.views import UserSignupView, UserProfileView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from django.conf import settings
 from django.conf.urls.static import static
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-
-    # 1. API 라우팅 (API prefix만 사용)
-    path('api/auth/', include('users.urls')),  # users 앱 (인증)
-    path('api/diagnosis/', include('diagnosis.urls')),  # diagnosis 앱 (실시간 진단)
+    path("admin/", admin.site.urls),
+    # 회원
+    path("api/auth/signup/",  UserSignupView.as_view(),   name="signup"),
+    path("api/auth/profile/", UserProfileView.as_view(),  name="profile"),
+    path("api/auth/login/",   TokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path('api/dashboard/', include('dashboard.urls')),  # dashboard 앱 (기록 조회)
     path('api/admin_tools/', include('admin_tools.urls')),  # admin_tools 앱 (관리자)
-
-    # 2. React 라우팅: API가 아닌 모든 요청은 React의 index.html로 전달
-    #    (정규식에서 'api/'로 시작하지 않는 모든 경로를 잡도록 수정)
-    # 이거는 개발 후에 수정하는 것
-    #re_path(r'^(?!api/).*$', TemplateView.as_view(template_name='index.html'), name='react_app'),
-]
-# *****************************************
-# 2. MEDIA 파일 서빙 설정 (DEBUG=True 일 때만)
-# *****************************************
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+ ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

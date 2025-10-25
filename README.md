@@ -70,6 +70,9 @@
     cd backend
     # mysql 접속
     mysql -u root -p # 이건 원하는 대로 
+   
+   # users, diagnosis, dashboard 폴더의 마이그레이션 폴더 제거 
+   
     # db 지우고 다시 
     DROP DATABASE early_dot_db;
     # db 다시 생성 
@@ -80,6 +83,8 @@
     python manage.py makemigrations diagnosis
     python manage.py makemigrations dashboard
     python manage.py migrate
+   
+    # 디비버에서 예시 덤프 sql 실행시킬 것.
     ```
 
 ### 1.2. 프론트엔드 환경 (Node/NPM)
@@ -87,7 +92,7 @@
 1.  프론트엔드 폴더로 이동 후 의존성 설치:
     ```bash
     cd frontend
-    npm install #### npm 다운 받으면 이거 다시 해줘야 함  (최초 1회 또는 package.json 변경 시)
+    npm install # 새로 할 때마다 이거 해줄 것 
     npm start
     ```
 
@@ -107,6 +112,30 @@
 | :--- | :--- |:------------------------------------------| :--- |
 | **백엔드 (API)** | `backend/` | `cd backend` `python manage.py runserver` | `http://127.0.0.1:8000` |
 | **프론트엔드 (UI)** | `frontend/` | `cd frontend` `npm start`                 | `http://localhost:3000` |
+
+## 🚀 2-1. IP 바뀜 걱정없이 프로젝트 실행 - Mac 환경 한정 ( Win 환경 추가 예정 )
+
+### 내 Mac 호스트명 확인 ( 꼭 기억해야함.)
+ - `scutil --get LocalHostName`
+ - `ex) sondongbin-ui-MacBookPro`
+
+### 수정해야 하는 부분
+ - backend / .env
+   - `REACT_APP_API_BASE_URL=http://<내맥호스트명>.local:8000`
+   - `VITE_API_BASE=http://<내맥호스트명>.local:8000`
+
+
+ - early_dot / settings.py - 주석 달아놓음.
+   - ALLOWED_HOSTS
+   - CORS_ALLOWED_ORIGINS
+   - CSRF_TRUSTED_ORIGINS
+
+| 구분        | 실행 위치       | 명령어                                                                       | 주소                           |
+|:----------| :---------- |:--------------------------------------------------------------------------| :--------------------------- |
+| **백엔드**   | `backend/`  | `cd backend`<br>`python manage.py runserver 0.0.0.0:8000`                 | `http://<내맥호스트명>.local:8000` |
+| **프론트**   | `frontend/` | `cd frontend`<br>`DANGEROUSLY_DISABLE_HOST_CHECK=true \`<br/>`WDS_SOCKET_HOST=<내맥호스트명>.local \`<br/>`HOST=0.0.0.0 PORT=3000 \`<br/>`npm start`                  | `http://<내맥호스트명>.local:3000` |
+| **핸드폰**   | `걍 핸드폰`        |                                                                           | `http://<내맥호스트명>.local:3000` |
+
 
 
 ---
