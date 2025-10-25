@@ -1,4 +1,5 @@
 # /Users/tasha/Projects/Early_Dot_Project/backend/dashboard/serializers.py
+from datetime import date
 
 from rest_framework import serializers
 from diagnosis.models import Results, Photos, DiseaseInfo
@@ -26,14 +27,29 @@ class DiseaseInfoSerializer(serializers.ModelSerializer):
 
 
 # 🔴 신규: 의사 화면에 필요한 환자 정보 (Users 모델 사용)
+# 🔴 신규: 의사 화면에 필요한 환자 정보 (Users 모델 사용)
 class UserSimpleSerializer(serializers.ModelSerializer):
     """의사 대시보드에 필요한 환자의 간단 정보 시리얼라이저"""
 
+    # 💡 만 나이 계산을 위한 SerializerMethodField 추가
+    calculated_age = serializers.SerializerMethodField()
+
     class Meta:
         model = Users
-        # 만 45세, 가족력: 있음 표시를 위한 필드
-        fields = ['name', 'age', 'family_history']
+        # 기존 age 대신 calculated_age를 포함하도록 fields 수정
+        # ⚠️ Users 모델에 date_of_birth 필드가 있다고 가정합니다.
+        fields = ['name', 'calculated_age', 'family_history'] # 'age' 필드는 제거 또는 유지 가능
 
+    def get_calculated_age(self, obj):
+        """Users 객체에서 생년월일(date_of_birth)을 기반으로 만 나이를 계산합니다."""
+        if hasattr(obj, 'age') and obj.age:
+            today = date.today()
+            # 만 나이 계산 공식: (오늘 연도 - 생일 연도) - (생일이 지나지 않았으면 1)
+            age = today.year - obj.age.year - (
+                (today.month, today.day) < (obj.age.month, obj.age.day)
+            )
+            return age
+        return None # 생년월일 정보가 없으면 None 반환
 
 # 🔴 신규: 의사 화면에 필요한 증상 정보 (Photos 모델 사용)
 class PhotoSymptomsSerializer(serializers.ModelSerializer):

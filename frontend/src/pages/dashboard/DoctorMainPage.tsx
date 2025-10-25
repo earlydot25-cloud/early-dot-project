@@ -37,7 +37,18 @@ interface MainDashboardData {
   };
   history: DiagnosisResult[];
 }
-// -----------------------------------
+
+// 💡 의사 대시보드 요약 데이터 구조에 맞게 변경
+interface DoctorSummaryData {
+  total_assigned_count: number; // 백엔드 필드명: total_assigned_count
+  immediate_attention_count: number; // 백엔드 필드명: immediate_attention_count
+}
+
+// 💡 메인 대시보드 데이터 타입을 의사 전용으로 변경
+interface DoctorDashboardData {
+  summary: DoctorSummaryData;
+  history: DiagnosisResult[]; // DiagnosisResult는 DoctorCardSerializer의 구조를 따라야 정확함
+}
 
 
 // -----------------------------------
@@ -243,7 +254,7 @@ const renderABCDEItem = (key: string, title: string, description: string) => (
 
 const DoctorMainPage: React.FC = () => {
   const navigate = useNavigate();
-  const [data, setData] = useState<MainDashboardData | null>(null);
+  const [data, setData] = useState<DoctorDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -254,18 +265,23 @@ const DoctorMainPage: React.FC = () => {
         const API_URL = 'api/dashboard/doctor/main/';
 
         try {
-//             const token = localStorage.getItem('accessToken');
-//             if (!token) {
-//                 throw new Error('인증 토큰이 없습니다. 로그인이 필요합니다.');
-//             }
+// 1. 토큰 가져오기 (주석 해제 및 확인)
+                const token = localStorage.getItem('accessToken');
+                if (!token) {
+                    // 💡 토큰이 없으면 에러를 설정하고 함수 종료
+                    setError('인증 토큰이 없습니다. 로그인이 필요합니다.');
+                    setIsLoading(false);
+                    return; // 함수 즉시 종료
+                }
 
-            const response = await axios.get<MainDashboardData>(API_URL, {
-                headers: {
-//                     Authorization: `Bearer ${token}`,
-                },
-            });
+                const response = await axios.get<DoctorDashboardData>(API_URL, {
+                    headers: {
+                        // 2. Authorization 헤더에 Bearer 토큰 추가 (주석 해제)
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
 
-            setData(response.data);
+                setData(response.data);
 
         } catch (err) {
             console.error("Failed to fetch doctor dashboard data:", err);
@@ -305,14 +321,18 @@ const DoctorMainPage: React.FC = () => {
     <div className="p-1 space-y-3">
 
       {/* 1. 상단 요약 및 전체보기 버튼 */}
-      <section>
+       <section>
         <div className="flex justify-between items-center mb-3 p-2 bg-gray-50 rounded-md shadow-inner">
           <div className="text-sm font-medium text-gray-700 flex items-center space-x-4">
             <span className="flex items-center">
-              <CheckCircleIcon className="text-blue-500 mr-1 w-4 h-4" /> 전체 환부 {summary.total_count}건
+              <CheckCircleIcon className="text-blue-500 mr-1 w-4 h-4" />
+              {/* 🔴 total_count -> total_assigned_count로 변경 */}
+              전체 환부 {summary.total_assigned_count}건
             </span>
             <span className="flex items-center text-red-600 font-bold">
-              <ExclamationTriangleIcon className="mr-1 w-4 h-4" /> 소견 요청 {summary.attention_count}건
+              <ExclamationTriangleIcon className="mr-1 w-4 h-4" />
+              {/* 🔴 attention_count -> immediate_attention_count로 변경 */}
+              소견 요청 {summary.immediate_attention_count}건
             </span>
           </div>
           <button onClick={handleViewAllHistory} className="flex items-center text-sm text-blue-600 font-medium hover:text-blue-800">

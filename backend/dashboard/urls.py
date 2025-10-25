@@ -14,7 +14,7 @@ urlpatterns = [
     # 메인화면 - 환자용
     path('main/', UserDashboardMainView.as_view(), name='dashboard_main'),
     # 메인화면 - 의사용
-    path('dashboard/doctor/main/', DoctorDashboardMainView.as_view(), name='doctor-dashboard-main'),
+    path('doctor/main/', DoctorDashboardMainView.as_view(), name='doctor-dashboard-main'),
 
 ]
 
