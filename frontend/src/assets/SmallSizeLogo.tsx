@@ -68,7 +68,8 @@ const EarlyDotNavLogo: React.FC<EarlyDotNavLogoProps> = ({
       role="img"
       aria-label={title}
       xmlns="http://www.w3.org/2000/svg"
-      preserveAspectRatio="xMidYMid meet"
+      preserveAspectRatio="xMinYMid meet"   // 기존: xMidYMid → 왼쪽(anchor) 기준
+      style={{ display: 'block' }}           // 인라인 공백 방지(선택)
     >
       <defs>
         {/* 잉크톤 그라디언트 (작은 사이즈 대비 대비 강도 유지) */}
@@ -78,13 +79,13 @@ const EarlyDotNavLogo: React.FC<EarlyDotNavLogoProps> = ({
         </linearGradient>
       </defs>
       <text
-        x="50%"
+        x="50"                                // 기존: "50%"
         y="96"
-        textAnchor="middle"
+        textAnchor="start"                   // 기존: "middle"
         fontFamily="Inter, Pretendard, -apple-system, Segoe UI, Roboto, Noto Sans KR, system-ui, sans-serif"
-        fontSize="80"        // viewBox 기준(가로 자동 스케일)
+        fontSize="80"
         fontWeight="800"
-        letterSpacing="4"    // 네비 소형 사이즈용으로 약간 타이트
+        letterSpacing="4"
         fill="url(#ed-mini-ink)"
       >
         {"EARLY "}

@@ -78,7 +78,8 @@ class Users(AbstractBaseUser, PermissionsMixin):
     name = models.CharField(max_length=100)
     sex = models.CharField(max_length=20)
     age = models.IntegerField()
-    family_history = models.CharField(max_length=10)
+    family_history = models.CharField(max_length=10, default='모름')
+    #family_history = models.CharField(max_length=10, blank=True, null=True)
     is_doctor = models.BooleanField(default=False)
 
     # 🌟 doctor_uid 외래 키 (db_column 유지)

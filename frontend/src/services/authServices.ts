@@ -1,59 +1,205 @@
-// frontend/src/services/authService.ts (최종 버전)
-import axios from 'axios';
+// src/services/authServices.ts
+// -----------------------------------------------------------------------------
+// 인증 관련 서비스 모듈
+// - login: 이메일/비밀번호로 토큰 발급
+// - refresh: 갱신
+// - me: 현재 사용자 프로필 가져오기
+// - saveTokens / clearAuth: 로컬 스토리지 관리
+// -----------------------------------------------------------------------------
+import { API_BASE, STORAGE, http } from './http';
 
-// 💡 API_URL을 정의합니다. (실제 연동 시 사용될 주소)
-// 이 주소는 팀원들에게 전달하여 나중에 사용할 것임을 명시합니다.
-const API_URL = 'http://localhost:8000/users';
-
-// 💡 타입 정의
-interface AuthResponse {
-    success: boolean;
-    token?: string;
-    message?: string;
+// DRF 에러 평탄화
+export function parseDjangoErrors(data: any): Record<string, string> {
+  if (!data || typeof data !== 'object') return {};
+  const out: Record<string, string> = {};
+  for (const k of Object.keys(data)) {
+    const v = (data as any)[k];
+    if (Array.isArray(v)) out[k] = v.join(' ');
+    else if (typeof v === 'string') out[k] = v;
+    else out[k] = JSON.stringify(v);
+  }
+  return out;
 }
 
-// ----------------------------------------------------
-// 1. 로그인 (Login) API 호출 로직 (Mocked)
-// ----------------------------------------------------
-export const loginUser = async (username: string, password: string): Promise<AuthResponse> => {
-    try {
-        console.log(`[AUTH SERVICE] Attempting login for: ${username} (MOCKED)`);
+// 공용 fetch
+async function jsonFetch<T>(url: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers);
 
-        // 💡 실제 BE 연동 시 이 Mock 로직을 아래 주석 처리된 Axios 로직으로 교체해야 합니다.
-        // Mock Data 반환
-        return { success: true, token: 'mock-token-for-dev' };
+  // body가 FormData가 아닐 때만 JSON 헤더 세팅
+  if (!headers.has('Content-Type') && !(init.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
 
-        /* // 💡 실제 BE 연동 시 사용할 로직 (팀원들에게 참고용으로 제공)
-        const response = await axios.post(`${API_URL}/login/`, { username, password });
-        if (response.data.token) {
-            localStorage.setItem('authToken', response.data.token);
-            return { success: true, token: response.data.token, message: '로그인 성공' };
-        } else {
-            return { success: false, message: response.data.message || '토큰 없음' };
-        }
-        */
+  // JWT 자동 부착(있을 때만)
+  const access = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+  if (access && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${access}`);
+  }
 
-    } catch (error) {
-        console.error('[AUTH SERVICE] Login failed', error);
-        return { success: false, message: '로그인 실패 (Mocking 중)' };
-    }
+  const res = await fetch(url, { ...init, headers, credentials: 'omit' });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : {};
+
+  if (!res.ok) {
+    const err: any = new Error(`HTTP ${res.status}`);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  return data as T;
+}
+
+/* ------------------------------------------------------------------------- */
+/* 1) 회원가입 (JSON) — 일반 사용자/권고 가입 환자용                         */
+/* ------------------------------------------------------------------------- */
+
+// types 보강: multipart에도 family_history 허용
+export type SignupJsonPayload = {
+  email: string;
+  password: string;
+  name: string;
+  sex?: 'M' | 'F';
+  age?: number;
+  family_history?: 'Y' | 'N' | 'U'; // ← JSON에 명시
+  is_doctor?: boolean;
+  referral_uid?: number;
 };
 
-// ----------------------------------------------------
-// 2. 회원가입 (Signup) API 호출 로직 (Mocked)
-// ----------------------------------------------------
-export const signupUser = async (data: any): Promise<AuthResponse> => {
-    try {
-        console.log("[AUTH SERVICE] Attempting signup (MOCKED)");
 
-        // Mock Data 반환
-        return { success: true, message: '회원가입 성공 (Mocked)' };
+export async function signupUser(payload: SignupJsonPayload) {
+    const body: SignupJsonPayload = {
+    ...payload,
+    family_history: payload.family_history ?? 'N',
+  };
+  try {
+    const data = await jsonFetch<any>(`${API_BASE}/api/auth/signup/`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
 
-    } catch (error) {
-        console.error('[AUTH SERVICE] Signup failed', error);
-        return { success: false, message: '회원가입 실패' };
+    // 응답에 토큰이 같이 올 수 있음(백엔드 정책)
+    if (data?.tokens?.access) localStorage.setItem('accessToken', data.tokens.access);
+    if (data?.tokens?.refresh) localStorage.setItem('refreshToken', data.tokens.refresh);
+
+    return { ok: true as const, data };
+  } catch (e: any) {
+    if (e?.data) {
+      return { ok: false as const, status: e.status ?? 400, errors: parseDjangoErrors(e.data) };
     }
+    return { ok: false as const, status: 0, errors: { _error: e?.message || 'Network error' } };
+  }
+}
+
+/* ------------------------------------------------------------------------- */
+/* 2) 회원가입 (FormData) — 의사(파일 업로드 포함)용                          */
+/* ------------------------------------------------------------------------- */
+
+export type SignupMultipartPayload = {
+  email: string;
+  password: string;
+  name: string;
+  sex?: 'M' | 'F';
+  age?: number;
+  is_doctor?: boolean;
+  family_history?: "Y" | "N" | "U";   // ✅ 이 줄 있어야 함
+  specialty?: string;
+  hospital?: string;
+  license_file?: File | null;
+  referral_uid?: number;
 };
 
-// 💡 필수: TS1208 에러 해결을 위해 추가
-export {};
+
+export async function signupUserMultipart(payload: SignupMultipartPayload) {
+  const fd = new FormData();
+  const sexLabel = payload.sex === 'M' ? '남성' : payload.sex === 'F' ? '여성' : '';
+  const fhLabelMap: Record<'Y'|'N'|'U', '있음'|'없음'|'모름'> = { Y: '있음', N: '없음', U: '모름' };
+
+  // 필수/공통
+  fd.append('email', payload.email);
+  fd.append('password', payload.password);
+  fd.append('name', payload.name);
+
+  // 선택 필드(값이 있을 때만 append)
+  if (payload.sex) fd.append('sex', payload.sex);
+  if (typeof payload.age === 'number') fd.append('age', String(payload.age));
+  if (typeof payload.is_doctor === 'boolean') fd.append('is_doctor', String(payload.is_doctor));
+  // 💡 핵심: 값이 없으면 'N'으로 보냄
+  fd.append('family_history', payload.family_history ?? 'N');
+  if (payload.specialty) fd.append('specialty', payload.specialty);
+  if (payload.hospital) fd.append('hospital', payload.hospital);
+  if (payload.license_file) fd.append('license_file', payload.license_file);
+  if (typeof payload.referral_uid === 'number') {
+    fd.append('referral_uid', String(payload.referral_uid));
+  }
+
+  try {
+    const data = await jsonFetch<any>(`${API_BASE}/api/auth/signup/`, {
+      method: 'POST',
+      body: fd, // FormData일 땐 Content-Type 세팅 금지
+    });
+
+    if (data?.tokens?.access) localStorage.setItem('accessToken', data.tokens.access);
+    if (data?.tokens?.refresh) localStorage.setItem('refreshToken', data.tokens.refresh);
+
+    return { ok: true as const, data };
+  } catch (e: any) {
+    if (e?.data) {
+      return { ok: false as const, status: e.status ?? 400, errors: parseDjangoErrors(e.data) };
+    }
+    return { ok: false as const, status: 0, errors: { _error: e?.message || 'Network error' } };
+  }
+}
+
+export type Tokens = { access: string; refresh: string };
+export type User = {
+  id: number;
+  email: string;
+  name: string;
+  is_doctor: boolean;
+  doctor_uid: number | null;
+};
+
+export async function login(params: { email: string; password: string }): Promise<Tokens> {
+  // SimpleJWT: /api/auth/login/ 에 { email, password } 전송 (커스텀 유저 email 로그인)
+  const data = await fetch(`${API_BASE}/api/auth/login/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  }).then(async (res) => {
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = json?.detail || '이메일 또는 비밀번호를 확인하세요.';
+      const e = new Error(msg) as any;
+      e.payload = json;
+      e.status = res.status;
+      throw e;
+    }
+    return json as Tokens;
+  });
+
+  return data;
+}
+
+export async function refresh(refreshToken: string): Promise<Pick<Tokens, 'access'>> {
+  return http.post<Pick<Tokens, 'access'>>('/api/auth/refresh/', { refresh: refreshToken });
+}
+
+export async function me(): Promise<User> {
+  // /api/auth/profile/ 는 IsAuthenticated 보호 (백엔드에서 설정) :contentReference[oaicite:8]{index=8}
+  return http.get<User>('/api/auth/profile/');
+}
+
+export function saveTokens(tokens: Tokens) {
+  localStorage.setItem(STORAGE.access, tokens.access);
+  localStorage.setItem(STORAGE.refresh, tokens.refresh);
+}
+
+export function saveUser(user: User) {
+  localStorage.setItem(STORAGE.user, JSON.stringify(user));
+}
+
+export function clearAuth() {
+  localStorage.removeItem(STORAGE.access);
+  localStorage.removeItem(STORAGE.refresh);
+  localStorage.removeItem(STORAGE.user);
+}

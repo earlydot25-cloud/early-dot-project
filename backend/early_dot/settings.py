@@ -17,7 +17,7 @@ import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # 사용자가 올린 파일(사진, 인증서 등)이 저장되는 디렉토리의 절대 경로
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+#MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # MEDIA 파일을 처리하는 URL
 MEDIA_URL = '/media/'
@@ -136,9 +136,9 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
     },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
+    #{ 이거 디장고 자체적으로 비번 제약 걸어놓는 부분인데, 제약이 너무 빡세서 일단 빼놓음
+    #    'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+    #},
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
@@ -169,9 +169,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     # 🔴 이 부분을 임시로 주석 처리하거나 AllowAny로 변경
-    # 'DEFAULT_AUTHENTICATION_CLASSES': (
-    #     'rest_framework_simplejwt.authentication.JWTAuthentication',
-    # ),
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
     'DEFAULT_PERMISSION_CLASSES': [
         # 'rest_framework.permissions.IsAuthenticated', # 🚨 주석 처리 또는 제거
         'rest_framework.permissions.AllowAny',  # 💡 임시로 AllowAny로 변경
@@ -182,21 +182,34 @@ REST_FRAMEWORK = {
 # 💡 리액트 FE 연동을 위한 CORS 설정
 # -------------------------------------------------------------------
 
-# 모든 호스트를 허용합니다 (배포 시에는 특정 도메인으로 제한해야 합니다).
-CORS_ALLOW_ALL_ORIGINS = False
+# [기본값: 로컬만 허용]
+#ALLOWED_HOSTS = ["127.0.0.1", "localhost", "*"]    #<- mac 기준으로 이거 주석 풀고, 아래 주석 달면 됨.
+ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
-# 💡 리액트 FE 개발 서버 주소 허용
-# (FE가 http://localhost:3000에서 실행된다고 가정)
+# 모든 호스트를 허용합니다 (배포 시에는 특정 도메인으로 제한해야 합니다).
+CORS_ALLOW_ALL_ORIGINS = True   # 개발 한정임
+#CORS_ALLOW_ALL_ORIGINS = False
+
+# 로컬 FE 오리진만 허용
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    # 💡 (선택 사항) 만약 BE와 FE가 동일한 도메인을 사용하지만 포트가 다르다면
-    # CORS_ALLOW_CREDENTIALS = True
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    # 네트워크(IP) 바뀌어도 접속되게 하려면 .local 추가(주석 해제)
+    # sondongbin-ui-MacBookPro 으로 되어 있는 부분이 mac 사용자의 macbook 이름이 들어가면 됨,
+    #"http://sondongbin-ui-MacBookPro.local:3000",
+    #"http://sondongbin-ui-MacBookPro.local:5173",
 ]
 
-# 💡 CSRF 보호를 위한 설정
-# 리액트가 Django CSRF 쿠키를 사용해야 한다면 필요합니다.
-# 현재 JWT를 사용하므로 필수는 아니지만, 세션 인증을 위해 추가할 수 있습니다.
-# CSRF_TRUSTED_ORIGINS = [
-#     'http://localhost:3000',
-# ]
+# CSRF 신뢰 오리진
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    # 네트워크(IP) 바뀌어도 접속되게 하려면 .local 추가(주석 해제)
+    # sondongbin-ui-MacBookPro 으로 되어 있는 부분이 mac 사용자의 macbook 이름이 들어가면 됨,
+    #http://sondongbin-ui-MacBookPro.local:3000",
+    #http://sondongbin-ui-MacBookPro.local:5173",
+]
