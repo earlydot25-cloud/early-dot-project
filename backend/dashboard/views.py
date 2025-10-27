@@ -170,6 +170,8 @@ class PatientListView(APIView):
             data.append({"id": p.id, "name": p.name, "folders": list(folders)})
         return Response(data)
 
+
+
 class FolderListView(APIView):
     permission_classes = [AllowAny]
 
