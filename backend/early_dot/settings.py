@@ -173,8 +173,8 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': [
-        # 'rest_framework.permissions.IsAuthenticated', # 🚨 주석 처리 또는 제거
-        'rest_framework.permissions.AllowAny',  # 💡 임시로 AllowAny로 변경
+         'rest_framework.permissions.IsAuthenticated',# 🚨 주석 처리 또는 제거
+        #'rest_framework.permissions.AllowAny',  # 💡 임시로 AllowAny로 변경
     ]
 }
 
@@ -200,6 +200,9 @@ CORS_ALLOWED_ORIGINS = [
     # sondongbin-ui-MacBookPro 으로 되어 있는 부분이 mac 사용자의 macbook 이름이 들어가면 됨,
     #"http://sondongbin-ui-MacBookPro.local:3000",
     #"http://sondongbin-ui-MacBookPro.local:5173",
+    "http://tasha@Dayeongui-MacBookAir.local:3000",
+    "http://tasha@Dayeongui-MacBookAir.local:5173",
+
 ]
 
 # CSRF 신뢰 오리진
@@ -212,4 +215,6 @@ CSRF_TRUSTED_ORIGINS = [
     # sondongbin-ui-MacBookPro 으로 되어 있는 부분이 mac 사용자의 macbook 이름이 들어가면 됨,
     #http://sondongbin-ui-MacBookPro.local:3000",
     #http://sondongbin-ui-MacBookPro.local:5173",
+    "http://tasha@Dayeongui-MacBookAir.local:3000",
+    "http://tasha@Dayeongui-MacBookAir.local:5173",
 ]
