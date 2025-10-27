@@ -84,10 +84,11 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny
-from diagnosis.models import Results
+from diagnosis.models import Photos, Results
 from users.models import Users
 from .serializers import ResultMainSerializer
 from django.db.models import Q
+
 
 # 1️⃣ 기록 목록
 class RecordListView(APIView):
@@ -157,3 +158,27 @@ class RecordListView(APIView):
 
         serializer = ResultMainSerializer(results, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class PatientListView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        patients = Users.objects.filter(is_doctor=False).order_by("id")
+        data = []
+        for p in patients:
+            folders = Photos.objects.filter(user=p).values_list("folder_name", flat=True).distinct()
+            data.append({"id": p.id, "name": p.name, "folders": list(folders)})
+        return Response(data)
+
+class FolderListView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        user_id = request.query_params.get("user")
+        if not user_id:
+            return Response({"error": "user 파라미터 필요"}, status=400)
+
+        folders = Photos.objects.filter(user_id=user_id).values(
+            "folder_name", "body_part"
+        ).distinct()
+        return Response(list(folders))

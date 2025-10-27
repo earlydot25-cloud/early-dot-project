@@ -1,7 +1,7 @@
 // frontend/src/pages/dashboard/HistoryResultPage.tsx
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 
 interface RecordDetail {
   id: number;
@@ -9,72 +9,63 @@ interface RecordDetail {
   risk_level: string;
   vlm_analysis_text: string;
   disease: { name_ko: string };
-  photo: {
-    user_name: string;
-    folder_name: string;
-    upload_storage_path: string;
-    body_part: string;
-  };
+  photo: { folder_name: string };
 }
 
 const HistoryResultPage: React.FC = () => {
-  const navigate = useNavigate();
   const { folderName, resultId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const query = new URLSearchParams(location.search);
+  const userId = query.get("user");
+
+  const { userName, folderDisplay, diseaseName } = (location.state || {}) as {
+    userName?: string;
+    folderDisplay?: string;
+    diseaseName?: string;
+  };
+
   const [data, setData] = useState<RecordDetail | null>(null);
 
   useEffect(() => {
-    const fetchDetail = async () => {
-      const res = await axios.get<RecordDetail>(
-        `/api/dashboard/records/${resultId}/`
-      );
-      setData(res.data);
-    };
-    fetchDetail();
+    axios
+      .get<RecordDetail>(`/api/dashboard/records/${resultId}/`)
+      .then((res) => setData(res.data))
+      .catch(() => setData(null));
   }, [resultId]);
 
-  if (!data) return <p>불러오는 중...</p>;
-
-  const { photo, disease } = data;
+  const finalUser = userName || "환자";
+  const finalFolder = folderDisplay || data?.photo?.folder_name || folderName;
+  const finalDisease = data?.disease?.name_ko || diseaseName || "질환명";
 
   return (
-    <div className="w-full max-w-md mx-auto bg-gray-50 min-h-screen px-4 py-6">
+    <div className="w-full max-w-md mx-auto bg-gray-50 min-h-screen px-4 py-5">
       <button
         onClick={() => navigate(-1)}
-        className="text-lg text-gray-700 hover:text-black mb-3"
+        className="text-sm text-gray-600 mb-3 flex items-center gap-1 hover:text-black"
       >
-        ←
+        ← 뒤로가기
       </button>
 
-      <h2 className="text-lg font-semibold mb-2">
-        {photo.user_name} &gt; {photo.folder_name} &gt; {disease.name_ko}
+      {/* ✅ DB에서 불러온 폴더명 반영 */}
+      <p className="text-xs text-gray-500 mb-2 text-left">
+        {`${finalUser} > ${finalFolder} > ${finalDisease}`}
+      </p>
+
+      <h2 className="text-lg font-bold mb-2 text-left">
+        {finalDisease} ({data?.risk_level || "정보 없음"})
       </h2>
 
-      <img
-        src={`http://127.0.0.1:8000${photo.upload_storage_path}`}
-        alt="record"
-        className="w-full rounded-xl border border-gray-200 mb-4"
-      />
+      <p className="text-xs text-gray-500 mb-4 text-left">
+        진단일: {data?.analysis_date?.split("T")[0] || "정보 없음"}
+      </p>
 
-      <p className="text-sm text-gray-700 mb-2">
-        <b>진단일:</b> {data.analysis_date.split("T")[0]}
+      <p className="text-sm text-gray-700 mb-5 text-left">
+        {data?.vlm_analysis_text || "AI 분석 결과가 없습니다."}
       </p>
-      <p className="text-sm text-gray-700 mb-2">
-        <b>위험도:</b>{" "}
-        <span
-          className={
-            data.risk_level === "높음"
-              ? "text-red-500 font-semibold"
-              : data.risk_level === "중간"
-              ? "text-yellow-500 font-semibold"
-              : "text-green-500 font-semibold"
-          }
-        >
-          {data.risk_level}
-        </span>
-      </p>
-      <p className="text-sm text-gray-700">
-        <b>AI 분석 내용:</b> {data.vlm_analysis_text || "내용 없음"}
-      </p>
+
+      <h3 className="text-sm font-semibold text-left mb-1">설명</h3>
+      <h3 className="text-sm font-semibold text-left">권장 조치</h3>
     </div>
   );
 };
