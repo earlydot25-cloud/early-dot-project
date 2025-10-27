@@ -77,7 +77,8 @@ class Users(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
     name = models.CharField(max_length=100)
     sex = models.CharField(max_length=20)
-    age = models.IntegerField()
+    birth_date = models.DateField(null=True, blank=True)
+    #age = models.IntegerField() # 생년월일이 아니고 계산된 age로 들어가고 있음
     family_history = models.CharField(max_length=10, default='모름')
     #family_history = models.CharField(max_length=10, blank=True, null=True)
     is_doctor = models.BooleanField(default=False)
