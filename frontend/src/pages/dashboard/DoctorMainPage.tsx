@@ -265,12 +265,12 @@ const DoctorMainPage: React.FC = () => {
     const fetchDoctorData = async () => {
         // 💡 백엔드 DRF API URL: 현재 로그인된 의사(doctors.uid_id)에게 필요한 대시보드 데이터를 가져옴
         const API_URL = '/api/dashboard/doctor/main/';
-        console.log('API URL:', API_URL); // URL이 올바른지 확인
+        //console.log('API URL:', API_URL); // URL이 올바른지 확인
 
         try {
 // 1. 토큰 가져오기 (주석 해제 및 확인)
                 const token = localStorage.getItem('accessToken');
-                console.log('Token retrieved:', token ? 'Exists' : 'MISSING!'); // 토큰 존재 여부 확인
+                //console.log('Token retrieved:', token ? 'Exists' : 'MISSING!'); // 토큰 존재 여부 확인
                 if (!token) {
                     // 💡 토큰이 없으면 에러를 설정하고 함수 종료
                     setError('인증 토큰이 없습니다. 로그인이 필요합니다.');
@@ -278,7 +278,7 @@ const DoctorMainPage: React.FC = () => {
                     return; // 함수 즉시 종료
                 }
                 // 💡 3. Axios 요청 직전 확인
-                console.log('Attempting to fetch data from API...'); // 이 로그가 찍히는지 확인!
+                //console.log('Attempting to fetch data from API...'); // 이 로그가 찍히는지 확인!
                 const response = await axios.get<DoctorDashboardData>(API_URL, {
                     headers: {
                         // 2. Authorization 헤더에 Bearer 토큰 추가 (주석 해제)
@@ -286,7 +286,7 @@ const DoctorMainPage: React.FC = () => {
                     },
                 });
 
-                console.log('API Response received:', response.data); // 응답 데이터 확인
+                //console.log('API Response received:', response.data); // 응답 데이터 확인
                 setData(response.data);
 
 } catch (err: any) { // 🚨 err 타입을 'any'로 지정하여 TS 컴파일 오류를 회피
