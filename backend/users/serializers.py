@@ -6,6 +6,8 @@ from django.core import exceptions as django_exceptions
 from django.core.files.storage import default_storage
 from rest_framework import serializers
 from .models import Doctors
+from diagnosis.models import Results
+
 
 User = get_user_model()
 
@@ -173,3 +175,115 @@ class RegisterSerializer(serializers.ModelSerializer):
 
         return user
 
+
+# -----------------------------------
+# 1. DoctorProfileSerializer (Doctors 모델)
+# -----------------------------------
+class DoctorProfileSerializer(serializers.ModelSerializer):
+    """Users 모델에 중첩될 Doctors 정보"""
+
+    class Meta:
+        model = Doctors
+        fields = ['specialty', 'hospital', 'status']
+
+    # -----------------------------------
+
+
+# 2. PatientListItemSerializer (의사가 보는 환자 목록)
+# -----------------------------------
+class PatientListItemSerializer(serializers.ModelSerializer):
+    """의사에게 할당된 환자 목록의 간소화된 정보"""
+
+    class Meta:
+        model = User
+        fields = ['id', 'email', 'name']
+
+
+# -----------------------------------
+# 3. UserProfileSerializer (GET 요청 응답 구조)
+# -----------------------------------
+class UserProfileSerializer(serializers.ModelSerializer):
+    """마이페이지(ProfilePage)에 필요한 모든 사용자 정보 (읽기 전용)"""
+
+    # doctor_profile = DoctorProfileSerializer(source='doctor', read_only=True, required=False)
+    # assigned_doctor = serializers.SerializerMethodField(required=False)
+    # patients = serializers.SerializerMethodField(required=False)
+
+    class Meta:
+        model = User
+        # 'phone', 'address' 필드는 Users 모델에 실제 존재해야 합니다.
+        fields = ['id', 'email', 'name', 'sex', 'age', 'family_history', 'is_doctor'
+                  ]
+        read_only_fields = ['email', 'is_doctor', 'date_joined']
+
+    def get_assigned_doctor(self, obj: User):
+        """환자일 경우, 연결된 담당 의사 정보(Doctors 객체)를 가져옵니다."""
+        if not obj.is_doctor and obj.doctor:
+            try:
+                return {
+                    'id': obj.doctor.uid.id,
+                    'name': obj.doctor.name,
+                    'specialty': obj.doctor.specialty,
+                    'hospital': obj.doctor.hospital,
+                }
+            except Exception as e:
+                # 임시 디버깅용: 오류 발생 시 None 반환
+                print(f"Error in get_assigned_doctor: {e}")
+                return None
+        return None
+
+    def get_patients(self, obj: User):
+        """의사일 경우, 담당하는 환자 목록을 가져옵니다."""
+        if obj.is_doctor and hasattr(obj, 'doctor'):
+            # 쿼리 로직을 모두 건너뛰고 빈 리스트 반환
+            return []
+
+        return []
+
+
+# -----------------------------------
+# 4. UserProfileUpdateSerializer (PATCH 요청 처리)
+# -----------------------------------
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    """프로필 정보 수정을 위한 시리얼라이저 (PATCH)"""
+
+    specialty = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    hospital = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    assigned_doctor_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
+    class Meta:
+        model = User
+        fields = ['specialty', 'hospital', 'assigned_doctor_name']
+
+    def update(self, instance, validated_data):
+        # 2. 의사 전용 필드 업데이트 (Doctors 모델)
+        if instance.is_doctor and instance.doctor:
+            doctor_profile = instance.doctor
+            doctor_profile.specialty = validated_data.get('specialty', doctor_profile.specialty)
+            doctor_profile.hospital = validated_data.get('hospital', doctor_profile.hospital)
+            doctor_profile.save()
+
+        # 3. 환자 전용 필드 업데이트 (담당의사 연결)
+        elif not instance.is_doctor and 'assigned_doctor_name' in validated_data:
+            assigned_doctor_name = validated_data.pop('assigned_doctor_name').strip()
+
+            # 🚨 입력된 이름이 있다면 연결 로직 실행
+            if assigned_doctor_name:
+                doctor_user = User.objects.filter(
+                    is_doctor=True,
+                    name=assigned_doctor_name
+                ).first()
+
+                if doctor_user and doctor_user.doctor:
+                    instance.doctor = doctor_user.doctor
+                else:
+                    raise serializers.ValidationError({
+                        "assigned_doctor_name": [f"이름이 '{assigned_doctor_name}'인 등록된 의사를 찾을 수 없습니다."]
+                    })
+            else:
+                instance.doctor = None
+
+        # 4. 모든 변경 사항 저장
+        instance.save()
+
+        return instance
