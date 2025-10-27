@@ -241,6 +241,9 @@ const MainPage: React.FC = () => {
       try {
         // 개발 프록시가 세팅되어 있으면 상대 경로로 호출 가능
         const API_URL = '/api/dashboard/main/';
+        const token = localStorage.getItem('accessToken');
+        console.log('Token being sent in MainPage:', token);
+
         const res = await axios.get<MainDashboardData>(API_URL, {
           headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
         });

@@ -1,3 +1,5 @@
+// src/pages/dashboard/DoctorMainPage.tsx
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaChevronRight, FaExclamationTriangle, FaCheckCircle, FaUserMd } from 'react-icons/fa';
@@ -262,18 +264,21 @@ const DoctorMainPage: React.FC = () => {
   useEffect(() => {
     const fetchDoctorData = async () => {
         // 💡 백엔드 DRF API URL: 현재 로그인된 의사(doctors.uid_id)에게 필요한 대시보드 데이터를 가져옴
-        const API_URL = 'api/dashboard/doctor/main/';
+        const API_URL = '/api/dashboard/doctor/main/';
+        console.log('API URL:', API_URL); // URL이 올바른지 확인
 
         try {
 // 1. 토큰 가져오기 (주석 해제 및 확인)
                 const token = localStorage.getItem('accessToken');
+                console.log('Token retrieved:', token ? 'Exists' : 'MISSING!'); // 토큰 존재 여부 확인
                 if (!token) {
                     // 💡 토큰이 없으면 에러를 설정하고 함수 종료
                     setError('인증 토큰이 없습니다. 로그인이 필요합니다.');
                     setIsLoading(false);
                     return; // 함수 즉시 종료
                 }
-
+                // 💡 3. Axios 요청 직전 확인
+                console.log('Attempting to fetch data from API...'); // 이 로그가 찍히는지 확인!
                 const response = await axios.get<DoctorDashboardData>(API_URL, {
                     headers: {
                         // 2. Authorization 헤더에 Bearer 토큰 추가 (주석 해제)
@@ -281,22 +286,37 @@ const DoctorMainPage: React.FC = () => {
                     },
                 });
 
+                console.log('API Response received:', response.data); // 응답 데이터 확인
                 setData(response.data);
 
-        } catch (err) {
+} catch (err: any) { // 🚨 err 타입을 'any'로 지정하여 TS 컴파일 오류를 회피
             console.error("Failed to fetch doctor dashboard data:", err);
 
-            // 💡 타입 단언을 사용하여 403 에러 안전하게 처리
-            // err를 `{ response: { status: number } }` 타입을 가진 객체로 단언합니다.
-            const errorWithResponse = err as { response?: { status: number } };
+            // 💡 [수정] axios.isAxiosError 대신, err.response 객체의 존재 여부로 Axios 오류를 확인
+            if (err.response) {
+                 console.error("Axios error response status:", err.response.status);
+                 console.error("Axios error response data:", err.response.data);
+                 console.error("Axios error config:", err.config);
+            }
 
-            if (errorWithResponse.response && errorWithResponse.response.status === 403) {
+            // 💡 타입 단언을 사용하여 403 에러 안전하게 처리
+            const errorStatus = err.response?.status;
+
+            if (errorStatus === 403) {
                 // 로그인한 사용자가 의사 계정이 아님 -> 환자 대시보드로 리다이렉션
-                navigate('dashboard/main/');
+                navigate('/dashboard/main'); // 🚨 절대 경로로 수정
                 return;
             }
 
-            // 그 외 에러 (401, 500 등) 처리
+            // 401 Unauthorized 오류 처리
+            if (errorStatus === 401) {
+                // 토큰 만료 또는 유효하지 않은 토큰 -> 로그인 페이지로 이동
+                setError('세션이 만료되었거나 인증에 실패했습니다. 다시 로그인해주세요.');
+                navigate('/login');
+                return;
+            }
+
+            // 그 외 에러 (404, 500 등) 처리
             setError('의사 대시보드 데이터를 불러오는 데 실패했습니다. 서버 상태 및 인증을 확인하세요.');
         } finally {
             setIsLoading(false);
@@ -304,7 +324,7 @@ const DoctorMainPage: React.FC = () => {
     };
 
     fetchDoctorData();
-  }, []);
+  }, [navigate]);
 
 
   // 로딩 및 에러 처리 UI
@@ -326,7 +346,7 @@ const DoctorMainPage: React.FC = () => {
 
   // 진단 내역 전체보기 버튼 클릭 핸들러
   const handleViewAllHistory = () => {
-    navigate('/doctor/dashboard/all');
+    navigate('/api/dashboard/patients');
   };
 
   return (

@@ -38,17 +38,25 @@ const LoginPage: React.FC = () => {
 
       // 2) 프로필 가져오기 → 로컬 저장
       const user = await me();
+
+      // 🚨 디버깅 코드 추가: user 객체의 내용을 콘솔에 출력합니다.
+      console.log('User data from me():', user);
+
+
+      // 🚨 [수정 1: 이전 키 제거] 남아있을 수 있는 'userRole' 키를 삭제하여 라우팅 혼란 방지
+      localStorage.removeItem('userRole');
       saveUser(user);
       // ✅ 추가: 실명 보장 저장(혹시 saveUser가 안 해줄 경우 대비)
       const displayName = user?.name || user?.email || '';
       localStorage.setItem('userName', displayName);
 
-      // 🎯 [핵심 추가]: HomeRedirector가 사용할 isDoctor 역할 정보 저장
-      // user.is_doctor가 0 또는 1의 숫자 값이라고 가정하고 문자열로 변환하여 저장
-      if (user && typeof user.is_doctor !== 'undefined') {
-        // user.is_doctor (숫자 0 또는 1)을 문자열 "0" 또는 "1"로 저장
-        localStorage.setItem('isDoctor', String(user.is_doctor));
+      // 🎯 [핵심 수정]: is_doctor가 boolean true/false일 때 "1"/"0"으로 저장
+      let isDoctorStringValue = '0'; // 기본값 환자
+      if (user && typeof user.is_doctor === 'boolean') { // boolean 타입인지 확인
+          isDoctorStringValue = user.is_doctor ? '1' : '0'; // true면 "1", false면 "0"
       }
+      localStorage.setItem('isDoctor', isDoctorStringValue);
+
 
       // ✅ Nav가 즉시 갱신되도록 커스텀 이벤트를 쏜다
       window.dispatchEvent(new Event('auth:update'));
