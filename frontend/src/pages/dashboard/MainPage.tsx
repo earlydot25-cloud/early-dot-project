@@ -41,9 +41,8 @@ interface DiagnosisResult {
   id: number;
   photo: PhotoData;
   disease: DiseaseData;
-  analysis_date: string;                     // ISO 문자열
-  // AI 위험도 스펙
-  risk_level: '높음' | '보통' | '낮음' | '정상';
+  analysis_date: string;
+  risk_level: '높음' | '보통' | '낮음';
   vlm_analysis_text: string | null;
   followup_check: FollowUpCheckData | null;
 
@@ -59,6 +58,8 @@ interface MainDashboardData {
   };
   history: DiagnosisResult[];
 }
+// -----------------------------------
+
 
 // -----------------------------------
 // 🔴 아이콘 안전 래퍼 (TS2786 방지) 🔴
@@ -69,7 +70,6 @@ const CameraIcon: IconCmp = (props) => React.createElement(FaCamera as any, prop
 const ChevronRightIcon: IconCmp = (props) => React.createElement(FaChevronRight as any, props);
 const ExclamationTriangleIcon: IconCmp = (props) => React.createElement(FaExclamationTriangle as any, props);
 const CheckCircleIcon: IconCmp = (props) => React.createElement(FaCheckCircle as any, props);
-
 // -----------------------------------
 // [카드 컴포넌트] DiagnosisCard
 // -----------------------------------
@@ -241,6 +241,9 @@ const MainPage: React.FC = () => {
       try {
         // 개발 프록시가 세팅되어 있으면 상대 경로로 호출 가능
         const API_URL = '/api/dashboard/main/';
+        const token = localStorage.getItem('accessToken');
+        console.log('Token being sent in MainPage:', token);
+
         const res = await axios.get<MainDashboardData>(API_URL, {
           headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
         });
@@ -297,7 +300,7 @@ const MainPage: React.FC = () => {
   // 로그인한 사용자 정보 (localStorage에 로그인 시 저장되어 있어야 함)
   const currentUserId = Number(localStorage.getItem('userId'));          // Users.id
   const currentDoctorUid = Number(localStorage.getItem('doctorUid'));    // Doctors.uid
-  const isDoctor = localStorage.getItem('isDoctor') === 'true';
+  const isDoctor = localStorage.getItem('isDoctor') === '1';
 
   // 내 소유만 남기기
   const filteredHistory: DiagnosisResult[] = history.filter((item) => {
@@ -403,6 +406,7 @@ const MainPage: React.FC = () => {
           {renderABCDEItem('E', 'E. 변화 (Evolving)', '해당 환부 부위가 최근 경계가 넓어지거나, 가려움/통증/출혈이 있는지 스스로 관찰하여 변화를 기록하세요.')}
         </div>
       </section>
+
     </div>
   );
 };
