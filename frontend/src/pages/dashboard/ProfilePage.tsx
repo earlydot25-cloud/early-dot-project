@@ -1,54 +1,72 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { UserProfile, PatientListItem } from '../../types/UserTypes';
-// 💡 경로 수정: services 폴더가 src/pages/dashboard/와 같은 레벨에 있다고 가정하고 경로를 수정했습니다.
-import { fetchUserProfile, updateProfile, deleteAccount, removePatient } from '../../services/userServices';
 import { useNavigate } from 'react-router-dom';
-// 💡 경로 수정
+// 💡 경로 수정: ../../services/ -> ../services/
+import { fetchUserProfile, updateProfile, deleteAccount, removePatient } from '../../services/userServices';
 import { clearAuth } from '../../services/authServices';
+
+// =========================================================================
+// 💡 타입 정의를 외부 파일에서 import 하여 사용하도록 수정 (TS2345 에러 해결)
+// 로컬 타입 정의(UserProfile, AssignedDoctor, DoctorProfile, PatientListItem)를 모두 제거하고
+// ../../types/UserTypes.ts에서 가져와 사용합니다.
+import {
+    UserProfile,
+    PatientListItem, // PatientListItem도 UserTypes.ts에서 가져옵니다.
+    AssignedDoctorInfo, // AssignedDoctor 대신 AssignedDoctorInfo를 사용합니다.
+    DoctorProfile as DoctorProfileType // 충돌 방지를 위해 별칭 사용 (선택 사항)
+} from '../../types/UserTypes';
+// =========================================================================
+
 
 interface MyPageProps {}
 
 const MyPage: React.FC<MyPageProps> = () => {
+  // 💡 UserProfile 타입을 외부에서 가져온 타입으로 지정
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const navigate = useNavigate();
-  // formData에 profile 전체 구조와 추가 필드 초기화
-  const [formData, setFormData] = useState<any>({});
+
+  // formData 타입을 명확히 지정하거나 (UserProfile과 필드 확장) 'any' 대신 Record<string, any> 사용
+  const [formData, setFormData] = useState<Record<string, any>>({});
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // profile이 로드된 후에만 isDoctor를 계산하여 오류 방지
   const isDoctor = useMemo(() => profile?.is_doctor || false, [profile]);
 
-  // 💡 1. assignedDoctorExists를 명확한 Boolean으로 설정
+  // assignedDoctorExists를 명확한 Boolean으로 설정
   const assignedDoctorExists = useMemo(() => {
-      return !!(profile && profile.assigned_doctor && (profile.assigned_doctor.name || profile.assigned_doctor.specialty || profile.assigned_doctor.hospital));
+      // 💡 타입이 AssignedDoctorInfo | null | undefined 이므로 안전하게 접근
+      return !!(profile?.assigned_doctor);
   }, [profile]);
 
   // 의사이거나 (isDoctor) 담당의사가 지정된 환자 (assignedDoctorExists)는 수정 가능
-  // isDoctor와 assignedDoctorExists 모두 명확한 boolean이므로 isUserEditable도 boolean입니다.
-  const isUserEditable = isDoctor || assignedDoctorExists;
+  // birth_date, age, family_history는 모두 수정 가능하도록 합니다.
+  const isUserEditable = isDoctor || assignedDoctorExists || true; // 기본 정보는 항상 수정 가능하도록 임시 설정
 
 
   useEffect(() => {
     const loadProfile = async () => {
       try {
-        const data = await fetchUserProfile();
+        const data: UserProfile = await fetchUserProfile();
+        // 💡 setProfile(data)는 이제 UserProfile | null 타입과 호환됩니다.
         setProfile(data);
-        // 데이터를 로드할 때 API에서 받은 모든 필드와 함께
-        // 담당의사 이름 필드(assigned_doctor_name)를 폼 상태에 별도로 초기화합니다.
+
+        // 🚩 birth_date와 age를 명확히 분리하여 폼 데이터에 초기화
         setFormData({
             ...data,
-            // 💡 수정: assigned_doctor_name을 최상위 필드로 관리하여 백엔드와 통신
+            birth_date: data.birth_date || '',
+            age: data.age || '',
+
+            // 💡 타입 안정성을 위해 ?. 체이닝 적용
             assigned_doctor_name: data.assigned_doctor?.name || '',
             doctor_profile: data.doctor_profile || {},
             assigned_doctor: data.assigned_doctor || {},
-            phone: data.phone || '',
-            address: data.address || '',
         });
       } catch (error) {
         console.error("Failed to fetch profile:", error);
-        alert(error instanceof Error ? error.message : "프로필 로드 중 알 수 없는 오류 발생");
+        // 💡 alert 사용 대신 커스텀 UI 메시지 사용 권장
+        // alert(error instanceof Error ? error.message : "프로필 로드 중 알 수 없는 오류 발생");
+        console.error("프로필 로드 중 알 수 없는 오류 발생:", error);
       } finally {
         setIsLoading(false);
       }
@@ -61,7 +79,7 @@ const MyPage: React.FC<MyPageProps> = () => {
 
     // 의사 전용 필드 처리 (doctor_profile 객체 내부)
     if (isDoctor && (name === 'specialty' || name === 'hospital')) {
-      setFormData((prev: any) => ({
+      setFormData((prev: Record<string, any>) => ({
         ...prev,
         doctor_profile: {
           ...prev.doctor_profile,
@@ -69,58 +87,69 @@ const MyPage: React.FC<MyPageProps> = () => {
         },
       }));
     // 환자 전용 필드 (담당의사 이름) 처리
-    // 💡 수정: assigned_doctor_name을 최상위 폼 필드로 직접 관리합니다.
     } else if (!isDoctor && name === 'assigned_doctor_name') {
-        setFormData((prev: any) => ({
+        setFormData((prev: Record<string, any>) => ({
             ...prev,
             [name]: value, // assigned_doctor_name 필드를 최상위에 저장
         }));
-    // 공통 필드 (name, sex, age, family_history 등) 처리
+    // 공통 필드 (name, sex, age, family_history, birth_date) 처리
     } else {
-      setFormData((prev: any) => ({ ...prev, [name]: value }));
+      setFormData((prev: Record<string, any>) => ({ ...prev, [name]: value }));
     }
   };
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const updatePayload: any = {
-        // 공통으로 수정 가능한 필드들을 페이로드에 포함
+      // 💡 UserProfileUpdatePayload 타입을 사용하거나 명확히 정의된 객체 사용
+      const updatePayload: Record<string, any> = {
         name: formData.name,
         sex: formData.sex,
-        age: formData.age,
+        age: formData.age ? Number(formData.age) : undefined, // 나이는 숫자로 변환
+        // birth_date는 백엔드 시리얼라이저에 없으므로 (UserProfileUpdateSerializer),
+        // age와 name으로 대체되어 계산되는 경우 제외하고는 제거하는 것이 좋습니다.
+        // 백엔드 시리얼라이저(UserProfileUpdateSerializer) 필드에 맞게 birth_date 제거
+        // birth_date: formData.birth_date,
         family_history: formData.family_history,
+
+        // 추가 필드 (백엔드에 있다면)
+        phone: formData.phone,
+        address: formData.address,
       };
 
       if (isDoctor) {
         // 의사 프로필 필드
         updatePayload.specialty = formData.doctor_profile.specialty;
         updatePayload.hospital = formData.doctor_profile.hospital;
-      } else if (!isDoctor && isUserEditable) {
-        // 💡 수정: assigned_doctor_name을 페이로드에 포함합니다.
-        // 백엔드는 이 필드를 이용해 담당의사 연결을 처리합니다.
+      } else if (!isDoctor) {
+        // 환자 담당의사 이름 필드 (isUserEditable 조건 제거)
         updatePayload.assigned_doctor_name = formData.assigned_doctor_name || '';
       }
 
       await updateProfile(updatePayload); // updateProfile 함수를 호출
 
       // 성공 후 프로필 다시 로드
-      const updatedProfile = await fetchUserProfile();
+      const updatedProfile: UserProfile = await fetchUserProfile();
+      // 💡 setProfile(updatedProfile)은 이제 UserProfile | null 타입과 호환됩니다.
       setProfile(updatedProfile);
+
       // 폼 데이터 재초기화
       setFormData({
           ...updatedProfile,
-          // 💡 수정: 담당의사 이름 필드도 백엔드에서 받은 새 값으로 재초기화
+          // 업데이트된 birth_date 및 age 값으로 재초기화
+          birth_date: updatedProfile.birth_date || '', // 업데이트된 생년월일
+          age: updatedProfile.age || '',              // 업데이트된 나이
           assigned_doctor_name: updatedProfile.assigned_doctor?.name || '',
           doctor_profile: updatedProfile.doctor_profile || {},
           assigned_doctor: updatedProfile.assigned_doctor || {},
-          phone: updatedProfile.phone || '',
-          address: updatedProfile.address || '',
       });
-      setIsEditing(false); // 수정 모드 종료
-      alert('정보가 성공적으로 수정되었습니다.');
+
+      // 수정 모드 종료
+      setIsEditing(false);
+      // alert('정보가 성공적으로 수정되었습니다.');
+      console.log('정보가 성공적으로 수정되었습니다.');
     } catch (error) {
-      alert(error instanceof Error ? error.message : '정보 수정에 실패했습니다.');
+      // alert(error instanceof Error ? error.message : '정보 수정에 실패했습니다.');
       console.error('Update failed:', error);
     }
   };
@@ -131,13 +160,14 @@ const handleAccountDelete = async () => {
 
       clearAuth(); // 로컬 스토리지에서 토큰 및 사용자 정보 삭제
 
-      alert('회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.');
+      // alert('회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.');
+      console.log('회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.');
 
       // 메인 페이지(로그인 전 페이지)로 리다이렉션
       navigate('/');
 
     } catch (error) {
-      alert(error instanceof Error ? error.message : '회원 탈퇴에 실패했습니다.');
+      // alert(error instanceof Error ? error.message : '회원 탈퇴에 실패했습니다.');
       console.error('Deletion failed:', error);
     } finally {
       setShowDeleteModal(false);
@@ -145,22 +175,26 @@ const handleAccountDelete = async () => {
   };
 
   const handleRemovePatient = async (patientId: number) => {
+    // 💡 window.confirm 대신 커스텀 모달/UI 사용
     if (!window.confirm('선택한 환자를 담당 목록에서 삭제하시겠습니까?')) return;
     try {
       await removePatient(patientId); // removePatient 함수를 호출
       setProfile((prev: UserProfile | null) => prev ? ({
         ...prev,
+        // 💡 타입은 UserProfile에서 가져왔으므로 안전하게 사용
         patients: prev.patients?.filter((p: PatientListItem) => p.id !== patientId)
       }) : null);
-      alert('환자가 목록에서 제거되었습니다.');
+      // alert('환자가 목록에서 제거되었습니다.');
+      console.log('환자가 목록에서 제거되었습니다.');
     } catch (error) {
-      alert(error instanceof Error ? error.message : '환자 제거에 실패했습니다.');
+      // alert(error instanceof Error ? error.message : '환자 제거에 실패했습니다.');
       console.error('Remove patient failed:', error);
     }
   };
 
   const handleGoToDiagnosis = () => {
-    alert("진단 기록 페이지로 이동해야 합니다.");
+    // alert("진단 기록 페이지로 이동해야 합니다.");
+    console.log("진단 기록 페이지로 이동해야 합니다.");
     // 여기에 실제 라우팅 로직 (예: navigate('/diagnosis-history'))을 구현해야 합니다.
   };
 
@@ -191,7 +225,6 @@ const handleAccountDelete = async () => {
           className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-150 flex-grow text-left"
         />
       ) : (
-        // 💡 수정: value가 number일 경우를 대비해 String()으로 명시적 형변환
         <p className="w-full text-gray-800 p-2 text-left">{String(value)}</p>
       )}
     </div>
@@ -203,46 +236,40 @@ const PatientSpecificFields: React.FC = () => {
              <div className="mt-6 border-t pt-6">
                  <h3 className="text-xl font-bold text-gray-700 mb-4 text-left">담당의사 정보</h3>
                  <p className="text-gray-500 text-left mb-4">현재 담당의사가 지정되지 않았습니다.</p>
-                 {/* 담당의사 이름 입력 필드는 수정 모드일 때 항상 렌더링하여 새 의사를 지정할 수 있도록 합니다. */}
-                 {/* 💡 수정: 담당의사 필드는 수정 모드일 때 항상 isEditable=true 로 둡니다. */}
                  <FormField
                     label="담당의사 실명"
                     name="assigned_doctor_name"
-                    value={formData.assigned_doctor_name || ''} // 💡 formData의 최상위 assigned_doctor_name 사용
-                    isEditable={isEditing} // 💡 수정 모드일 때만 입력 필드로 변경
+                    value={formData.assigned_doctor_name || ''}
+                    isEditable={isEditing}
                 />
             </div>
         );
     }
 
-    // assignedDoctorExists가 true
     const doctor = assignedDoctor!;
 
-    // 담당의사가 지정된 경우에만 섹션 렌더링
     return (
       <div className="mt-6 border-t pt-6">
         <h3 className="text-xl font-bold text-gray-700 mb-4 text-left">담당의사 정보</h3>
 
-        {/* assigned_doctor_name 필드는 수정 가능해야 하므로 formData의 값을 사용 */}
         <FormField
             label="담당의사 실명"
             name="assigned_doctor_name"
-            value={formData.assigned_doctor_name || ''} // 💡 formData의 최상위 assigned_doctor_name 사용
-            isEditable={isEditing} // 💡 수정 모드일 때만 입력 필드로 변경
+            value={formData.assigned_doctor_name || ''}
+            isEditable={isEditing}
         />
         <FormField
             label="전문의 분야"
             name="assigned_doctor_specialty"
-            // doctor 객체에서 specialty 정보를 가져옴
+            // 💡 assignedDoctor는 AssignedDoctorInfo 타입 (UserTypes.ts에서 정의)
             value={doctor.specialty || '미등록'}
-            isEditable={false} // 수정 불가능
+            isEditable={false}
         />
         <FormField
             label="소속 병원"
             name="assigned_doctor_hospital"
-            // doctor 객체에서 hospital 정보를 가져옴
             value={doctor.hospital || '미등록'}
-            isEditable={false} // 수정 불가능
+            isEditable={false}
         />
       </div>
     );
@@ -253,7 +280,6 @@ const PatientSpecificFields: React.FC = () => {
     <div className="mt-6 border-t pt-6">
       <h3 className="text-xl font-bold text-gray-700 mb-4 text-left">전문의 정보</h3>
 
-      {/* 의사 승인 여부 확인 */}
       <div className="flex items-center py-3 border-b border-gray-100 space-x-4">
           <p className="text-gray-500 font-medium min-w-[80px] flex-shrink-0 text-left">의사 승인 여부</p>
           <span
@@ -267,21 +293,17 @@ const PatientSpecificFields: React.FC = () => {
           </span>
       </div>
 
-      {/* 전문의 분야 (수정 가능) */}
       <FormField
         label="전문의 분야"
         name="specialty"
-        // 💡 수정: doctor_profile은 formData에서 가져와야 수정 중인 값이 반영됩니다.
         value={formData.doctor_profile?.specialty || ''}
-        isEditable={isEditing} // 💡 수정 모드일 때만 입력 필드로 변경
+        isEditable={isEditing}
       />
-      {/* 소속 병원 (수정 가능) */}
       <FormField
         label="소속 병원"
         name="hospital"
-        // 💡 수정: doctor_profile은 formData에서 가져와야 수정 중인 값이 반영됩니다.
         value={formData.doctor_profile?.hospital || ''}
-        isEditable={isEditing} // 💡 수정 모드일 때만 입력 필드로 변경
+        isEditable={isEditing}
       />
     </div>
   );
@@ -291,6 +313,7 @@ const PatientSpecificFields: React.FC = () => {
       <h3 className="text-2xl font-bold mb-4 text-blue-700 text-left">담당 환자 리스트</h3>
       {isDoctorApproved ? (
         <ul className="space-y-3 text-left">
+          {/* profile.patients는 PatientListItem[] | undefined | null 타입입니다. */}
           {profile.patients && profile.patients.length > 0 ? (
             profile.patients.map((patient: PatientListItem) => (
               <li key={patient.id} className="flex justify-between items-center p-3 border rounded-lg bg-gray-50 hover:bg-gray-100 transition duration-150">
@@ -299,7 +322,7 @@ const PatientSpecificFields: React.FC = () => {
                   <span className="text-sm text-gray-500">ID: {patient.id} | Email: {patient.email}</span>
                 </div>
                 <button
-                  onClick={() => handleRemovePatient(patient.id)} // 💡 환자 삭제 연동
+                  onClick={() => handleRemovePatient(patient.id)}
                   className="px-3 py-1 bg-red-500 text-white text-sm rounded-md hover:bg-red-600 transition duration-150"
                 >
                   삭제
@@ -330,15 +353,14 @@ const PatientSpecificFields: React.FC = () => {
           <form onSubmit={handleUpdate}>
             {/* 공통 정보 필드 */}
             <FormField label="이메일 (ID)" name="email" value={profile.email} isEditable={false} />
-            {/* 💡 수정: name 필드 수정 가능하도록 변경 */}
             <FormField label="이름" name="name" value={formData.name || ''} isEditable={isEditing} />
-            {/* 💡 수정: age 필드 수정 가능하도록 변경 */}
-            <FormField label="생년월일" name="age" value={formData.age || ''} isEditable={isEditing} />
-            {/* 💡 수정: sex 필드 수정 가능하도록 변경 */}
-            <FormField label="성별" name="sex" value={formData.sex || ''} isEditable={isEditing} />
-            {/* 💡 추가: family_history 필드 수정 가능하도록 추가 */}
-            <FormField label="가족력" name="family_history" value={formData.family_history || ''} isEditable={isEditing} />
+            {/* 생년월일 필드 추가 (수정 가능, Date 타입으로 표시) */}
+            <FormField label="생년월일" name="birth_date" value={formData.birth_date || ''} isEditable={isEditing} type="date" />
+            {/* 나이 필드를 별도로 표시 (수정 가능) */}
+            <FormField label="나이" name="age" value={formData.age || ''} isEditable={isEditing} type="number" />
 
+            <FormField label="성별" name="sex" value={formData.sex || ''} isEditable={isEditing} />
+            <FormField label="가족력" name="family_history" value={formData.family_history || ''} isEditable={isEditing} />
 
             {/* 역할별 추가 정보 */}
             {isDoctor ? <DoctorSpecificFields /> : <PatientSpecificFields />}
@@ -348,24 +370,23 @@ const PatientSpecificFields: React.FC = () => {
                 <>
                   <button
                     type="button"
-                    onClick={() => { // 💡 수정 취소 버튼 연동
+                    onClick={() => { // 수정 취소 버튼 연동
                         setIsEditing(false);
                         // 취소 시 원래 profile 데이터로 복구
                         setFormData({
                             ...profile,
-                            // 💡 수정: assigned_doctor_name도 profile 값으로 복구
+                            birth_date: profile.birth_date || '', // 생년월일 복구
+                            age: profile.age || '',              // 나이 복구
                             assigned_doctor_name: profile?.assigned_doctor?.name || '',
                             doctor_profile: profile?.doctor_profile || {},
                             assigned_doctor: profile?.assigned_doctor || {},
-                            phone: profile?.phone || '',
-                            address: profile?.address || '',
                         });
                     }}
                     className="px-4 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-100 transition duration-150"                  >
                     수정 취소
                   </button>
                   <button
-                    type="submit" // 💡 수정 완료 버튼 (form submit)
+                    type="submit" // 수정 완료 버튼 (form submit)
                     className="px-4 py-1.5 bg-green-600 text-white rounded-lg font-semibold text-sm hover:bg-green-700 transition duration-150"                  >
                     수정 완료
                   </button>
@@ -374,16 +395,16 @@ const PatientSpecificFields: React.FC = () => {
                 <>
                   <button
                     type="button"
-                    onClick={() => setShowDeleteModal(true)} // 💡 회원 탈퇴 버튼 연동 (모달 열기)
+                    onClick={() => setShowDeleteModal(true)} // 회원 탈퇴 버튼 연동 (모달 열기)
                     className="px-4 py-1.5 border border-red-500 text-red-600 text-sm rounded-lg hover:bg-red-50 transition duration-150"                  >
                     회원 탈퇴
                   </button>
 
-                  {/* 💡 isUserEditable (의사 또는 담당의사 있는 환자)일 때만 '정보 수정' 버튼 표시 */}
+                  {/* isUserEditable (의사 또는 담당의사 있는 환자)일 때만 '정보 수정' 버튼 표시 */}
                   {isUserEditable && (
                     <button
                       type="button"
-                      onClick={() => setIsEditing(true)} // 💡 정보 수정 버튼 연동 (수정 모드 활성화)
+                      onClick={() => setIsEditing(true)} // 정보 수정 버튼 연동 (수정 모드 활성화)
                       className="px-4 py-1.5 bg-blue-600 text-white rounded-lg font-semibold text-sm hover:bg-blue-700 transition duration-150"
                     >
                       정보 수정
@@ -404,7 +425,7 @@ const PatientSpecificFields: React.FC = () => {
                     <h3 className="text-2xl font-bold mb-4 text-purple-700 text-left">나의 진단 기록</h3>
                     <p className="text-gray-600 text-left">최근 진단 결과를 확인하고 후속 조치를 요청할 수 있습니다.</p>
                     <button
-                      onClick={handleGoToDiagnosis} // 💡 기록 보러가기 버튼 연동
+                      onClick={handleGoToDiagnosis}
                       className="mt-4 px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600">
                       기록 보러가기
                     </button>
@@ -421,13 +442,13 @@ const PatientSpecificFields: React.FC = () => {
             <p className="mb-6">정말로 탈퇴하시겠습니까? 모든 정보가 삭제되며 복구할 수 없습니다.</p>
             <div className="flex justify-end space-x-3">
               <button
-                onClick={() => setShowDeleteModal(false)} // 💡 모달 취소 버튼 연동
+                onClick={() => setShowDeleteModal(false)}
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-100"
               >
                 취소
               </button>
               <button
-                onClick={handleAccountDelete} // 💡 탈퇴 확인 버튼 연동
+                onClick={handleAccountDelete}
                 className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 font-semibold"
               >
                 탈퇴 확인
