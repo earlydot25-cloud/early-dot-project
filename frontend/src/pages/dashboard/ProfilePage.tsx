@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { UserProfile, PatientListItem } from '../../types/UserTypes';
 // 백엔드 통신 함수 임포트 확인 (userServices.ts에 정의되어 있어야 함)
 import { fetchUserProfile, updateProfile, deleteAccount, removePatient } from '../../services/userServices';
+import { useNavigate } from 'react-router-dom';
+import { clearAuth } from '../../services/authServices';
 
 interface MyPageProps {}
 
@@ -9,6 +11,7 @@ const MyPage: React.FC<MyPageProps> = () => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const navigate = useNavigate();
   // formData에 profile 전체 구조와 추가 필드 초기화
   const [formData, setFormData] = useState<any>({});
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -106,12 +109,18 @@ const MyPage: React.FC<MyPageProps> = () => {
     }
   };
 
-  const handleAccountDelete = async () => {
+const handleAccountDelete = async () => {
     try {
-      await deleteAccount(); // 💡 deleteAccount 함수를 호출
+      await deleteAccount(); // 회원 탈퇴 API 호출
+
+      // 💡 3. 토큰 제거 및 리다이렉션 로직 추가
+      clearAuth(); // 로컬 스토리지에서 토큰 및 사용자 정보 삭제
+
       alert('회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.');
-      // 🚨 탈퇴 후 로그인 페이지로 리다이렉션하는 로직을 여기에 추가해야 합니다.
-      // 예: navigate('/login');
+
+      // 메인 페이지(로그인 전 페이지)로 리다이렉션
+      navigate('/');
+
     } catch (error) {
       alert(error instanceof Error ? error.message : '회원 탈퇴에 실패했습니다.');
       console.error('Deletion failed:', error);
@@ -172,36 +181,54 @@ const MyPage: React.FC<MyPageProps> = () => {
     </div>
   );
 
-  const PatientSpecificFields: React.FC = () => (
-    <div className="mt-6 border-t pt-6">
-      <h3 className="text-xl font-bold text-gray-700 mb-4 text-left">담당의사 정보</h3>
-      {assignedDoctor && assignedDoctor.name ? (
-        <>
-            {/* assigned_doctor_name 필드는 수정 모드에서만 수정 가능 (handleInputChange/handleUpdate 연동됨) */}
-            <FormField
-                label="담당의사 실명"
-                name="assigned_doctor_name"
-                value={formData.assigned_doctor.name || ''}
-                isEditable={true}
-            />
-            <FormField
-                label="전문의 분야"
-                name="assigned_doctor_specialty"
-                value={assignedDoctor.specialty || '미등록'}
-                isEditable={false}
-            />
-            <FormField
-                label="소속 병원"
-                name="assigned_doctor_hospital"
-                value={assignedDoctor.hospital || '미등록'}
-                isEditable={false}
-            />
-        </>
-      ) : (
-        <p className="text-red-500 text-left">담당 의사가 지정되지 않았습니다.</p>
-      )}
-    </div>
-  );
+const PatientSpecificFields: React.FC = () => {
+    // 💡 1. assignedDoctor 변수가 존재하는지 확인
+    // (profile.assigned_doctor 객체가 아예 null/undefined인 경우)
+    const assignedDoctorExists = assignedDoctor && (
+        assignedDoctor.name || assignedDoctor.specialty || assignedDoctor.hospital
+    );
+
+    // 💡 2. 담당의사가 지정되지 않았으면 null을 반환하여 섹션 전체를 숨김
+    if (!assignedDoctorExists) {
+        return null;
+    }
+
+    // 💡 3. 담당의사가 지정된 경우에만 섹션 렌더링
+    return (
+      <div className="mt-6 border-t pt-6">
+        <h3 className="text-xl font-bold text-gray-700 mb-4 text-left">담당의사 정보</h3>
+
+        {/* 담당의사 이름 필드는 백엔드에서 null로 올 수 있으므로, name으로 다시 체크 */}
+        {assignedDoctor.name ? (
+          <>
+              {/* assigned_doctor_name 필드는 수정 모드에서만 수정 가능 (handleInputChange/handleUpdate 연동됨) */}
+              <FormField
+                  label="담당의사 실명"
+                  name="assigned_doctor_name"
+                  value={formData.assigned_doctor.name || ''}
+                  isEditable={true}
+              />
+              <FormField
+                  label="전문의 분야"
+                  name="assigned_doctor_specialty"
+                  value={assignedDoctor.specialty || '미등록'}
+                  isEditable={false}
+              />
+              <FormField
+                  label="소속 병원"
+                  name="assigned_doctor_hospital"
+                  value={assignedDoctor.hospital || '미등록'}
+                  isEditable={false}
+              />
+          </>
+        ) : (
+          // 담당의사 객체는 있지만 name 필드가 빈 경우에만 이 메시지를 표시
+          <p className="text-red-500 text-left">담당 의사 이름이 등록되지 않았습니다.</p>
+        )}
+      </div>
+    );
+  };
+
 
   const DoctorSpecificFields: React.FC = () => (
     <div className="mt-6 border-t pt-6">
@@ -305,14 +332,12 @@ const MyPage: React.FC<MyPageProps> = () => {
                             address: profile?.address || '',
                         });
                     }}
-                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition duration-150"
-                  >
+                    className="px-5 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-100 transition duration-150"                  >
                     수정 취소
                   </button>
                   <button
                     type="submit" // 💡 수정 완료 버튼 (form submit)
-                    className="px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition duration-150"
-                  >
+                    className="px-5 py-1.5 bg-green-600 text-white rounded-lg font-semibold text-sm hover:bg-green-700 transition duration-150"                  >
                     수정 완료
                   </button>
                 </>
@@ -321,15 +346,13 @@ const MyPage: React.FC<MyPageProps> = () => {
                   <button
                     type="button"
                     onClick={() => setShowDeleteModal(true)} // 💡 회원 탈퇴 버튼 연동 (모달 열기)
-                    className="px-6 py-2 border border-red-500 text-red-500 rounded-lg hover:bg-red-50 transition duration-150"
-                  >
+                    className="px-6 py-1.5 border border-red-500 text-red-500 font-semibold text-sm rounded-lg hover:bg-red-100 transition duration-150"                  >
                     회원 탈퇴
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsEditing(true)} // 💡 정보 수정 버튼 연동 (수정 모드 활성화)
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition duration-150"
-                  >
+                    className="px-6 py-1.5 bg-blue-600 text-white rounded-lg font-semibold text-sm hover:bg-blue-700 transition duration-150"                  >
                     정보 수정
                   </button>
                 </>
