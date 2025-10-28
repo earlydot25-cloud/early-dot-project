@@ -34,11 +34,11 @@ API.interceptors.request.use(
 
 /**
  * 현재 로그인된 사용자 정보 (환자/의사)를 가져오는 함수
+ * GET /api/auth/profile/
  */
 export async function fetchUserProfile(): Promise<UserProfile> {
   try {
-    // 🚨 수정: 기존 '/api/profile/' 에서 '/users/profile/' 로 변경
-    // API.get('/users/profile/')는 http://127.0.0.1:8000/api/users/profile/ 로 요청됩니다.
+    // 🚩 백엔드 통합 경로인 /auth/profile/ 사용 (GET 요청)
     const response = await API.get<UserProfile>('/auth/profile/');
     return response.data;
   } catch (error) {
@@ -50,10 +50,11 @@ export async function fetchUserProfile(): Promise<UserProfile> {
 
 /**
  * 사용자 정보 업데이트 함수
+ * PATCH /api/auth/profile/
  */
 export async function updateProfile(data: any): Promise<void> {
   try {
-    // 경로는 올바름. '/users/profile/update/' 엔드포인트가 API_BASE_URL에 연결됨
+    // 🚩 백엔드 통합 경로인 /auth/profile/ 사용 (PATCH 요청)
     await API.patch('/auth/profile/', data);
   } catch (error) {
     console.error('Update failed:', error);
@@ -63,10 +64,12 @@ export async function updateProfile(data: any): Promise<void> {
 
 /**
  * 회원 탈퇴 함수
+ * DELETE /api/auth/profile/
  */
 export async function deleteAccount(): Promise<void> {
   try {
-    // 경로는 올바름.
+    // 🚩 백엔드 통합 경로인 /auth/profile/ 사용 (DELETE 요청)
+    // 이전에 404가 발생했던 /users/profile/delete/ 경로 대신 이 경로를 사용해야 합니다.
     await API.delete('/auth/profile/');
   } catch (error) {
     console.error('Deletion failed:', error);
@@ -76,6 +79,7 @@ export async function deleteAccount(): Promise<void> {
 
 /**
  * 의사 전용: 담당 환자 삭제 함수
+ * POST /api/doctors/patients/{patientId}/remove/
  */
 export async function removePatient(patientId: number): Promise<void> {
   try {

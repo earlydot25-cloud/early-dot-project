@@ -1,4 +1,3 @@
-# backend/users/serializers.py
 from uuid import uuid4
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -8,8 +7,8 @@ from rest_framework import serializers
 from .models import Doctors
 from diagnosis.models import Results
 
-
 User = get_user_model()
+
 
 class UserSerializer(serializers.ModelSerializer):
     # Users ←(OneToOne/ForeignKey related_name='doctor')→ Doctors
@@ -130,13 +129,6 @@ class RegisterSerializer(serializers.ModelSerializer):
                 except ValueError:
                     raise serializers.ValidationError({"referral_uid": ["식별 코드는 양의 정수여야 합니다."]})
 
-                # Doctors 모델은 'uid' 필드를 User 객체와 연결합니다.
-                # 그러나 환자에게 할당할 때는 Doctor의 'id' (Doctors 모델의 PK) 또는
-                # Doctors 모델에 정의된 고유 식별코드(uid)를 사용해야 합니다.
-                # RegisterSerializer 내에서 'referral_uid'는 Doctors 모델의 PK(id)가 아닌,
-                # Doctors 모델의 uid 필드(User FK)와 연결된 User의 ID를 나타내는 것으로 보입니다.
-                # 여기서는 Doctors 모델에 'uid' 필드가 User 객체(FK)로 되어 있으므로,
-                # Doctors.objects.filter(id=n) 또는 Doctors.objects.filter(uid__id=n) 중 하나를 사용해야 합니다.
                 # Doctors 모델의 uid 필드가 User FK이므로, User ID를 기준으로 찾기 위해 `uid__id`를 사용합니다.
                 doctor_obj = Doctors.objects.filter(uid__id=n).first()
                 if not doctor_obj:
@@ -177,7 +169,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             **validated_data,
             is_doctor=is_doctor,
             birth_date=birth_date,
-            age=age # 👈 명시적으로 전달
+            age=age  # 👈 명시적으로 전달
         )
         user.set_password(password)
         user.save()
@@ -189,9 +181,9 @@ class RegisterSerializer(serializers.ModelSerializer):
 
         if license_file:
             # certs/<doctor_user_id>/<uuid>_원본파일명
-            #orig = os.path.basename(getattr(license_file, "name", "license"))
-            #filename = f"certs/{user.id}/{uuid4().hex}_{orig}"
-            #saved_path = default_storage.save(filename, license_file)
+            # orig = os.path.basename(getattr(license_file, "name", "license"))
+            # filename = f"certs/{user.id}/{uuid4().hex}_{orig}"
+            # saved_path = default_storage.save(filename, license_file)
 
             # Doctors.uid 필드는 User 객체에 대한 FK이므로 user 객체를 직접 할당
             Doctors.objects.create(
@@ -202,6 +194,11 @@ class RegisterSerializer(serializers.ModelSerializer):
                 cert_path=license_file,  # ← 업로드 파일 객체를 그대로 전달
                 status="pending",
             )
+
+        # 5️⃣ 환자일 경우 담당 의사 연결
+        if doctor_obj:
+            user.doctor = doctor_obj
+            user.save()
 
         print("--- RegisterSerializer.create END (User Created) ---")
         return user
@@ -254,10 +251,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
     # 의사일 경우: 담당 환자 목록 (PatientListItemSerializer 사용)
     patients = serializers.SerializerMethodField(read_only=True)
 
-    # 예시로 'phone'과 'address' 필드를 추가한다고 가정
-    # Users 모델에 해당 필드가 없으면 Meta.fields에서 제거하거나 User 모델에 추가해야 함.
-    # fields = ['id', 'email', 'name', 'sex', 'age', 'birth_date', 'family_history', 'is_doctor', 'phone', 'address', 'date_joined']
-
     class Meta:
         model = User
         # 'birth_date'는 User 모델에 있다고 가정. 없으면 제거 필요.
@@ -270,7 +263,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         """사용자가 의사일 경우, 자신의 Doctors 프로필 정보를 반환"""
         if obj.is_doctor:
             # Users ←(ForeignKey related_name='doctors_set')→ Doctors (default reverse lookup)
-            # Doctors.uid (FK to User)의 기본 역참조 이름은 'doctors_set'입니다.
+            # Doctors.uid (FK to User)의 related_name은 'doctor_profile'입니다.
             profile = getattr(obj, 'doctor_profile', None)
             if profile:
                 return DoctorProfileSerializer(profile).data
@@ -299,7 +292,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
         if obj.is_doctor:
             try:
                 # 1. 의사 본인의 Doctors 프로필 객체를 가져옴
-                # 💡 수정: obj.doctors_set.first() 대신 obj.doctor_profile 사용
                 doctor_profile = getattr(obj, 'doctor_profile', None)
 
                 if doctor_profile:
@@ -324,7 +316,6 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
     sex = serializers.CharField(required=False, allow_blank=True)
     age = serializers.IntegerField(required=False)
     family_history = serializers.CharField(required=False, allow_blank=True)
-    # phone = serializers.CharField(required=False, allow_blank=True) # User 모델에 있다면 추가
 
     # 의사 전용 필드 (Doctors 모델 업데이트용)
     specialty = serializers.CharField(write_only=True, required=False, allow_blank=True)
@@ -367,11 +358,10 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
                         name=assigned_doctor_name
                     ).first()
 
-                    # 해당 User의 Doctors 프로필 객체 확인
-                    # 💡 수정: doctors_set.exists() 대신 hasattr(doctor_user, 'doctor_profile')만 확인
-                    if doctor_user and hasattr(doctor_user,
-                                               'doctor_profile'):  # doctor_profile은 OneToOneField이므로 존재 여부만 확인
-                        instance.doctor = doctor_user.doctor_profile  # 👈 Doctors 객체 할당
+                    # 해당 User의 Doctors 프로필 객체 확인 (doctor_profile은 OneToOneField로 가정)
+                    if doctor_user and hasattr(doctor_user, 'doctor_profile'):
+                        # ✅ 수정된 부분: 검색된 의사의 Doctors 객체(doctor_user.doctor_profile)를 할당
+                        instance.doctor = doctor_user.doctor_profile  # ⬅️ 올바른 할당
                     else:
                         raise serializers.ValidationError({
                             "assigned_doctor_name": [f"이름이 '{assigned_doctor_name}'인 등록된 의사를 찾을 수 없습니다."]
