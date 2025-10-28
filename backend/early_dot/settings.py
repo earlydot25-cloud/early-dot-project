@@ -195,8 +195,8 @@ REST_FRAMEWORK = {
 # -------------------------------------------------------------------
 
 # [기본값: 로컬만 허용]
-ALLOWED_HOSTS = ["127.0.0.1", "localhost", "*"]    #<- mac 기준으로 이거 주석 풀고, 아래 주석 달면 됨.
-#ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+#ALLOWED_HOSTS = ["127.0.0.1", "localhost", "*"]    #<- mac 기준으로 이거 주석 풀고, 아래 주석 달면 됨.
+ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
 # 모든 호스트를 허용합니다 (배포 시에는 특정 도메인으로 제한해야 합니다).
 CORS_ALLOW_ALL_ORIGINS = True   # 개발 한정임
@@ -210,8 +210,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
     # 네트워크(IP) 바뀌어도 접속되게 하려면 .local 추가(주석 해제)
     # sondongbin-ui-MacBookPro 으로 되어 있는 부분이 mac 사용자의 macbook 이름이 들어가면 됨,
-    "http://sondongbin-ui-MacBookPro.local:3000",
-    "http://sondongbin-ui-MacBookPro.local:5173",
+    #"http://sondongbin-ui-MacBookPro.local:3000",
+    #"http://sondongbin-ui-MacBookPro.local:5173",
 ]
 
 # CSRF 신뢰 오리진
@@ -222,6 +222,6 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
     # 네트워크(IP) 바뀌어도 접속되게 하려면 .local 추가(주석 해제)
     # sondongbin-ui-MacBookPro 으로 되어 있는 부분이 mac 사용자의 macbook 이름이 들어가면 됨,
-    "http://sondongbin-ui-MacBookPro.local:3000",
-    "http://sondongbin-ui-MacBookPro.local:5173",
+    #"http://sondongbin-ui-MacBookPro.local:3000",
+    #"http://sondongbin-ui-MacBookPro.local:5173",
 ]
