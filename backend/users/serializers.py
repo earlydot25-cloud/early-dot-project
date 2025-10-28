@@ -151,23 +151,22 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.save()
 
         # 4️⃣ 환자 권고가입인 경우 doctor FK 연결
-        if doctor_obj is not None:
-            user.doctor = doctor_obj
-            user.save()
 
-        # 5️⃣ 의사 본인 가입일 경우 Doctors 프로필 생성
         if is_doctor:
-            saved_path = ""
-            if license_file:
-                filename = f"certs/{uuid4().hex}_{getattr(license_file, 'name', 'license')}"
-                saved_path = default_storage.save(filename, license_file)
+            saved_path = None
+
+        if license_file:
+            # certs/<doctor_user_id>/<uuid>_원본파일명
+            #orig = os.path.basename(getattr(license_file, "name", "license"))
+            #filename = f"certs/{user.id}/{uuid4().hex}_{orig}"
+            #saved_path = default_storage.save(filename, license_file)
 
             Doctors.objects.create(
-                uid=user,  # ✅ uid는 ForeignKey(=User) 필드
+                uid=user,
                 name=user.name,
                 specialty=specialty or "",
                 hospital=hospital or "",
-                cert_path=saved_path,  # ✅ 모델 필드명과 일치
+                cert_path=license_file,  # ← 업로드 파일 객체를 그대로 전달
                 status="pending",
             )
 
