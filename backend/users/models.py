@@ -6,6 +6,7 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone  # date_joined 기본값 지정을 위해 추가
+from uuid import uuid4
 
 
 # Custom User Manager 정의 (필수)
@@ -47,6 +48,12 @@ def doctor_cert_upload_to(instance, filename):
     # instance.uid는 의사 Users 객체(Doctors.uid OneToOne)
     return f"certs/{instance.uid_id}/{uuid4().hex}_{filename}"
 
+# 모델의 cert_path를 FileField로 바꾸고 upload_to 함수에서 경로
+# 이거 이따가 경로 바꿔야 함
+def doctor_cert_upload_to(instance, filename):
+    # instance.uid는 의사 Users 객체(Doctors.uid OneToOne)
+    return f"certs/{instance.uid_id}/{uuid4().hex}_{filename}"
+
 class Doctors(models.Model):
     # 'uid'는 이 테이블의 Primary Key 역할
     uid = models.OneToOneField(
@@ -82,8 +89,8 @@ class Users(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
     name = models.CharField(max_length=100)
     sex = models.CharField(max_length=20)
-    birth_date = models.DateField(null=True, blank=True)
-    #age = models.IntegerField() # 생년월일이 아니고 계산된 age로 들어가고 있음
+    birth_date = models.DateField(null=False, blank=False)
+    age = models.IntegerField()
     family_history = models.CharField(max_length=10, default='모름')
     #family_history = models.CharField(max_length=10, blank=True, null=True)
     is_doctor = models.BooleanField(default=False)
@@ -103,7 +110,7 @@ class Users(AbstractBaseUser, PermissionsMixin):
 
     # Django의 기본 username 필드를 email로 사용하도록 설정
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['name', 'sex', 'age', 'family_history']
+    REQUIRED_FIELDS = ['name', 'sex', 'age', 'birth_date', 'family_history']
 
     class Meta:
         db_table = 'users'

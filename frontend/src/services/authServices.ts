@@ -59,6 +59,7 @@ export type SignupJsonPayload = {
   password: string;
   name: string;
   sex?: 'M' | 'F';
+  birth_date: string;
   age?: number;
   family_history?: 'Y' | 'N' | 'U'; // ← JSON에 명시
   is_doctor?: boolean;
@@ -99,6 +100,7 @@ export type SignupMultipartPayload = {
   password: string;
   name: string;
   sex?: 'M' | 'F';
+  birth_date: string;
   age?: number;
   is_doctor?: boolean;
   family_history?: "Y" | "N" | "U";   // ✅ 이 줄 있어야 함
@@ -118,6 +120,7 @@ export async function signupUserMultipart(payload: SignupMultipartPayload) {
   fd.append('email', payload.email);
   fd.append('password', payload.password);
   fd.append('name', payload.name);
+  fd.append("birth_date", payload.birth_date);
 
   // 선택 필드(값이 있을 때만 append)
   if (payload.sex) fd.append('sex', payload.sex);
