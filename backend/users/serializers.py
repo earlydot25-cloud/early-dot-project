@@ -158,17 +158,17 @@ class RegisterSerializer(serializers.ModelSerializer):
 
         if license_file:
             # certs/<doctor_user_id>/<uuid>_원본파일명
-            orig = os.path.basename(getattr(license_file, "name", "license"))
-            filename = f"certs/{user.id}/{uuid4().hex}_{orig}"
-            saved_path = default_storage.save(filename, license_file)
+            #orig = os.path.basename(getattr(license_file, "name", "license"))
+            #filename = f"certs/{user.id}/{uuid4().hex}_{orig}"
+            #saved_path = default_storage.save(filename, license_file)
 
             Doctors.objects.create(
-                uid = user,  # OneToOne PK
-                name = user.name,
-                specialty = specialty or "",
-                hospital = hospital or "",
-                cert_path = saved_path,  # 문자열 경로 저장
-                status = "pending",
+                uid=user,
+                name=user.name,
+                specialty=specialty or "",
+                hospital=hospital or "",
+                cert_path=license_file,  # ← 업로드 파일 객체를 그대로 전달
+                status="pending",
             )
 
         return user
