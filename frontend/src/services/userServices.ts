@@ -54,7 +54,7 @@ export async function fetchUserProfile(): Promise<UserProfile> {
 export async function updateProfile(data: any): Promise<void> {
   try {
     // 경로는 올바름. '/users/profile/update/' 엔드포인트가 API_BASE_URL에 연결됨
-    await API.patch('/users/profile/update/', data);
+    await API.patch('/auth/profile/', data);
   } catch (error) {
     console.error('Update failed:', error);
     throw new Error("정보 수정에 실패했습니다.");
@@ -67,7 +67,7 @@ export async function updateProfile(data: any): Promise<void> {
 export async function deleteAccount(): Promise<void> {
   try {
     // 경로는 올바름.
-    await API.delete('/users/profile/delete/');
+    await API.delete('/auth/profile/');
   } catch (error) {
     console.error('Deletion failed:', error);
     throw new Error("회원 탈퇴에 실패했습니다.");

@@ -1,7 +1,6 @@
-// src/dashboard/components/MyPage.tsx
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { UserProfile, PatientListItem } from '../../types/UserTypes';
+// 백엔드 통신 함수 임포트 확인 (userServices.ts에 정의되어 있어야 함)
 import { fetchUserProfile, updateProfile, deleteAccount, removePatient } from '../../services/userServices';
 
 interface MyPageProps {}
@@ -10,9 +9,11 @@ const MyPage: React.FC<MyPageProps> = () => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  // formData에 profile 전체 구조와 추가 필드 초기화
   const [formData, setFormData] = useState<any>({});
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
+  // profile이 로드된 후에만 isDoctor를 계산하여 오류 방지
   const isDoctor = useMemo(() => profile?.is_doctor || false, [profile]);
 
   useEffect(() => {
@@ -20,6 +21,7 @@ const MyPage: React.FC<MyPageProps> = () => {
       try {
         const data = await fetchUserProfile();
         setProfile(data);
+        // 데이터를 로드할 때 phone, address, doctor_profile, assigned_doctor를 확실히 초기화
         setFormData({
             ...data,
             doctor_profile: data.doctor_profile || {},
@@ -40,6 +42,7 @@ const MyPage: React.FC<MyPageProps> = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
 
+    // 의사 전용 필드 처리
     if (isDoctor && (name === 'specialty' || name === 'hospital')) {
       setFormData((prev: any) => ({
         ...prev,
@@ -48,6 +51,7 @@ const MyPage: React.FC<MyPageProps> = () => {
           [name]: value,
         },
       }));
+    // 환자 전용 필드 처리
     } else if (!isDoctor && name === 'assigned_doctor_name') {
         setFormData((prev: any) => ({
             ...prev,
@@ -56,6 +60,7 @@ const MyPage: React.FC<MyPageProps> = () => {
                 name: value,
             },
         }));
+    // 공통 필드 (phone, address 등) 처리
     } else {
       setFormData((prev: any) => ({ ...prev, [name]: value }));
     }
@@ -64,25 +69,36 @@ const MyPage: React.FC<MyPageProps> = () => {
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const updatePayload: any = {};
+      const updatePayload: any = {
+        // 💡 [핵심 수정]: 공통으로 수정 가능한 필드들을 페이로드에 포함
+        name: formData.name,
+        sex: formData.sex,
+        age: formData.age,
+        family_history: formData.family_history,
+      };
 
       if (isDoctor) {
+        // 의사 프로필 필드
         updatePayload.specialty = formData.doctor_profile.specialty;
         updatePayload.hospital = formData.doctor_profile.hospital;
       } else if (!isDoctor && formData.assigned_doctor.name) {
+        // 환자 담당의사 이름 필드
         updatePayload.assigned_doctor_name = formData.assigned_doctor.name;
       }
 
-      await updateProfile(updatePayload);
+      await updateProfile(updatePayload); // 💡 updateProfile 함수를 호출
 
+      // 성공 후 프로필 다시 로드
       const updatedProfile = await fetchUserProfile();
       setProfile(updatedProfile);
       setFormData({
           ...updatedProfile,
           doctor_profile: updatedProfile.doctor_profile || {},
           assigned_doctor: updatedProfile.assigned_doctor || {},
+          phone: updatedProfile.phone || '', // phone, address도 업데이트된 값으로 초기화
+          address: updatedProfile.address || '',
       });
-      setIsEditing(false);
+      setIsEditing(false); // 수정 모드 종료
       alert('정보가 성공적으로 수정되었습니다.');
     } catch (error) {
       alert(error instanceof Error ? error.message : '정보 수정에 실패했습니다.');
@@ -92,9 +108,10 @@ const MyPage: React.FC<MyPageProps> = () => {
 
   const handleAccountDelete = async () => {
     try {
-      await deleteAccount();
+      await deleteAccount(); // 💡 deleteAccount 함수를 호출
       alert('회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.');
-      // 탈퇴 후 리다이렉션 로직 추가
+      // 🚨 탈퇴 후 로그인 페이지로 리다이렉션하는 로직을 여기에 추가해야 합니다.
+      // 예: navigate('/login');
     } catch (error) {
       alert(error instanceof Error ? error.message : '회원 탈퇴에 실패했습니다.');
       console.error('Deletion failed:', error);
@@ -106,7 +123,7 @@ const MyPage: React.FC<MyPageProps> = () => {
   const handleRemovePatient = async (patientId: number) => {
     if (!window.confirm('선택한 환자를 담당 목록에서 삭제하시겠습니까?')) return;
     try {
-      await removePatient(patientId);
+      await removePatient(patientId); // 💡 removePatient 함수를 호출
       setProfile((prev: UserProfile | null) => prev ? ({
         ...prev,
         patients: prev.patients?.filter((p: PatientListItem) => p.id !== patientId)
@@ -116,6 +133,11 @@ const MyPage: React.FC<MyPageProps> = () => {
       alert(error instanceof Error ? error.message : '환자 제거에 실패했습니다.');
       console.error('Remove patient failed:', error);
     }
+  };
+
+  const handleGoToDiagnosis = () => {
+    alert("진단 기록 페이지로 이동해야 합니다.");
+    // 🚨 여기에 실제 라우팅 로직 (예: router.push('/diagnosis-history'))을 구현해야 합니다.
   };
 
 
@@ -129,12 +151,11 @@ const MyPage: React.FC<MyPageProps> = () => {
 
   const doctorProfile = profile.doctor_profile;
   const assignedDoctor = profile.assigned_doctor;
-  const isDoctorApproved = doctorProfile?.status === '승인';
+  const isDoctorApproved = doctorProfile && doctorProfile.status === '승인';
 
   // 폼 필드 헬퍼 컴포넌트
   const FormField: React.FC<{ label: string; name: string; value: string | number; isEditable: boolean; type?: string }> =
     ({ label, name, value, isEditable, type = 'text' }) => (
-    // 🚨 수정: 레이블 너비를 min-w-[80px]으로 줄여서 값 필드 영역을 확보했습니다.
     <div className="flex items-center py-3 border-b border-gray-100 space-x-4">
       <label className="text-gray-500 font-medium min-w-[80px] flex-shrink-0 text-left">{label}</label>
       {isEditable && isEditing ? (
@@ -151,20 +172,12 @@ const MyPage: React.FC<MyPageProps> = () => {
     </div>
   );
 
-  // 비밀번호 변경 컴포넌트
-  const PasswordChangeSection = () => (
-    <div className="py-4 border-b border-gray-100 text-left">
-        <h4 className="text-lg font-semibold mb-2">비밀번호 변경</h4>
-        <p className="text-sm text-gray-500">비밀번호 변경은 별도의 보안 절차를 통해 진행됩니다.</p>
-        <button type="button" className="mt-2 text-sm text-blue-600 hover:text-blue-800">비밀번호 변경하기</button>
-    </div>
-  );
-
   const PatientSpecificFields: React.FC = () => (
     <div className="mt-6 border-t pt-6">
       <h3 className="text-xl font-bold text-gray-700 mb-4 text-left">담당의사 정보</h3>
       {assignedDoctor && assignedDoctor.name ? (
         <>
+            {/* assigned_doctor_name 필드는 수정 모드에서만 수정 가능 (handleInputChange/handleUpdate 연동됨) */}
             <FormField
                 label="담당의사 실명"
                 name="assigned_doctor_name"
@@ -238,7 +251,7 @@ const MyPage: React.FC<MyPageProps> = () => {
                   <span className="text-sm text-gray-500">ID: {patient.id} | Email: {patient.email}</span>
                 </div>
                 <button
-                  onClick={() => handleRemovePatient(patient.id)}
+                  onClick={() => handleRemovePatient(patient.id)} // 💡 환자 삭제 연동
                   className="px-3 py-1 bg-red-500 text-white text-sm rounded-md hover:bg-red-600 transition duration-150"
                 >
                   삭제
@@ -257,8 +270,6 @@ const MyPage: React.FC<MyPageProps> = () => {
 
 
   return (
-    // 🚨 수정: container 클래스를 제거하고, max-w-xl(최대 500px) 정도만 유지하여
-    //       데스크톱에서도 너무 넓게 퍼지지 않으면서 모바일 폭을 충분히 확보
     <div className="mx-auto p-4 sm:p-8 bg-gray-50 max-w-xl min-w-[320px]">
       <h1 className="text-3xl font-bold text-gray-800 mb-8 border-b pb-4 text-left">마이 페이지</h1>
 
@@ -268,15 +279,12 @@ const MyPage: React.FC<MyPageProps> = () => {
         <div className="bg-white p-8 rounded-xl shadow-lg">
           <h2 className="text-2xl font-bold text-gray-700 mb-6 text-left">회원 정보 {isEditing ? '수정' : '확인'}</h2>
 
-          <form onSubmit={handleUpdate}>
-            {/* 공통 정보 필드 */}
+          <form onSubmit={handleUpdate}> {/* 💡 수정 완료 버튼은 handleUpdate로 연동됨 */}
+            {/* 공통 정보 필드 (수정 불가능) */}
             <FormField label="이메일 (ID)" name="email" value={profile.email} isEditable={false} />
             <FormField label="이름" name="name" value={profile.name} isEditable={false} />
             <FormField label="생년월일" name="age" value={profile.age} isEditable={false} />
             <FormField label="성별" name="sex" value={profile.sex} isEditable={false} />
-
-            {/* 비밀번호 변경 섹션 */}
-            <PasswordChangeSection />
 
             {/* 역할별 추가 정보 */}
             {isDoctor ? <DoctorSpecificFields /> : <PatientSpecificFields />}
@@ -286,20 +294,23 @@ const MyPage: React.FC<MyPageProps> = () => {
                 <>
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={() => { // 💡 수정 취소 버튼 연동
                         setIsEditing(false);
+                        // 취소 시 원래 profile 데이터로 복구
                         setFormData({
                             ...profile,
                             doctor_profile: profile?.doctor_profile || {},
                             assigned_doctor: profile?.assigned_doctor || {},
-                        }); // 취소 시 원래 데이터로 복구
+                            phone: profile?.phone || '',
+                            address: profile?.address || '',
+                        });
                     }}
                     className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition duration-150"
                   >
                     수정 취소
                   </button>
                   <button
-                    type="submit"
+                    type="submit" // 💡 수정 완료 버튼 (form submit)
                     className="px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition duration-150"
                   >
                     수정 완료
@@ -309,14 +320,14 @@ const MyPage: React.FC<MyPageProps> = () => {
                 <>
                   <button
                     type="button"
-                    onClick={() => setShowDeleteModal(true)}
+                    onClick={() => setShowDeleteModal(true)} // 💡 회원 탈퇴 버튼 연동 (모달 열기)
                     className="px-6 py-2 border border-red-500 text-red-500 rounded-lg hover:bg-red-50 transition duration-150"
                   >
                     회원 탈퇴
                   </button>
                   <button
                     type="button"
-                    onClick={() => setIsEditing(true)}
+                    onClick={() => setIsEditing(true)} // 💡 정보 수정 버튼 연동 (수정 모드 활성화)
                     className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition duration-150"
                   >
                     정보 수정
@@ -327,7 +338,6 @@ const MyPage: React.FC<MyPageProps> = () => {
           </form>
         </div>
 
-        {/* 오른쪽 섹션이었던 부분 */}
         <div className="space-y-8">
             {isDoctor && <DoctorPatientList />}
 
@@ -336,7 +346,11 @@ const MyPage: React.FC<MyPageProps> = () => {
                 <div className="p-6 bg-white rounded-lg shadow-md border-t-4 border-purple-500">
                     <h3 className="text-2xl font-bold mb-4 text-purple-700 text-left">나의 진단 기록</h3>
                     <p className="text-gray-600 text-left">최근 진단 결과를 확인하고 후속 조치를 요청할 수 있습니다.</p>
-                    <button className="mt-4 px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600">기록 보러가기</button>
+                    <button
+                      onClick={handleGoToDiagnosis} // 💡 기록 보러가기 버튼 연동
+                      className="mt-4 px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600">
+                      기록 보러가기
+                    </button>
                 </div>
             )}
         </div>
@@ -350,13 +364,13 @@ const MyPage: React.FC<MyPageProps> = () => {
             <p className="mb-6">정말로 탈퇴하시겠습니까? 모든 정보가 삭제되며 복구할 수 없습니다.</p>
             <div className="flex justify-end space-x-3">
               <button
-                onClick={() => setShowDeleteModal(false)}
+                onClick={() => setShowDeleteModal(false)} // 💡 모달 취소 버튼 연동
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-100"
               >
                 취소
               </button>
               <button
-                onClick={handleAccountDelete}
+                onClick={handleAccountDelete} // 💡 탈퇴 확인 버튼 연동
                 className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 font-semibold"
               >
                 탈퇴 확인

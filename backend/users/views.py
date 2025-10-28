@@ -23,20 +23,20 @@ class UserSignupView(APIView):
         return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
 
 
-
 # --------------------------------------------------------
-# 2. 프로필 뷰 (GET/PATCH: /api/users/profile/, /api/users/profile/update/)
+# 2. 프로필 뷰 (GET/PATCH/DELETE: /api/auth/profile/)
 # --------------------------------------------------------
 class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
-    # 내 정보 조회 (FE의 /profile 페이지에서 사용)
+    # 1. 내 정보 조회 (GET)
     def get(self, request):
+        """내 정보 조회 (GET)"""
         # 💡 UserProfileSerializer를 사용하여 의사/환자 상세 정보 포함
         serializer = UserProfileSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    # 내 정보 수정 (PUT 대신 PATCH 사용 권장)
+    # 2. 내 정보 수정 (PATCH)
     def patch(self, request):
         """프로필 정보 수정 (PATCH)"""
         user = request.user
@@ -59,15 +59,9 @@ class UserProfileView(APIView):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-# --------------------------------------------------------
-# 3. 회원 탈퇴 뷰 (DELETE: /api/users/profile/delete/)
-# --------------------------------------------------------
-class UserDeleteView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    # 3. 회원 탈퇴 (DELETE)
     def delete(self, request):
-        """회원 탈퇴"""
+        """회원 탈퇴 (DELETE)"""
         user = request.user
         user.delete()
         # 성공 시 204 No Content 반환

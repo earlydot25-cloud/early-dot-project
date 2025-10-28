@@ -345,8 +345,8 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
         instance.family_history = validated_data.get('family_history', instance.family_history)
 
         # 2. 의사 전용 필드 업데이트 (Doctors 모델)
-        if instance.is_doctor and hasattr(instance, 'doctors_set'):
-            doctor_profile = instance.doctors_set.first()  # 의사 본인의 Doctors 프로필
+        if instance.is_doctor and hasattr(instance, 'doctor_profile'):
+            doctor_profile = instance.doctor_profile  # 의사 본인의 Doctors 프로필
             if doctor_profile:
                 doctor_profile.specialty = validated_data.get('specialty', doctor_profile.specialty)
                 doctor_profile.hospital = validated_data.get('hospital', doctor_profile.hospital)
@@ -368,8 +368,10 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
                     ).first()
 
                     # 해당 User의 Doctors 프로필 객체 확인
-                    if doctor_user and hasattr(doctor_user, 'doctors_set') and doctor_user.doctors_set.exists():
-                        instance.doctor = doctor_user.doctors_set.first()
+                    # 💡 수정: doctors_set.exists() 대신 hasattr(doctor_user, 'doctor_profile')만 확인
+                    if doctor_user and hasattr(doctor_user,
+                                               'doctor_profile'):  # doctor_profile은 OneToOneField이므로 존재 여부만 확인
+                        instance.doctor = doctor_user.doctor_profile  # 👈 Doctors 객체 할당
                     else:
                         raise serializers.ValidationError({
                             "assigned_doctor_name": [f"이름이 '{assigned_doctor_name}'인 등록된 의사를 찾을 수 없습니다."]
