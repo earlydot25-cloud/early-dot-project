@@ -246,17 +246,17 @@ export default function SignupPage() {
   /* 4) API 헬퍼 */
   const API_BASE = (process.env.REACT_APP_API_BASE_URL?.replace(/\/+$/, "") || "http://localhost:8000");
 
-  /** 로그인: SimpleJWT(TokenObtainPairView) — Users.USERNAME_FIELD=email */
-  async function loginUser(payload: { email: string; password: string }) {
-    const res = await fetch(`${API_BASE}/api/auth/login/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.detail || "로그인 실패");
-    return data as { access: string; refresh: string };
-  }
+  ///** 로그인: SimpleJWT(TokenObtainPairView) — Users.USERNAME_FIELD=email */
+  //async function loginUser(payload: { email: string; password: string }) {
+  //  const res = await fetch(`${API_BASE}/api/auth/login/`, {
+  //    method: "POST",
+  //    headers: { "Content-Type": "application/json" },
+  //    body: JSON.stringify(payload),
+  //  });
+  //  const data = await res.json().catch(() => ({}));
+  //  if (!res.ok) throw new Error(data?.detail || "로그인 실패");
+  //  return data as { access: string; refresh: string };
+  //}
 
   /* 5) 제출 핸들러 */
   const onSubmit = async (e: React.FormEvent) => {
@@ -331,12 +331,16 @@ export default function SignupPage() {
       }
 
       // (4) 성공 시 자동 로그인 → 토큰 저장
-      const tokens = await loginUser({ email: f.email, password: f.password });
-      localStorage.setItem("accessToken", tokens.access);
-      localStorage.setItem("refreshToken", tokens.refresh);
-
-      // (5) 이동
-      nav("/");
+      //const tokens = await loginUser({ email: f.email, password: f.password });
+      //localStorage.setItem("accessToken", tokens.access);
+      //localStorage.setItem("refreshToken", tokens.refresh);
+      // (4) 성공 시: 혹시 남아 있는 토큰/유저 흔적 정리하고 로그인 화면으로 보냄
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      localStorage.removeItem("token");
+      localStorage.removeItem("idToken");
+      localStorage.removeItem("user");
+      nav("/login", { replace: true, state: { justSignedUp: true } });
     } catch (e: any) {
       setErr(e?.message || "회원가입에 실패했습니다.");
     } finally {

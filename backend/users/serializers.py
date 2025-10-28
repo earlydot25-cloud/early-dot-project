@@ -1,5 +1,6 @@
 # backend/users/serializers.py
 from uuid import uuid4
+import os
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core import exceptions as django_exceptions
@@ -151,24 +152,23 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.save()
 
         # 4️⃣ 환자 권고가입인 경우 doctor FK 연결
-        if doctor_obj is not None:
-            user.doctor = doctor_obj
-            user.save()
 
-        # 5️⃣ 의사 본인 가입일 경우 Doctors 프로필 생성
         if is_doctor:
-            saved_path = ""
-            if license_file:
-                filename = f"certs/{uuid4().hex}_{getattr(license_file, 'name', 'license')}"
-                saved_path = default_storage.save(filename, license_file)
+            saved_path = None
+
+        if license_file:
+            # certs/<doctor_user_id>/<uuid>_원본파일명
+            orig = os.path.basename(getattr(license_file, "name", "license"))
+            filename = f"certs/{user.id}/{uuid4().hex}_{orig}"
+            saved_path = default_storage.save(filename, license_file)
 
             Doctors.objects.create(
-                uid=user,  # ✅ uid는 ForeignKey(=User) 필드
-                name=user.name,
-                specialty=specialty or "",
-                hospital=hospital or "",
-                cert_path=saved_path,  # ✅ 모델 필드명과 일치
-                status="pending",
+                uid = user,  # OneToOne PK
+                name = user.name,
+                specialty = specialty or "",
+                hospital = hospital or "",
+                cert_path = saved_path,  # 문자열 경로 저장
+                status = "pending",
             )
 
         return user

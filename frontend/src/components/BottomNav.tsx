@@ -34,6 +34,7 @@ const BottomNav: React.FC = () => {
 
   return (
     <nav
+      id="app-tabbar"                // ← 추가
       style={{
         position: 'fixed',
         left: 0,
