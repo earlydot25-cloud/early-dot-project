@@ -31,17 +31,23 @@ function authHeader(): Record<string, string> {
 
 async function request<T>(path: string, options: RequestInit = {}, retry = true): Promise<T> {
   const url = `${API_BASE}${path}`;
+
+  // 💡 body를 RequestInit에서 분리하여 fetch 호출 시 가장 뒤에 위치하도록 합니다.
+  // 이 수정은 http.post, http.put, http.patch의 body를 fetch에 정확히 전달하도록 보장합니다.
+  const { headers, body, ...restOptions } = options;
+
   const res = await fetch(url, {
     headers: {
       'Content-Type': 'application/json', // 기본 JSON 헤더
-      ...(authHeader() || {}),            // ✅ undefined일 때 안전하게 빈 객체 대체
-      ...(options.headers || {}),         // 추가 옵션 병합
+      ...(authHeader() || {}),            // 인증 헤더 병합
+      ...(headers || {}),                 // 추가 헤더 병합
     },
-  ...options,
-});
+    body: body, // ⬅️ 분리된 body를 명시적으로 전달
+    ...restOptions, // method, cache 등 나머지 옵션
+  });
 
   // JSON 파싱 (비JSON 응답 대비)
-  const data = await res.json().catch(() => ({} as any)); // ✅ 타입 명시 (TS가 data.detail 접근할 때 경고 안 뜸)
+  const data = await res.json().catch(() => ({} as any));
 
 
   // 401 처리: 첫 시도라면 refresh 한 번 시도

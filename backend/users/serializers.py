@@ -6,12 +6,14 @@ from django.core import exceptions as django_exceptions
 from django.core.files.storage import default_storage
 from rest_framework import serializers
 from .models import Doctors
+from diagnosis.models import Results
+
 
 User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
     # Users ←(OneToOne/ForeignKey related_name='doctor')→ Doctors
-    # 응답에서 의사 프로필 pk만 정수로 노출
+    # 응답에서 의사 프로필 pk만 정수로 노출 (환자가 배정된 의사 프로필을 가리킴)
     doctor_uid = serializers.IntegerField(source='doctor.id', read_only=True, allow_null=True)
 
     class Meta:
@@ -21,6 +23,7 @@ class UserSerializer(serializers.ModelSerializer):
             'email',
             'name',
             'sex',
+            'birth_date',
             'age',
             'family_history',
             'is_doctor',
@@ -31,6 +34,8 @@ class UserSerializer(serializers.ModelSerializer):
 class RegisterSerializer(serializers.ModelSerializer):
     # 권고 가입 식별코드(선택)
     referral_uid = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    # 프론트엔드에서 YYYY-MM-DD 형식의 문자열로 전송된 값을 Date 객체로 파싱합니다.
+    birth_date = serializers.DateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"], required=True)
     # 의사 전용 입력(Users 모델 필드 아님 → create 전에 pop)
     specialty = serializers.CharField(write_only=True, required=False, allow_blank=True)
     hospital = serializers.CharField(write_only=True, required=False, allow_blank=True)
@@ -40,7 +45,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         model = User
         fields = (
             "email", "password", "name", "sex", "age", "family_history",
-            "is_doctor", "specialty", "hospital", "license_file", "referral_uid",
+            "is_doctor", "specialty", "hospital", "license_file", "referral_uid", "birth_date",
         )
         extra_kwargs = {
             "password": {"write_only": True},
@@ -80,6 +85,8 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     # --------- validation ---------
     def validate(self, attrs):
+        print("--- RegisterSerializer.validate START ---")
+
         # 0) 비밀번호 정책
         try:
             validate_password(attrs.get("password") or "")
@@ -91,7 +98,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         attrs["family_history"] = self._norm_fh(self.initial_data.get("family_history", attrs.get("family_history")))
 
         # 2) 공통 필수
-        required = ["email", "password", "name", "sex", "age"]
+        required = ["email", "password", "name", "sex", "age", "birth_date"]
         missing = [k for k in required if not attrs.get(k)]
         if missing:
             raise serializers.ValidationError({k: ["이 필드는 필수입니다."] for k in missing})
@@ -122,23 +129,43 @@ class RegisterSerializer(serializers.ModelSerializer):
                         raise ValueError()
                 except ValueError:
                     raise serializers.ValidationError({"referral_uid": ["식별 코드는 양의 정수여야 합니다."]})
-                doctor_obj = Doctors.objects.filter(uid=n).first()
+
+                # Doctors 모델은 'uid' 필드를 User 객체와 연결합니다.
+                # 그러나 환자에게 할당할 때는 Doctor의 'id' (Doctors 모델의 PK) 또는
+                # Doctors 모델에 정의된 고유 식별코드(uid)를 사용해야 합니다.
+                # RegisterSerializer 내에서 'referral_uid'는 Doctors 모델의 PK(id)가 아닌,
+                # Doctors 모델의 uid 필드(User FK)와 연결된 User의 ID를 나타내는 것으로 보입니다.
+                # 여기서는 Doctors 모델에 'uid' 필드가 User 객체(FK)로 되어 있으므로,
+                # Doctors.objects.filter(id=n) 또는 Doctors.objects.filter(uid__id=n) 중 하나를 사용해야 합니다.
+                # Doctors 모델의 uid 필드가 User FK이므로, User ID를 기준으로 찾기 위해 `uid__id`를 사용합니다.
+                doctor_obj = Doctors.objects.filter(uid__id=n).first()
                 if not doctor_obj:
-                    raise serializers.ValidationError({"referral_uid": ["유효하지 않은 의사 식별번호(uid)입니다."]})
+                    # 이전 로직: Doctors.objects.filter(uid=n).first()
+                    # 새 로직: Doctors.objects.filter(uid__id=n).first()
+                    raise serializers.ValidationError(
+                        {"referral_uid": ["유효하지 않은 의사 식별번호(User ID)입니다. 해당 ID를 가진 의사 프로필이 존재하지 않습니다."]})
                 attrs["doctor"] = doctor_obj
             else:
                 attrs.pop("doctor", None)
 
         # ✅ 모든 분기 끝난 후 "항상" attrs 리턴
         assert isinstance(attrs, dict), "internal: attrs must be dict"
+
+        print("--- RegisterSerializer.validate END (OK) ---")
         return attrs
 
     def create(self, validated_data):
+        print("--- RegisterSerializer.create START ---")
+        print("Final Validated Data in create:", validated_data)
+
         # 1️⃣ 공통 필드 분리
         is_doctor = validated_data.pop("is_doctor", False)
         doctor_obj = validated_data.pop("doctor", None)
         validated_data.pop("referral_uid", None)
         password = validated_data.pop("password")
+
+        birth_date = validated_data.pop("birth_date")
+        age = validated_data.pop("age")  # 정수여야 함
 
         # 2️⃣ Users 모델에 없는 의사 전용 필드 제거
         specialty = validated_data.pop("specialty", None)
@@ -146,7 +173,12 @@ class RegisterSerializer(serializers.ModelSerializer):
         license_file = validated_data.pop("license_file", None)
 
         # 3️⃣ Users 객체 생성
-        user = User.objects.create(**validated_data, is_doctor=is_doctor)
+        user = User.objects.create(
+            **validated_data,
+            is_doctor=is_doctor,
+            birth_date=birth_date,
+            age=age # 👈 명시적으로 전달
+        )
         user.set_password(password)
         user.save()
 
@@ -161,8 +193,9 @@ class RegisterSerializer(serializers.ModelSerializer):
             #filename = f"certs/{user.id}/{uuid4().hex}_{orig}"
             #saved_path = default_storage.save(filename, license_file)
 
+            # Doctors.uid 필드는 User 객체에 대한 FK이므로 user 객체를 직접 할당
             Doctors.objects.create(
-                uid=user,
+                uid=user,  # ✅ uid는 User에 대한 ForeignKey 필드
                 name=user.name,
                 specialty=specialty or "",
                 hospital=hospital or "",
@@ -170,5 +203,182 @@ class RegisterSerializer(serializers.ModelSerializer):
                 status="pending",
             )
 
+        print("--- RegisterSerializer.create END (User Created) ---")
         return user
 
+
+# -----------------------------------
+# 1. DoctorProfileSerializer (Doctors 모델)
+# -----------------------------------
+class DoctorProfileSerializer(serializers.ModelSerializer):
+    """Users 모델에 중첩될 Doctors 정보 (의사 본인 프로필 조회용)"""
+
+    # 의사 본인의 User ID를 노출
+    user_id = serializers.IntegerField(source='uid.id', read_only=True)
+
+    class Meta:
+        model = Doctors
+        fields = ['user_id', 'specialty', 'hospital', 'status']
+
+
+# 2. PatientListItemSerializer (의사가 보는 환자 목록)
+# -----------------------------------
+class PatientListItemSerializer(serializers.ModelSerializer):
+    """의사에게 할당된 환자 목록의 간소화된 정보"""
+
+    # 마지막 진료 결과의 날짜를 가져오는 필드 추가 (Results 모델 사용 가정)
+    last_diagnosis_date = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'email', 'name', 'birth_date', 'age', 'sex', 'last_diagnosis_date']
+
+    def get_last_diagnosis_date(self, obj: User):
+        # Results 모델에 user(FK) 필드가 있고, created_at/date 필드가 있다고 가정
+        last_result = Results.objects.filter(user=obj).order_by('-created_at').first()
+        if last_result:
+            return last_result.created_at.date()  # 날짜만 반환
+        return None
+
+
+# -----------------------------------
+# 3. UserProfileSerializer (GET 요청 응답 구조)
+# -----------------------------------
+class UserProfileSerializer(serializers.ModelSerializer):
+    """마이페이지(ProfilePage)에 필요한 모든 사용자 정보 (읽기 전용)"""
+
+    # 의사일 경우: 본인의 Doctors 프로필 정보
+    doctor_profile = serializers.SerializerMethodField(read_only=True)
+    # 환자일 경우: 배정된 담당 의사 요약 정보
+    assigned_doctor = serializers.SerializerMethodField(read_only=True)
+    # 의사일 경우: 담당 환자 목록 (PatientListItemSerializer 사용)
+    patients = serializers.SerializerMethodField(read_only=True)
+
+    # 예시로 'phone'과 'address' 필드를 추가한다고 가정
+    # Users 모델에 해당 필드가 없으면 Meta.fields에서 제거하거나 User 모델에 추가해야 함.
+    # fields = ['id', 'email', 'name', 'sex', 'age', 'birth_date', 'family_history', 'is_doctor', 'phone', 'address', 'date_joined']
+
+    class Meta:
+        model = User
+        # 'birth_date'는 User 모델에 있다고 가정. 없으면 제거 필요.
+        fields = ['id', 'email', 'name', 'sex', 'age', 'birth_date', 'family_history', 'is_doctor',
+                  'doctor_profile', 'assigned_doctor', 'patients'
+                  ]
+        read_only_fields = ['email', 'is_doctor', 'date_joined']
+
+    def get_doctor_profile(self, obj: User):
+        """사용자가 의사일 경우, 자신의 Doctors 프로필 정보를 반환"""
+        if obj.is_doctor:
+            # Users ←(ForeignKey related_name='doctors_set')→ Doctors (default reverse lookup)
+            # Doctors.uid (FK to User)의 기본 역참조 이름은 'doctors_set'입니다.
+            profile = getattr(obj, 'doctor_profile', None)
+            if profile:
+                return DoctorProfileSerializer(profile).data
+        return None
+
+    def get_assigned_doctor(self, obj: User):
+        """사용자가 환자일 경우, 연결된 담당 의사 정보(Doctors 객체)를 요약하여 반환"""
+        # obj.doctor는 환자에게 할당된 Doctors 모델 인스턴스입니다.
+        if not obj.is_doctor and obj.doctor:
+            try:
+                # obj.doctor.uid는 Doctors 인스턴스가 연결된 User 객체입니다.
+                doctor_user = obj.doctor.uid
+                return {
+                    'id': doctor_user.id,
+                    'name': doctor_user.name,
+                    'specialty': obj.doctor.specialty,
+                    'hospital': obj.doctor.hospital,
+                }
+            except Exception as e:
+                print(f"Error in get_assigned_doctor: {e}")
+                return None
+        return None
+
+    def get_patients(self, obj: User):
+        """사용자가 의사일 경우, 담당하는 환자 목록을 가져와 PatientListItemSerializer로 직렬화"""
+        if obj.is_doctor:
+            try:
+                # 1. 의사 본인의 Doctors 프로필 객체를 가져옴
+                # 💡 수정: obj.doctors_set.first() 대신 obj.doctor_profile 사용
+                doctor_profile = getattr(obj, 'doctor_profile', None)
+
+                if doctor_profile:
+                    # 2. 해당 Doctors 프로필 객체를 'doctor' 필드(FK)로 가진 User들을 쿼리
+                    patient_users = User.objects.filter(doctor=doctor_profile).filter(is_doctor=False)
+                    return PatientListItemSerializer(patient_users, many=True).data
+            except Exception as e:
+                # 예외 시 디버깅을 위해 print(e)를 남겨두는 것이 좋습니다.
+                print(f"Error in get_patients: {e}")
+                return []
+        return []
+
+
+# -----------------------------------
+# 4. UserProfileUpdateSerializer (PATCH 요청 처리)
+# -----------------------------------
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    """프로필 정보 수정을 위한 시리얼라이저 (PATCH)"""
+
+    # User 모델 필드
+    name = serializers.CharField(required=False, allow_blank=True)
+    sex = serializers.CharField(required=False, allow_blank=True)
+    age = serializers.IntegerField(required=False)
+    family_history = serializers.CharField(required=False, allow_blank=True)
+    # phone = serializers.CharField(required=False, allow_blank=True) # User 모델에 있다면 추가
+
+    # 의사 전용 필드 (Doctors 모델 업데이트용)
+    specialty = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    hospital = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
+    # 환자 전용 필드 (담당 의사 연결/해제용)
+    assigned_doctor_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
+    class Meta:
+        model = User
+        fields = ['name', 'sex', 'age', 'family_history', 'specialty', 'hospital', 'assigned_doctor_name']
+
+    def update(self, instance: User, validated_data):
+        # 1. User 모델의 일반 필드 업데이트
+        instance.name = validated_data.get('name', instance.name)
+        instance.sex = validated_data.get('sex', instance.sex)
+        instance.age = validated_data.get('age', instance.age)
+        instance.family_history = validated_data.get('family_history', instance.family_history)
+
+        # 2. 의사 전용 필드 업데이트 (Doctors 모델)
+        if instance.is_doctor and hasattr(instance, 'doctors_set'):
+            doctor_profile = instance.doctors_set.first()  # 의사 본인의 Doctors 프로필
+            if doctor_profile:
+                doctor_profile.specialty = validated_data.get('specialty', doctor_profile.specialty)
+                doctor_profile.hospital = validated_data.get('hospital', doctor_profile.hospital)
+                doctor_profile.save()
+
+        # 3. 환자 전용 필드 업데이트 (담당의사 연결)
+        elif not instance.is_doctor:
+            assigned_doctor_name = validated_data.pop('assigned_doctor_name', None)
+
+            if assigned_doctor_name is not None:
+                assigned_doctor_name = assigned_doctor_name.strip()
+
+                # 🚨 입력된 이름이 있다면 연결 로직 실행
+                if assigned_doctor_name:
+                    # 이름으로 User 찾기 (is_doctor=True이고 이름 일치)
+                    doctor_user = User.objects.filter(
+                        is_doctor=True,
+                        name=assigned_doctor_name
+                    ).first()
+
+                    # 해당 User의 Doctors 프로필 객체 확인
+                    if doctor_user and hasattr(doctor_user, 'doctors_set') and doctor_user.doctors_set.exists():
+                        instance.doctor = doctor_user.doctors_set.first()
+                    else:
+                        raise serializers.ValidationError({
+                            "assigned_doctor_name": [f"이름이 '{assigned_doctor_name}'인 등록된 의사를 찾을 수 없습니다."]
+                        })
+                else:
+                    # 이름이 빈 문자열이면 담당 의사 연결 해제
+                    instance.doctor = None
+
+        # 4. 모든 변경 사항 저장
+        instance.save()
+
+        return instance

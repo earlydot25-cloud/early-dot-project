@@ -1,9 +1,26 @@
 # # backend/diagnosis/models.py
 #
-
+import os
 from django.db import models
 from django.conf import settings
+from django.contrib.auth import get_user_model
 
+User = get_user_model()
+
+def build_upload_path(instance, original_filename):
+
+    # 폴더명: 사용자 id
+    storage_folder = instance.user.id
+    folder = instance.folder_name
+    # 파일명: 사용자가 폼에서 준 값
+    base_name = instance.file_name or os.path.splitext(os.path.basename(original_filename))[0]
+    # 확장자: 원본 확장자 유지
+    ext = os.path.splitext(original_filename)[1]  # ".jpg" 같은 거
+    # 최종 파일 이름
+    final_filename = f"{base_name}{ext}"
+
+    # 최종 경로
+    return f"uploads/{storage_folder}/{folder}/{final_filename}"
 
 class DiseaseInfo(models.Model):
     name_ko = models.CharField(max_length=100)
@@ -22,16 +39,13 @@ class DiseaseInfo(models.Model):
 
 
 class Photos(models.Model):
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='photos',
-    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
 
-    # 🌟 수정된 부분 🌟
+    # :star2: 수정된 부분 :star2:
     # 3개의 CharField 대신 ImageField를 사용합니다.
     # 'uploads/'는 settings.py의 MEDIA_ROOT 하위 폴더를 의미합니다.
-    upload_storage_path = models.ImageField(upload_to='uploads/', blank=True, null=True)
+    upload_storage_path = models.ImageField(upload_to=build_upload_path, blank=True, null=True)
+
     folder_name = models.CharField(max_length=100)
     file_name = models.CharField(max_length=100)
 

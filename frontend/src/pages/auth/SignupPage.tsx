@@ -73,6 +73,7 @@ function korError(errors: Record<string, string> = {}) {
     : field === "hospital" ? "소속 병원"
     : field === "license_file" ? "면허 증빙 파일"
     : field === "referral_uid" ? "식별 코드"
+    : field === "birth_date" ? "생년월일" // birth_date 필드명 추가
     : field;
 
   const lines: string[] = [];
@@ -95,7 +96,7 @@ interface FormState {
   password: string;
   password2: string;
   name: string;
-  birth: string;
+  birth_date: string; //변경
   gender: "male" | "female" | "";
   familyHistory: "yes" | "no" | "unknown" | "";
   specialty: string;
@@ -213,7 +214,7 @@ export default function SignupPage() {
     password: "",
     password2: "",
     name: "",
-    birth: "",
+    birth_date: "", // 초기화 수정
     gender: "",
     familyHistory: "no", // 기본 '아니요'로 보이게
     specialty: "",
@@ -229,12 +230,12 @@ export default function SignupPage() {
 
   /* 3) 파생값/검증 */
   const rules = usePasswordRules(f.password, f.email);
-  const age = useMemo(() => calcAge(f.birth), [f.birth]);
+  const age = useMemo(() => calcAge(f.birth_date), [f.birth_date]);
   const passwordMatch = f.password.length > 0 && f.password === f.password2;
 
   const requireReferral = !f.isDoctor && f.byDoctorReferral;
   const requireDoctorFields = f.isDoctor;
-  const baseOk = !!(f.email && rules.allOk && passwordMatch && f.name && f.birth && f.gender);
+  const baseOk = !!(f.email && rules.allOk && passwordMatch && f.name && f.birth_date && f.gender);
   const doctorOk = !requireDoctorFields || (f.specialty && f.hospital && f.licenseFile);
   const referralOk = !requireReferral || !!f.referralCode;
   const patientFamilyOk = f.isDoctor ? true : !!f.familyHistory;
@@ -268,7 +269,7 @@ export default function SignupPage() {
 
     try {
       // (1) 파생값 계산
-      const ageVal = calcAge(f.birth);
+      const ageVal = calcAge(f.birth_date);
       if (ageVal == null) throw new Error("생년월일에서 나이를 계산할 수 없습니다.");
 
       const sexForAPI: "M" | "F" | undefined =
@@ -295,6 +296,7 @@ export default function SignupPage() {
           password: f.password,
           name: f.name,
           sex: sexForAPI,
+          birth_date: f.birth_date,
           age: ageVal,
           is_doctor: true,
           family_history: familyForAPI, // ← 타입에 없으면 authServices.ts 타입에 추가 필요
@@ -318,6 +320,7 @@ export default function SignupPage() {
           name: f.name,
           sex: sexForAPI,
           age: ageVal,
+          birth_date: f.birth_date,
           family_history: familyForAPI,
           is_doctor: false,
           referral_uid: f.byDoctorReferral ? Number(f.referralCode) : undefined,
@@ -435,7 +438,7 @@ export default function SignupPage() {
 
         {/* 생년월일 */}
         <Field
-          required={false}
+          required={true}
           label={
             <div className="flex items-baseline justify-between gap-3">
               <span className="inline-flex items-center gap-1">
@@ -450,8 +453,8 @@ export default function SignupPage() {
             <Input
               type="date"
               placeholder="YYYY-MM-DD"
-              value={f.birth}
-              onChange={(e) => update("birth")(e.target.value)}
+              value={f.birth_date}
+              onChange={(e) => update("birth_date")(e.target.value)}
               max={new Date().toISOString().slice(0, 10)}
               className="pr-10"
             />
