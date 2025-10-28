@@ -13,8 +13,20 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import environ
 import os
+from datetime import timedelta
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# 로그인 이후 기본 토큰 유효시간 5분에서 1시간으로 반영
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),   # ← 액세스 1시간
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),   # ← 기본 유지(원하면 조절)
+    # 아래는 기본값과 동일하지만, 명시해두면 팀원 이해에 좋음
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
 
 # 사용자가 올린 파일(사진, 인증서 등)이 저장되는 디렉토리의 절대 경로
 #MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -173,8 +185,8 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': [
-         'rest_framework.permissions.IsAuthenticated',# 🚨 주석 처리 또는 제거
-        #'rest_framework.permissions.AllowAny',  # 💡 임시로 AllowAny로 변경
+        # 'rest_framework.permissions.IsAuthenticated', # 🚨 주석 처리 또는 제거
+        'rest_framework.permissions.AllowAny',  # 💡 임시로 AllowAny로 변경
     ]
 }
 
@@ -200,9 +212,6 @@ CORS_ALLOWED_ORIGINS = [
     # sondongbin-ui-MacBookPro 으로 되어 있는 부분이 mac 사용자의 macbook 이름이 들어가면 됨,
     #"http://sondongbin-ui-MacBookPro.local:3000",
     #"http://sondongbin-ui-MacBookPro.local:5173",
-    "http://tasha@Dayeongui-MacBookAir.local:3000",
-    "http://tasha@Dayeongui-MacBookAir.local:5173",
-
 ]
 
 # CSRF 신뢰 오리진
@@ -213,8 +222,6 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
     # 네트워크(IP) 바뀌어도 접속되게 하려면 .local 추가(주석 해제)
     # sondongbin-ui-MacBookPro 으로 되어 있는 부분이 mac 사용자의 macbook 이름이 들어가면 됨,
-    #http://sondongbin-ui-MacBookPro.local:3000",
-    #http://sondongbin-ui-MacBookPro.local:5173",
-    "http://tasha@Dayeongui-MacBookAir.local:3000",
-    "http://tasha@Dayeongui-MacBookAir.local:5173",
+    #"http://sondongbin-ui-MacBookPro.local:3000",
+    #"http://sondongbin-ui-MacBookPro.local:5173",
 ]

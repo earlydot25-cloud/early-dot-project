@@ -1,6 +1,7 @@
 # backend/users/models.py
 
 from django.db import models
+from uuid import uuid4
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
@@ -41,6 +42,10 @@ class CustomUserManager(BaseUserManager):
             raise ValueError('Superuser must have is_superuser=True.')
         return self.create_user(email, password, **extra_fields)
 
+# 모델의 cert_path를 FileField로 바꾸고 upload_to 함수에서 경로
+def doctor_cert_upload_to(instance, filename):
+    # instance.uid는 의사 Users 객체(Doctors.uid OneToOne)
+    return f"certs/{instance.uid_id}/{uuid4().hex}_{filename}"
 
 class Doctors(models.Model):
     # 'uid'는 이 테이블의 Primary Key 역할
@@ -53,7 +58,7 @@ class Doctors(models.Model):
     name = models.CharField(max_length=100)
     specialty = models.CharField(max_length=100, blank=True, null=True)
     hospital = models.CharField(max_length=100, blank=True, null=True)
-    cert_path = models.ImageField(upload_to='certs/', blank=True, null=True)
+    cert_path = models.FileField(upload_to=doctor_cert_upload_to, blank=True, null=True)
     status = models.CharField(max_length=20)
 
     class Meta:

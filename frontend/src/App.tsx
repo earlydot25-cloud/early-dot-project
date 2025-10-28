@@ -6,16 +6,23 @@ import BeforeLoginPage from './pages/BeforeLoginPage';
 import MainPage from './pages/dashboard/MainPage';
 import DoctorMainPage from './pages/dashboard/DoctorMainPage';
 import LoginPage from './pages/auth/LoginPage';
-import SignupPage from "./pages/auth/SignupPage";
+import SignupPage from './pages/auth/SignupPage';
 import BodySelectionPage from './pages/diagnosis/CapturePage';
 import HistoryPage from './pages/dashboard/HistoryPage';
 import ProfilePage from './pages/dashboard/ProfilePage';
 import ResultDetailPage from './pages/diagnosis/ResultDetailPage';
 
-// 간단한 로그인 판별
-const isAuthed = () => !!localStorage.getItem('accessToken');
+// 로그인 여부 판별 함수 개선
+const isAuthed = (): boolean => {
+  const access = localStorage.getItem('accessToken');
+  const user = localStorage.getItem('user');
 
-// 보호 라우트: 미로그인 시 / 로 리다이렉트
+  // accessToken과 user 둘 다 존재해야 로그인 상태로 인정
+  if (!access || !user || user === 'null' || user === '{}') return false;
+  return true;
+};
+
+// 보호 라우트: 로그인 안 되어 있으면 "/"로 리다이렉트
 const RequireAuth: React.FC<{ children: React.ReactElement }> = ({ children }) => {
   return isAuthed() ? children : <Navigate to="/" replace />;
 }
@@ -89,45 +96,46 @@ const HomeRedirector: React.FC = () => {
 // -----------------------------------
 // App 컴포넌트 (라우팅)
 const App: React.FC = () => {
+  useEffect(() => {
+    const access = localStorage.getItem('accessToken');
+    const user = localStorage.getItem('user');
 
-    useEffect(() => {
-        console.log("-----------------------------------------------------------------");
+    // user 정보가 없거나 accessToken이 비정상적이면 정리
+    if (!access || !user || user === 'null') {
+      localStorage.clear();
+    }
+console.log("-----------------------------------------------------------------");
         console.log("⚠️ 현재 모든 페이지는 인증 없이 접근 가능합니다.");
         // 🚨 수정: 콘솔 메시지를 현재 사용 중인 'isDoctor' 키와 값('1'/'0')에 맞춰 수정
         console.log("✅ '/home' 경로 테스트 안내:");
         console.log("    - 의사 모드: localStorage.setItem('isDoctor', '1'); (콘솔 입력 후 새로고침)");
         console.log("    - 환자 모드: localStorage.setItem('isDoctor', '0'); 또는 localStorage.removeItem('isDoctor'); (콘솔 입력 후 새로고침)");
         console.log("-----------------------------------------------------------------");
-    }, []);
+  }, []);
 
-    return (
-        <BrowserRouter>
-            <Layout>
-                <Routes>
-                    {/* 1. 로그인 이전 랜딩 페이지 (루트 경로) */}
-                    <Route path="/" element={<BeforeLoginPage />} />
+  return (
+    <BrowserRouter>
+      <Layout>
+        <Routes>
+          {/* 0) 로그인 전 랜딩 */}
+          <Route path="/" element={<BeforeLoginPage />} />
 
-                    {/* 1) 인증 관련 */}
-                    <Route path="/login" element={<LoginPage />} />
-                    <Route path="/signup" element={<SignupPage />} />
+          {/* 1) 인증 관련 */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
 
-                    {/* 🟢 핵심: '/home' 경로에서 역할에 따라 페이지 분기 (HomeRedirector 사용) 🟢 */}
-                    {/* HomeRedirector는 컴포넌트 렌더링 대신 경로 리다이렉트를 수행합니다. */}
-                    <Route path="/home" element={<RequireAuth><HomeRedirector /></RequireAuth>} />
-
-                    {/* 2) 대시보드 메인 페이지 (실제 컴포넌트 렌더링은 여기서) */}
-                    <Route path="/dashboard/main" element={<RequireAuth><MainPage /></RequireAuth>} />
-                    <Route path="/dashboard/doctor/main" element={<RequireAuth><DoctorMainPage /></RequireAuth>} />
-
-                    {/* 3) 로그인 후만 접근 가능 (다른 라우트들) */}
-                    <Route path="/diagnosis" element={<RequireAuth><BodySelectionPage /></RequireAuth>} />
-                    <Route path="/dashboard/history" element={<RequireAuth><HistoryPage /></RequireAuth>} />
-                    <Route path="/dashboard/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
-                    <Route path="/diagnosis/detail/:id" element={<RequireAuth><ResultDetailPage /></RequireAuth>} />
-                </Routes>
-            </Layout>
-        </BrowserRouter>
-    );
+          {/* 2) 로그인 후만 접근 가능 */}
+          <Route path="/home" element={<RequireAuth><HomeRedirector /></RequireAuth>} />
+          <Route path="/dashboard/main" element={<RequireAuth><MainPage /></RequireAuth>} />
+          <Route path="/dashboard/doctor/main" element={<RequireAuth><DoctorMainPage /></RequireAuth>} />
+          <Route path="/diagnosis" element={<RequireAuth><BodySelectionPage /></RequireAuth>} />
+          <Route path="/dashboard/history" element={<RequireAuth><HistoryPage /></RequireAuth>} />
+          <Route path="/dashboard/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
+          <Route path="/diagnosis/detail/:id" element={<RequireAuth><ResultDetailPage /></RequireAuth>} />
+        </Routes>
+      </Layout>
+    </BrowserRouter>
+  );
 };
 
 export default App;
