@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import PhotoPreview from '../../components/PhotoPreview';
 import { useCaptureStore } from '../../hooks/useCaptureStore';
 import { uploadCase } from '../../services/uploadService';
+import axios from 'axios';
 
 // =======================
 // 타입 정의
@@ -39,8 +40,27 @@ export default function SavePhotoPage() {
   const fileBlobRef = useRef<Blob | null>(null);
 
   // 가입 시 기본값 (실제 서비스에서는 사용자 프로필에서 불러옴)
-  const defaultGender: '남' | '여' | '기타' = '남';
-  const defaultBirth = '1995-01-01';
+//   const defaultGender: '남' | '여' | '기타' = '남';
+//   const defaultBirth = '1995-01-01';
+  const [userInfo, setUserInfo] = useState<{ gender: '남' | '여' | '기타'; birth: string } | null>(null);
+
+useEffect(() => {
+  axios
+    .get<{ sex: string; birth: string }>('/api/auth/profile/', { withCredentials: true })
+    .then((res) => {
+      const data = res.data;
+      setUserInfo({ gender: data.sex === 'M' ? '남' : data.sex === 'F' ? '여' : '기타', birth: data.birth });
+      setForm((prev) => ({
+        ...prev,
+        gender: data.sex === 'M' ? '남' : data.sex === 'F' ? '여' : '기타',
+        birth: data.birth,
+      }));
+    })
+    .catch((err) => {
+      console.error('유저 정보 불러오기 실패:', err);
+    });
+}, []);
+
 
   // 폼 상태
   const [form, setForm] = useState<SaveFormValues>({
@@ -53,8 +73,8 @@ export default function SavePhotoPage() {
     infection: '없음',
     bleeding: '없음',
     onset: '1달 이내',
-    gender: defaultGender,
-    birth: defaultBirth,
+    gender: '남', // 임시(API 로 덮어씌워짐)
+    birth: '', // 임시(위와 동일)
   });
 
   // =======================
@@ -89,20 +109,21 @@ export default function SavePhotoPage() {
   // 핸들러
   // =======================
   const onResetFields = () => {
-    setForm((prev) => ({
-      ...prev,
-      folderName: makeDefaultFolderName(),
-      fileName: makeDefaultFileName(),
-      itch: '없음',
-      pain: '없음',
-      colorChange: '없음',
-      infection: '없음',
-      bleeding: '없음',
-      onset: '1달 이내',
-      gender: defaultGender,
-      birth: defaultBirth,
-    }));
-  };
+  setForm((prev) => ({
+    ...prev,
+    folderName: makeDefaultFolderName(),
+    fileName: makeDefaultFileName(),
+    itch: '없음',
+    pain: '없음',
+    colorChange: '없음',
+    infection: '없음',
+    bleeding: '없음',
+    onset: '1달 이내',
+    gender: userInfo?.gender || '기타',
+    birth: userInfo?.birth || '',
+  }));
+};
+
 
   const onChange = (key: keyof SaveFormValues, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));

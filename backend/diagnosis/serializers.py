@@ -41,7 +41,7 @@ class PhotoUploadSerializer(serializers.ModelSerializer):
         """
         1) 업로드된 파일 이름에 user.id를 반영하여 폴더 구조를 정리합니다.
            → uploads/<user.id>/<파일명>
-        2) DB 저장 후 file_name / folder_name을 자동으로 채웁니다.
+        2) DB 저장 후 file_name / folder_name을 자동으로 채웁다.
         """
         user = validated_data.get('user')
         file_field = validated_data.get('upload_storage_path')
@@ -56,7 +56,7 @@ class PhotoUploadSerializer(serializers.ModelSerializer):
                   f'file_field : {file_field.name}')
 
         # 2️⃣ DB에 우선 저장
-        photo = super().create(validated_data)
+        #photo = super().create(validated_data)
         # print(validated_data)
         # print(validated_data["upload_storage_path"])
         # # 3️⃣ 저장 완료 후 file_name / folder_name 자동 채움

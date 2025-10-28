@@ -8,31 +8,19 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 def build_upload_path(instance, original_filename):
-    """
-    우리가 원하는 실제 파일 저장 경로을 만든다.
-    요구사항:
-      uploads/<folder_name>/<file_name>.jpg
 
-    주의:
-    - instance.folder_name / instance.file_name 는 serializer에서 미리 세팅해 줄 것이다.
-    - original_filename 은 업로드된 실제 파일 이름이지만,
-      우리는 그걸 무시하고 instance.file_name을 쓸 거다.
-    """
-
-    # 폴더명: 사용자가 폼에서 준 값
-    folder = instance.folder_name or "fuck"
-
+    # 폴더명: 사용자 id
+    storage_folder = instance.user.id
+    folder = instance.folder_name
     # 파일명: 사용자가 폼에서 준 값
     base_name = instance.file_name or os.path.splitext(os.path.basename(original_filename))[0]
-
     # 확장자: 원본 확장자 유지
     ext = os.path.splitext(original_filename)[1]  # ".jpg" 같은 거
-
     # 최종 파일 이름
     final_filename = f"{base_name}{ext}"
 
     # 최종 경로
-    return f"uploads/{folder}/{final_filename}"
+    return f"uploads/{storage_folder}/{folder}/{final_filename}"
 
 class DiseaseInfo(models.Model):
     name_ko = models.CharField(max_length=100)
