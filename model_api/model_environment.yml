@@ -1,0 +1,14 @@
+# model_api/model_environment.yml
+
+name: model_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10  # 사용하려는 파이썬 버전을 지정하세요
+  - pip
+  # FastAPI 실행을 위한 패키지
+  - uvicorn
+  - pip:
+    - fastapi
+    - pydantic

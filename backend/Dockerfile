@@ -6,8 +6,9 @@ WORKDIR /app
 
 # conda 환경 파일 복사 (이름 변경됨)
 COPY unified_environment.yml .
+COPY requirements_base.txt .
 
-# mamba가 있으면 속도가 빠르므로 설치 시도
+# mamba 설치 및 환경 생성
 RUN conda install -n base -c conda-forge mamba -y || true \
     && (mamba env create -f unified_environment.yml || conda env create -f unified_environment.yml) \
     && conda clean -afy
