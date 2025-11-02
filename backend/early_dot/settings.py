@@ -44,11 +44,9 @@ env = environ.Env(
     DEBUG=(bool, False)
 )
 
-# .env 파일 읽기
-# (프로젝트 루트의 backend/.env 파일 경로를 지정)
-environ.Env.read_env(
-    env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
-)
+# 💡 수정 코드: BASE_DIR(backend의 상위, 즉 프로젝트 루트)를 기준으로 .env 파일을 찾도록 수정
+environ.Env.read_env(env_file=BASE_DIR / '.env') # BASE_DIR은 /app/early_dot 에 해당
+
 # 추후에 서버 배포용으로 분리
 DJANGO_ENV = env("DJANGO_ENV", default="local")
 
@@ -126,9 +124,6 @@ WSGI_APPLICATION = 'early_dot.wsgi.application'
 #     }
 # }
 
-DATABASES = {
-    'default': env.db(),
-}
 
 # 또는 환경 변수를 직접 사용하는 경우 (env 라이브러리를 사용한다면 위 코드가 권장됨)
 DATABASES = {

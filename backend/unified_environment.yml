@@ -15,8 +15,9 @@ dependencies:
 
   # - sympy=1.13.1  # 👈 주석 처리: 종속성 해결 실패의 주범일 수 있으므로 제거
   - fsspec
+  - mysqlclient
 
   - pip
-  - pip:
-    # 이 파일은 backend/requirements_base.txt 파일입니다.
-    - -r requirements_base.txt
+#  - pip:
+#    # 이 파일은 backend/requirements_base.txt 파일입니다.
+#    - -r requirements_base.txt
