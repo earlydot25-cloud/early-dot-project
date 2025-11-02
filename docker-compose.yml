@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  db:
+    image: mysql:8
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+
+  django:
+    build: ./backend
+    container_name: project_django
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - fastapi   # fastapi는 지금 없어도 docker가 경고만 띄우고 넘어감
+
+  # 아직 미사용이지만 나중을 위해 미리 구조만 둠
+  fastapi:
+    build: ./model_api
+    container_name: project_model_api
+    env_file:
+      - .env
+    volumes:
+      - ./model_api:/app
+    ports:
+      - "8001:8001"
+    # 만약 model_api 폴더가 없으면 잠시 주석 처리해도 됨
+    # command: ["sleep", "infinity"]
+
+volumes:
+  db_data:
