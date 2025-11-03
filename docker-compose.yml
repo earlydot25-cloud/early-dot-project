@@ -40,5 +40,15 @@ services:
     # 만약 model_api 폴더가 없으면 잠시 주석 처리해도 됨
     # command: ["sleep", "infinity"]
 
+  frontend:
+    build: ./frontend
+    container_name: project_frontend
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - django
+
 volumes:
   db_data:
