@@ -1,4 +1,4 @@
-#version: "3.9"
+#version: '3.9'
 
 services:
   db:
@@ -13,6 +13,8 @@ services:
       - "3307:3306"
     volumes:
       - db_data:/var/lib/mysql
+    networks:
+      - early_dot_network # 💡 네트워크 명시적 연결
 
   django:
     build: ./backend
@@ -25,7 +27,9 @@ services:
       - "8000:8000"
     depends_on:
       - db
-      - fastapi   # fastapi는 지금 없어도 docker가 경고만 띄우고 넘어감
+      - fastapi
+    networks:
+      - early_dot_network # 💡 네트워크 명시적 연결
 
   # 아직 미사용이지만 나중을 위해 미리 구조만 둠
   fastapi:
@@ -37,7 +41,8 @@ services:
       - ./model_api:/app
     ports:
       - "8001:8001"
-    # 만약 model_api 폴더가 없으면 잠시 주석 처리해도 됨
+    networks:
+      - early_dot_network # 💡 네트워크 명시적 연결
     # command: ["sleep", "infinity"]
 
   frontend:
@@ -49,6 +54,13 @@ services:
       - "3000:3000"
     depends_on:
       - django
+    networks:
+      - early_dot_network # 💡 네트워크 명시적 연결
 
 volumes:
   db_data:
+
+# 💡 명시적인 네트워크 정의 섹션을 추가합니다.
+networks:
+  early_dot_network:
+    driver: bridge # 기본 bridge 네트워크 사용을 명시
