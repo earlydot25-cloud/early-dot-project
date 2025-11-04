@@ -30,6 +30,7 @@ urlpatterns = [
     path("api/auth/profile/", UserProfileView.as_view(),  name="profile"),
     path("api/auth/login/",   TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path('api/diagnosis/', include('diagnosis.urls')),  # diagnosis 앱 (진단 업로드)
     path('api/dashboard/', include('dashboard.urls')),  # dashboard 앱 (기록 조회)
     path('api/admin_tools/', include('admin_tools.urls')),  # admin_tools 앱 (관리자)
  ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

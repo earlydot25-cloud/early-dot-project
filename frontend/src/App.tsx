@@ -7,8 +7,13 @@ import MainPage from './pages/dashboard/MainPage';
 import DoctorMainPage from './pages/dashboard/DoctorMainPage';
 import LoginPage from './pages/auth/LoginPage';
 import SignupPage from './pages/auth/SignupPage';
-import BodySelectionPage from './pages/diagnosis/CapturePage';
+import BodySelectionPage from './pages/diagnosis/BodySelectionPage';
+import CapturePage from './pages/diagnosis/CapturePage';
+import SavePhotoPage from './pages/diagnosis/SavePhotoPage';
 import HistoryPage from './pages/dashboard/HistoryPage';
+import DoctorHistoryPage from './pages/dashboard/DoctorHistoryPage';
+import HistoryDetailPage from './pages/dashboard/HistoryDetailPage';
+import HistoryResultPage from './pages/dashboard/HistoryResultPage';
 import ProfilePage from './pages/dashboard/ProfilePage';
 import ResultDetailPage from './pages/diagnosis/ResultDetailPage';
 
@@ -128,8 +133,23 @@ console.log("-----------------------------------------------------------------")
           <Route path="/home" element={<RequireAuth><HomeRedirector /></RequireAuth>} />
           <Route path="/dashboard/main" element={<RequireAuth><MainPage /></RequireAuth>} />
           <Route path="/dashboard/doctor/main" element={<RequireAuth><DoctorMainPage /></RequireAuth>} />
+          
+          {/* 진단 플로우 */}
           <Route path="/diagnosis" element={<RequireAuth><BodySelectionPage /></RequireAuth>} />
+          <Route path="/diagnosis/body-select" element={<RequireAuth><BodySelectionPage /></RequireAuth>} />
+          <Route path="/diagnosis/capture" element={<RequireAuth><CapturePage /></RequireAuth>} />
+          <Route path="/diagnosis/save" element={<RequireAuth><SavePhotoPage /></RequireAuth>} />
+          
+          {/* 진단 내역 - 일반인용 */}
           <Route path="/dashboard/history" element={<RequireAuth><HistoryPage /></RequireAuth>} />
+          <Route path="/dashboard/history/:folderName" element={<RequireAuth><HistoryDetailPage /></RequireAuth>} />
+          <Route path="/dashboard/history/:folderName/:resultId" element={<RequireAuth><HistoryResultPage /></RequireAuth>} />
+          
+          {/* 진단 내역 - 의사용 */}
+          <Route path="/dashboard/doctor/history" element={<RequireAuth><DoctorHistoryPage /></RequireAuth>} />
+          <Route path="/dashboard/doctor/history/:folderName" element={<RequireAuth><HistoryDetailPage /></RequireAuth>} />
+          <Route path="/dashboard/doctor/history/:folderName/:resultId" element={<RequireAuth><HistoryResultPage /></RequireAuth>} />
+          
           <Route path="/dashboard/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
           <Route path="/diagnosis/detail/:id" element={<RequireAuth><ResultDetailPage /></RequireAuth>} />
         </Routes>

@@ -8,14 +8,25 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 def build_upload_path(instance, original_filename):
-
-    # 폴더명: 사용자 id
-    storage_folder = instance.user.id
-    folder = instance.folder_name
-    # 파일명: 사용자가 폼에서 준 값
-    base_name = instance.file_name or os.path.splitext(os.path.basename(original_filename))[0]
+    """
+    이미지 업로드 경로 생성 함수
+    instance가 아직 저장되지 않았을 수 있으므로 안전하게 처리
+    """
+    # 사용자 ID (필수)
+    storage_folder = instance.user.id if instance.user else 'unknown'
+    
+    # 폴더명: instance에 있으면 사용, 없으면 기본값
+    folder = getattr(instance, 'folder_name', None) or 'default'
+    
+    # 파일명: instance에 있으면 사용, 없으면 원본 파일명 사용
+    if hasattr(instance, 'file_name') and instance.file_name:
+        base_name = instance.file_name
+    else:
+        base_name = os.path.splitext(os.path.basename(original_filename))[0]
+    
     # 확장자: 원본 확장자 유지
-    ext = os.path.splitext(original_filename)[1]  # ".jpg" 같은 거
+    ext = os.path.splitext(original_filename)[1] or '.jpg'
+    
     # 최종 파일 이름
     final_filename = f"{base_name}{ext}"
 

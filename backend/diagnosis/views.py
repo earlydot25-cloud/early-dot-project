@@ -43,6 +43,7 @@
 
 # backend/diagnosis/views.py
 
+from django.conf import settings
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
@@ -78,25 +79,41 @@ class PhotoUploadView(APIView):
         # many=False (기본값) : 단일 객체를 생성합니다.
         serializer = PhotoUploadSerializer(data=request.data)
 
-        if serializer.is_valid():
-            # serializer.save()를 호출하기 전에 'user'를 추가합니다.
-            # request.user는 IsAuthenticated 권한을 통해 인증된 사용자 객체입니다.
-            # (만약 IsAuthenticated를 주석 처리했다면, user를 임시로 지정해야 합니다)
-            try:
-                serializer.save(user=request.user)
-            except Exception as e:
-                # (디버깅용) user 할당에 실패하거나 다른 DB 오류가 발생한 경우
-                return Response(
-                    {"error": f"Failed to save data: {str(e)}"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-            #테스트용
-            # 저장이 성공하면, 저장된 객체의 상세 정보를 반환합니다.
-            # (PhotoDetailSerializer를 사용해 더 많은 정보를 보여줄 수도 있습니다)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-        else:
+        if not serializer.is_valid():
             # 유효성 검사 실패 시 (예: 필수 필드가 누락된 경우)
             # 프론트엔드에 어떤 필드가 잘못되었는지 오류 메시지를 반환합니다.
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            import json
+            if settings.DEBUG:
+                print(f"[DEBUG] Validation errors: {json.dumps(serializer.errors, indent=2, ensure_ascii=False)}")
+                print(f"[DEBUG] Received data keys: {list(request.data.keys())}")
+                print(f"[DEBUG] Received data: {dict(request.data)}")
+            return Response(
+                {"error": "Validation failed", "details": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # serializer.save()를 호출하기 전에 'user'를 추가합니다.
+        # request.user는 IsAuthenticated 권한을 통해 인증된 사용자 객체입니다.
+        try:
+            photo_instance = serializer.save(user=request.user)
+            # 저장 성공 후 ID를 포함한 응답 반환 (프론트엔드에서 결과 페이지로 이동하기 위해 필요)
+            return Response(
+                {
+                    "id": photo_instance.id,
+                    "message": "Photo uploaded successfully",
+                    **serializer.data
+                },
+                status=status.HTTP_201_CREATED
+            )
+        except Exception as e:
+            # (디버깅용) user 할당에 실패하거나 다른 DB 오류가 발생한 경우
+            import traceback
+            error_trace = traceback.format_exc()
+            return Response(
+                {
+                    "error": f"Failed to save data: {str(e)}",
+                    "traceback": error_trace if settings.DEBUG else None
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 

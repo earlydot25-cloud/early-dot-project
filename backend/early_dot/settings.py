@@ -121,11 +121,12 @@ WSGI_APPLICATION = 'early_dot.wsgi.application'
 #     }
 # }
 
-DATABASES = {
-    'default': env.db(),
-}
+# DATABASE_URL 환경 변수를 사용하는 경우 (주석 처리)
+# DATABASES = {
+#     'default': env.db(),
+# }
 
-# 또는 환경 변수를 직접 사용하는 경우 (env 라이브러리를 사용한다면 위 코드가 권장됨)
+# 환경 변수를 직접 사용하는 경우 (현재 사용 중)
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',

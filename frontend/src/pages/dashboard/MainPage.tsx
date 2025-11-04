@@ -293,7 +293,7 @@ const MainPage: React.FC = () => {
   }
 
   // -----------------------------------
-  // 🔎 “내 것만” 필터링 + 요약 계산 (=> 이 숫자만 UI에 사용)
+  // 🔎 "내 것만" 필터링 + 요약 계산 (=> 이 숫자만 UI에 사용)
   // -----------------------------------
   const history = data.history ?? [];
 
@@ -352,7 +352,7 @@ const MainPage: React.FC = () => {
         </button>
       </section>
 
-      {/* 2. AI 진단 내역 (상단 요약/헤더는 “내 것”이 0건이면 숨김) */}
+      {/* 2. AI 진단 내역 (상단 요약/헤더는 "내 것"이 0건이면 숨김) */}
       <section>
         {visibleTotal > 0 && (
           <div className="flex justify-between items-center mb-3 p-2 bg-gray-50 rounded-md shadow-inner">
@@ -379,13 +379,22 @@ const MainPage: React.FC = () => {
 
         <div className="flex space-x-4 overflow-x-scroll pb-3 scrollbar-hide">
           {visibleTotal > 0 ? (
-            filteredHistory.map((item) => (
-              <DiagnosisCard key={item.id} data={item} isDoctorView={isDoctor} />
-            ))
+            // 최근 진단 내역 최대 3개만 표시 (최신순 정렬)
+            filteredHistory
+              .sort((a, b) => {
+                // analysis_date 기준으로 최신순 정렬
+                const dateA = new Date(a.analysis_date || a.photo.capture_date).getTime();
+                const dateB = new Date(b.analysis_date || b.photo.capture_date).getTime();
+                return dateB - dateA;
+              })
+              .slice(0, 3)
+              .map((item) => (
+                <DiagnosisCard key={item.id} data={item} isDoctorView={isDoctor} />
+              ))
           ) : (
             // 🔻 요구한 문구: 0건일 때만 노출
             <p className="text-gray-700 font-medium">
-              조회 가능한 진단내역이 존재하지 않습니다! 지금 바로 새로운 진단을 시작해보세요!
+              조회 가능한 진단내역이 존재하지 않습니다! {visibleTotal}지금 바로 새로운 진단을 시작해보세요!
             </p>
           )}
         </div>

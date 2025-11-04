@@ -5,14 +5,15 @@ export interface User {
   id: number;
   email: string;
   name: string;
-  sex: '남성' | '여성';
+  sex: string; // 'M', 'F', '남', '여', '남성', '여성' 등 다양한 형식 가능
+  birth_date?: string; // YYYY-MM-DD 형식
   age: number;
   family_history: string;
   is_doctor: boolean;
   date_joined: string;
   // 수정 가능한 공통 필드 (Models에 없지만 UI에 필요한 필드)
-  phone: string;
-  address: string;
+  phone?: string;
+  address?: string;
 }
 
 // 의사 정보 (Doctors 모델 기반)
@@ -33,6 +34,7 @@ export interface PatientListItem {
 
 // 사용자 프로필 정보 (백엔드 응답 형태를 가정)
 export interface UserProfile extends User {
+  birth_date?: string; // YYYY-MM-DD 형식 (User 인터페이스에서 상속되지만 명시적으로 추가)
   doctor_profile?: DoctorProfile; // is_doctor=true일 때 존재
   patients?: PatientListItem[]; // is_doctor=true일 때 존재 (담당 환자 리스트)
   assigned_doctor?: { // is_doctor=false (환자)일 경우 담당 의사 정보

@@ -1,12 +1,14 @@
 // src/dashboard/components/MyPage.tsx
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { UserProfile, PatientListItem } from '../../types/UserTypes';
 import { fetchUserProfile, updateProfile, deleteAccount, removePatient } from '../../services/userServices';
 
 interface MyPageProps {}
 
 const MyPage: React.FC<MyPageProps> = () => {
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -310,14 +312,14 @@ const MyPage: React.FC<MyPageProps> = () => {
                   <button
                     type="button"
                     onClick={() => setShowDeleteModal(true)}
-                    className="px-6 py-2 border border-red-500 text-red-500 rounded-lg hover:bg-red-50 transition duration-150"
+                    className="px-6 py-2 border border-red-500 text-red-500 rounded-lg hover:bg-red-50 transition duration-150 text-sm whitespace-nowrap"
                   >
                     회원 탈퇴
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsEditing(true)}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition duration-150"
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition duration-150 text-sm whitespace-nowrap"
                   >
                     정보 수정
                   </button>
@@ -336,7 +338,12 @@ const MyPage: React.FC<MyPageProps> = () => {
                 <div className="p-6 bg-white rounded-lg shadow-md border-t-4 border-purple-500">
                     <h3 className="text-2xl font-bold mb-4 text-purple-700 text-left">나의 진단 기록</h3>
                     <p className="text-gray-600 text-left">최근 진단 결과를 확인하고 후속 조치를 요청할 수 있습니다.</p>
-                    <button className="mt-4 px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600">기록 보러가기</button>
+                    <button 
+                      onClick={() => navigate('/dashboard/history')}
+                      className="mt-4 px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600"
+                    >
+                      기록 보러가기
+                    </button>
                 </div>
             )}
         </div>

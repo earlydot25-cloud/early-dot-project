@@ -1,25 +1,28 @@
 // Layout.tsx
 import React from 'react';
-import { useLocation } from 'react-router-dom';      // ← 추가
+import { useLocation } from 'react-router-dom';
 import Nav from './Nav';
 import BottomNav from './BottomNav';
 import '../App.css';
 
-const HIDE_CHROME_PATHS = new Set(['/diagnosis']);   // ← 촬영 화면 경로만 숨김
+const HIDE_CHROME_PATHS = new Set(['/diagnosis/capture']);   // ← 카메라 촬영 화면 경로만 숨김
 
 const Layout: React.FC<React.PropsWithChildren> = ({ children }) => {
   const { pathname } = useLocation();
   const hideChrome = HIDE_CHROME_PATHS.has(pathname);
 
   return (
-    <div className="app-container">
-      {!hideChrome && <Nav />}                       {/* ← 상단 네비 조건부 */}
-      <main className="main-content" style={hideChrome ? { padding: 0 } : undefined}>
-        <div style={{ padding: hideChrome ? 0 : 20 }}>
+    <div className="app-container min-h-screen bg-white">
+      {!hideChrome && <Nav />}
+      <main 
+        className={`main-content ${hideChrome ? '' : 'pb-20'}`}
+        style={hideChrome ? { padding: 0 } : { paddingLeft: 0, paddingRight: 0 }}
+      >
+        <div className={`${hideChrome ? '' : 'w-full'}`}>
           {children}
         </div>
       </main>
-      {!hideChrome && <BottomNav />}                 {/* ← 하단 네비 조건부 */}
+      {!hideChrome && <BottomNav />}
     </div>
   );
 };
