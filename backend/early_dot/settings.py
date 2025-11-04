@@ -15,8 +15,11 @@ import environ
 import os
 from datetime import timedelta
 
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
 
 # 로그인 이후 기본 토큰 유효시간 5분에서 1시간으로 반영
 SIMPLE_JWT = {
@@ -41,11 +44,11 @@ env = environ.Env(
     DEBUG=(bool, False)
 )
 
-# .env 파일 읽기
-# (프로젝트 루트의 backend/.env 파일 경로를 지정)
-environ.Env.read_env(
-    env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
-)
+# 💡 수정 코드: BASE_DIR(backend의 상위, 즉 프로젝트 루트)를 기준으로 .env 파일을 찾도록 수정
+environ.Env.read_env(env_file=BASE_DIR / '.env') # BASE_DIR은 /app/early_dot 에 해당
+
+# 추후에 서버 배포용으로 분리
+DJANGO_ENV = env("DJANGO_ENV", default="local")
 
 
 # SECRET_KEY와 DEBUG를 환경 변수에서 가져옵니다.
@@ -121,9 +124,6 @@ WSGI_APPLICATION = 'early_dot.wsgi.application'
 #     }
 # }
 
-DATABASES = {
-    'default': env.db(),
-}
 
 # 또는 환경 변수를 직접 사용하는 경우 (env 라이브러리를 사용한다면 위 코드가 권장됨)
 DATABASES = {
@@ -191,37 +191,54 @@ REST_FRAMEWORK = {
 }
 
 # -------------------------------------------------------------------
-# 💡 리액트 FE 연동을 위한 CORS 설정
+# 💡 리액트 FE + Docker 컨테이너 + Mac 로컬 네트워크 CORS 설정
 # -------------------------------------------------------------------
 
-# [기본값: 로컬만 허용]
-#ALLOWED_HOSTS = ["127.0.0.1", "localhost", "*"]    #<- mac 기준으로 이거 주석 풀고, 아래 주석 달면 됨.
-ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+ALLOWED_HOSTS = [
+    "127.0.0.1",
+    "localhost",
+    "0.0.0.0",    # Docker 외부 접근 허용
+    "django",     # Docker 네트워크 내부 접근용
+    # Mac 로컬 네트워크 접근 허용 (맥북 이름 부분은 각자 환경에 맞게)
+    "sondongbin-ui-MacBookPro.local",
+]
 
-# 모든 호스트를 허용합니다 (배포 시에는 특정 도메인으로 제한해야 합니다).
-CORS_ALLOW_ALL_ORIGINS = True   # 개발 한정임
-#CORS_ALLOW_ALL_ORIGINS = False
+# 개발 중에는 모든 오리진 허용 (편의성)
+CORS_ALLOW_ALL_ORIGINS = True
 
-# 로컬 FE 오리진만 허용
+# 명시적 오리진 허용 (배포 시에만 True→False 바꾸고 이 목록만 남기면 됨)
 CORS_ALLOWED_ORIGINS = [
+    # React 로컬 개발 서버 (팀원들이 자기 로컬에서 접속)
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    # 네트워크(IP) 바뀌어도 접속되게 하려면 .local 추가(주석 해제)
-    # sondongbin-ui-MacBookPro 으로 되어 있는 부분이 mac 사용자의 macbook 이름이 들어가면 됨,
-    #"http://sondongbin-ui-MacBookPro.local:3000",
-    #"http://sondongbin-ui-MacBookPro.local:5173",
+
+    # Docker 내부 네트워크 (프론트/백/모델 서버 간 통신)
+    "http://frontend:3000",
+    "http://frontend:5173",
+    "http://fastapi:8001",
+
+    # Mac 네트워크 이름 접근 (같은 와이파이 내 다른 PC에서 접근)
+    "http://sondongbin-ui-MacBookPro.local:3000",
+    "http://sondongbin-ui-MacBookPro.local:5173",
 ]
 
-# CSRF 신뢰 오리진
+# CSRF 신뢰 오리진 (axios 등으로 POST 전송 시 403 방지)
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    # 네트워크(IP) 바뀌어도 접속되게 하려면 .local 추가(주석 해제)
-    # sondongbin-ui-MacBookPro 으로 되어 있는 부분이 mac 사용자의 macbook 이름이 들어가면 됨,
-    #"http://sondongbin-ui-MacBookPro.local:3000",
-    #"http://sondongbin-ui-MacBookPro.local:5173",
+    "http://0.0.0.0:8000",
+    "http://django:8000",
+    "http://sondongbin-ui-MacBookPro.local:3000",
+    "http://sondongbin-ui-MacBookPro.local:5173",
 ]
+
+# 추후 배포용 서버분리를 위함
+if DJANGO_ENV == "prod":
+    DEBUG = False
+    CORS_ALLOW_ALL_ORIGINS = False
+    ALLOWED_HOSTS = ["your-production-domain.com"]
+    CSRF_TRUSTED_ORIGINS = ["https://your-production-domain.com"]

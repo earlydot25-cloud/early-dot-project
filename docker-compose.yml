@@ -1,0 +1,66 @@
+#version: '3.9'
+
+services:
+  db:
+    image: mysql:8
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - early_dot_network # 💡 네트워크 명시적 연결
+
+  django:
+    build: ./backend
+    container_name: project_django
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - fastapi
+    networks:
+      - early_dot_network # 💡 네트워크 명시적 연결
+
+  # 아직 미사용이지만 나중을 위해 미리 구조만 둠
+  fastapi:
+    build: ./model_api
+    container_name: project_model_api
+    env_file:
+      - .env
+    volumes:
+      - ./model_api:/app
+    ports:
+      - "8001:8001"
+    networks:
+      - early_dot_network # 💡 네트워크 명시적 연결
+    # command: ["sleep", "infinity"]
+
+  frontend:
+    build: ./frontend
+    container_name: project_frontend
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - django
+    networks:
+      - early_dot_network # 💡 네트워크 명시적 연결
+
+volumes:
+  db_data:
+
+# 💡 명시적인 네트워크 정의 섹션을 추가합니다.
+networks:
+  early_dot_network:
+    driver: bridge # 기본 bridge 네트워크 사용을 명시

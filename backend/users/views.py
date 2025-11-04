@@ -5,6 +5,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from django.contrib.auth import get_user_model
 from .serializers import RegisterSerializer, UserSerializer, UserProfileSerializer, UserProfileUpdateSerializer
 
 class UserSignupView(APIView):
@@ -23,25 +24,27 @@ class UserSignupView(APIView):
         return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
 
 
-
+User = get_user_model() # 사용자 모델을 가져오는 더 안전한 방법
 # --------------------------------------------------------
 # 2. 프로필 뷰 (GET/PATCH: /api/users/profile/, /api/users/profile/update/)
 # --------------------------------------------------------
 class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
-    # 내 정보 조회 (FE의 /profile 페이지에서 사용)
+    # 내 정보 조회 (FE의 /profile 페이지에서 사용) - GET
     def get(self, request):
+        """프로필 정보 조회 (GET)"""
         # 💡 UserProfileSerializer를 사용하여 의사/환자 상세 정보 포함
         serializer = UserProfileSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    # 내 정보 수정 (PUT 대신 PATCH 사용 권장)
+    # 내 정보 수정 (PUT 대신 PATCH 사용 권장) - PATCH
     def patch(self, request):
         """프로필 정보 수정 (PATCH)"""
         user = request.user
 
         # 💡 UserProfileUpdateSerializer 사용
+        # (시리얼라이저 Import 필요)
         serializer = UserProfileUpdateSerializer(
             user,
             data=request.data,
@@ -59,13 +62,7 @@ class UserProfileView(APIView):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-# --------------------------------------------------------
-# 3. 회원 탈퇴 뷰 (DELETE: /api/users/profile/delete/)
-# --------------------------------------------------------
-class UserDeleteView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    # 회원 탈퇴 - DELETE
     def delete(self, request):
         """회원 탈퇴"""
         user = request.user
