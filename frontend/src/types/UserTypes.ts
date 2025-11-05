@@ -7,6 +7,14 @@ export interface AssignedDoctorInfo {
   name: string;
   specialty: string;
   hospital: string;
+  sex?: string; // 'M', 'F', '남', '여', '남성', '여성' 등 다양한 형식 가능
+  birth_date?: string; // YYYY-MM-DD 형식
+  age?: number;
+  family_history?: string;
+  is_doctor?: boolean;
+  date_joined?: string;
+  // 수정 가능한 공통 필드 (Models에 없지만 UI에 필요한 필드)
+  
 }
 
 // 2. 의사 정보 타입 (DoctorProfile)
@@ -47,6 +55,7 @@ export interface User {
 // 5. 사용자 프로필 정보 (UserProfile) - GET 응답
 // 모든 중첩 타입을 명시적으로 정의된 인터페이스로 대체
 export interface UserProfile extends User {
+
   doctor_profile?: DoctorProfile | null; // is_doctor=true일 때 존재
   patients?: PatientListItem[]; // is_doctor=true일 때 존재
   // null을 명시적으로 허용하여 ProfilePage.tsx의 useState(null)과 호환성을 확보
@@ -68,3 +77,4 @@ export interface UserProfileUpdatePayload {
   // 환자 전용 필드 (담당 의사 연결/해제용)
   assigned_doctor_name?: string;
 }
+

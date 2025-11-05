@@ -1,13 +1,10 @@
 // frontend/src/pages/diagnosis/CapturePage.tsx
 import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 import Webcam from 'react-webcam';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { FiArrowLeft, FiZap, FiZapOff, FiImage } from 'react-icons/fi';
 
-// ===== 앱의 중앙 컨테이너(네비 폭)과 맞추려면 여기를 네비와 동일하게 =====
-const MAX_STAGE_WIDTH = 430; // 예: 상/하단 네비가 430px max-width면 430으로
-// ===============================================================
-
-const API_URL = 'http://127.0.0.1:8000/api/diagnosis/upload/';
+const MAX_STAGE_WIDTH = 430;
 
 // 상/하단 네비 실제 높이를 측정하는 훅
 function useNavInsets() {
@@ -113,10 +110,15 @@ const styles: Record<string, React.CSSProperties> = {
 };
 
 const CapturePage: React.FC = () => {
+  // BodySelectionPage에서 넘어온 값 사용 (없으면 기본값)
+  const location = useLocation() as { state?: { bodyPart?: string } };
+  const selectedBodyPart = location.state?.bodyPart || '머리/목';
+
+  const navigate = useNavigate();
   const [torchOn, setTorchOn] = useState(false);
   const [guideOn, setGuideOn] = useState(true);
   const webcamRef = useRef<Webcam>(null);
-  const { top, bottom } = useNavInsets(); // ✅ 상/하단 네비 실제 높이
+  const { top, bottom } = useNavInsets();
 
   // 바디 스크롤 잠금
   useEffect(() => {
@@ -130,7 +132,7 @@ const CapturePage: React.FC = () => {
     };
   }, []);
 
-  const handleBack = () => console.log('뒤로 가기 클릭');
+  const handleBack = () => navigate(-1);
 
   const base64toFile = (base64: string, filename: string): File => {
     const [meta, data] = base64.split(',');
@@ -141,36 +143,33 @@ const CapturePage: React.FC = () => {
     return new File([u8], filename, { type: mime });
   };
 
-  const sendImageToBackend = async (file: File) => {
-    const formData = new FormData();
-    formData.append('image', file, 'captured_image.jpg');
-    formData.append('body_part', 'face');
-    formData.append('onset_date', '2025-10-22');
-    formData.append('meta_age', '30');
-    formData.append('meta_sex', 'male');
-    const token = localStorage.getItem('accessToken');
-    if (!token) { alert('로그인이 필요합니다.'); return; }
-
-    try {
-      const res = await fetch(API_URL, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData });
-      if (!res.ok) throw await res.json();
-      alert('사진이 성공적으로 업로드되었습니다!');
-    } catch (e) {
-      console.error('업로드 실패:', e);
-      alert('업로드 실패');
-    }
-  };
-
+  // ✅ 촬영 → 업로드하지 말고 저장 페이지로 이동
   const handleCapture = useCallback(() => {
     const shot = webcamRef.current?.getScreenshot();
-    if (shot) sendImageToBackend(base64toFile(shot, 'capture.jpg'));
-  }, []);
+    if (!shot) return;
+    const file = base64toFile(shot, `capture_${Date.now()}.jpg`);
+    navigate('/diagnosis/save', {
+      state: {
+        file,
+        previewUrl: shot,            // dataURL
+        bodyPart: selectedBodyPart,  // 선택한 신체부위 유지
+      },
+    });
+  }, [navigate, selectedBodyPart]);
 
+  // 갤러리에서 선택 → 저장 페이지로 이동
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const handleGalleryOpen = () => galleryInputRef.current?.click();
   const handleGalleryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) sendImageToBackend(f);
+    if (!f) return;
+    navigate('/diagnosis/save', {
+      state: {
+        file: f,
+        previewUrl: URL.createObjectURL(f), // objectURL
+        bodyPart: selectedBodyPart,
+      },
+    });
   };
 
   const handleToggleGuide = () => setGuideOn(v => !v);
@@ -206,11 +205,9 @@ const CapturePage: React.FC = () => {
   };
   useEffect(() => { applyTorch(torchOn); }, [torchOn]);
 
-  // 네비 사이만 정확히 차도록 stage 위치/크기 동적 지정
+  // 네비 사이만 정확히 차도록
   const stageDynamicStyle: React.CSSProperties = {
-    // 상단바 바로 아래부터
     marginTop: top,
-    // 하단바 위까지 (100dvh: 모바일 주소창 변화 대응)
     height: `calc(100dvh - ${top + bottom}px)`,
   };
 

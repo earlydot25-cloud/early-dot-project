@@ -174,26 +174,24 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
 
-        # 4️⃣ 환자 권고가입인 경우 doctor FK 연결
-
+        # 4️⃣ 의사 가입인 경우 Doctors 객체 생성
         if is_doctor:
-            saved_path = None
-
-        if license_file:
-            # certs/<doctor_user_id>/<uuid>_원본파일명
-            # orig = os.path.basename(getattr(license_file, "name", "license"))
-            # filename = f"certs/{user.id}/{uuid4().hex}_{orig}"
-            # saved_path = default_storage.save(filename, license_file)
-
+            if not license_file:
+                raise serializers.ValidationError({"license_file": ["의사 가입 시 면허증 파일은 필수입니다."]})
+            
             # Doctors.uid 필드는 User 객체에 대한 FK이므로 user 객체를 직접 할당
-            Doctors.objects.create(
-                uid=user,  # ✅ uid는 User에 대한 ForeignKey 필드
-                name=user.name,
-                specialty=specialty or "",
-                hospital=hospital or "",
-                cert_path=license_file,  # ← 업로드 파일 객체를 그대로 전달
-                status="pending",
-            )
+            try:
+                Doctors.objects.create(
+                    uid=user,  # ✅ uid는 User에 대한 ForeignKey 필드
+                    name=user.name,
+                    specialty=specialty or "",
+                    hospital=hospital or "",
+                    cert_path=license_file,  # ← 업로드 파일 객체를 그대로 전달
+                    status="pending",
+                )
+            except Exception as e:
+                print(f"Error creating Doctors object: {e}")
+                raise serializers.ValidationError({"doctor": [f"의사 정보 생성 중 오류가 발생했습니다: {str(e)}"]})
 
         # 5️⃣ 환자일 경우 담당 의사 연결
         if doctor_obj:

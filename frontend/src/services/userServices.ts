@@ -1,10 +1,11 @@
 import axios from 'axios';
 import { UserProfile, PatientListItem } from '../types/UserTypes';
-import { BACKEND_URL, STORAGE } from './http';
+import { API_BASE, STORAGE } from './http';
 
-// API 인스턴스 생성: Docker 내부 통신 주소 사용
+// API 인스턴스 생성: 프록시를 통해 요청 (브라우저에서 실행 시)
+// API_BASE가 빈 문자열이면 프록시를 통해 /api로 요청됩니다
 const API = axios.create({
-  baseURL: `${BACKEND_URL}/api`, // ✅ 수정: BACKEND_URL 사용
+  baseURL: `${API_BASE}/api`, // ✅ 프록시 사용 (package.json의 proxy 설정)
 });
 
 

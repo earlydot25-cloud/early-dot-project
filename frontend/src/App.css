@@ -18,7 +18,7 @@
     margin: 0 auto;
     position: relative;
     overflow: hidden; /* 💡 전체 컨테이너는 오버플로우 숨김 처리 */
-    background-color: #f7f7f7;
+    background-color: white;
     /* display: flex; flex-direction: column; 제거 */
 }
 
@@ -66,9 +66,10 @@
     /* 💡 Nav에 가려지지 않도록 상단 여백만 추가합니다. (BottomNav 영역은 height 계산에 포함됨) */
     padding-top: 60px;
 
-    /* 나머지 패딩은 유지 */
-    padding-left: 20px;
-    padding-right: 20px;
+    /* Tailwind 클래스로 패딩을 제어할 수 있도록 기본값 제거 */
+    padding-left: 0;
+    padding-right: 0;
+    padding-bottom: 0;
 }
 
 /* frontend/src/App.css */

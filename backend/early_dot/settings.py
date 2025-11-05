@@ -44,8 +44,13 @@ env = environ.Env(
     DEBUG=(bool, False)
 )
 
-# 💡 수정 코드: BASE_DIR(backend의 상위, 즉 프로젝트 루트)를 기준으로 .env 파일을 찾도록 수정
-environ.Env.read_env(env_file=BASE_DIR / '.env') # BASE_DIR은 /app/early_dot 에 해당
+# 💡 .env 파일 경로: 프로젝트 루트 (backend의 상위)
+# BASE_DIR은 /app/early_dot이므로, 상위 디렉토리인 /app/.env를 찾습니다
+# docker-compose에서 env_file로 .env를 전달하므로, 환경변수는 이미 설정되어 있을 수 있습니다
+# 하지만 파일에서 직접 읽는 경우를 위해 경로를 설정합니다
+env_file_path = BASE_DIR.parent / '.env'  # /app/.env
+if env_file_path.exists():
+    environ.Env.read_env(env_file=env_file_path)
 
 # 추후에 서버 배포용으로 분리
 DJANGO_ENV = env("DJANGO_ENV", default="local")
@@ -125,7 +130,8 @@ WSGI_APPLICATION = 'early_dot.wsgi.application'
 # }
 
 
-# 또는 환경 변수를 직접 사용하는 경우 (env 라이브러리를 사용한다면 위 코드가 권장됨)
+
+# 환경 변수를 직접 사용하는 경우 (현재 사용 중)
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',

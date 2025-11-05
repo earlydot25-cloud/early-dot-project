@@ -4,26 +4,569 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from diagnosis.models import Results
-from users.models import Users,  Doctors
+from diagnosis.models import Results, Photos
+from users.models import Users, Doctors
 from .serializers import ResultMainSerializer, DoctorCardSerializer
-from django.db.models import Q # 복잡한 쿼리를 위해 필요
+from django.db.models import Q, Max  # 복잡한 쿼리를 위해 필요
+from django.utils import timezone
 
 # --------------------------------------------------------
-# 1. 기록 목록 뷰 (GET: /api/data/records/)
+# 1. 폴더 목록 뷰 (GET: /api/dashboard/folders/)
 # --------------------------------------------------------
 # FE의 '진단 내역' 페이지에서 사용
+class FoldersListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # 쿼리 파라미터에서 user ID 확인 (의사용일 경우)
+        user_id = request.query_params.get('user')
+        
+        # user_id가 제공되면 해당 사용자, 없으면 현재 로그인한 사용자
+        if user_id:
+            try:
+                target_user = Users.objects.get(id=user_id)
+            except Users.DoesNotExist:
+                return Response(
+                    {'error': 'User not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            target_user = request.user
+        
+        # 해당 사용자의 Photos에서 folder_name으로 그룹핑
+        # 각 폴더별로 최신 capture_date를 가진 사진 정보 반환
+        folders_data = Photos.objects.filter(user=target_user).values('folder_name').annotate(
+            latest_date=Max('capture_date')
+        ).order_by('-latest_date')
+        
+        # 각 폴더의 상세 정보 조회
+        result = []
+        for folder in folders_data:
+            # 해당 폴더의 가장 최근 사진 정보 가져오기
+            latest_photo = Photos.objects.filter(
+                user=target_user,
+                folder_name=folder['folder_name']
+            ).order_by('-capture_date').first()
+            
+            if latest_photo:
+                # 이미지 URL 생성 (절대 경로)
+                image_url = ''
+                if latest_photo.upload_storage_path:
+                    url = latest_photo.upload_storage_path.url
+                    if url.startswith('http'):
+                        image_url = url
+                    else:
+                        image_url = f"http://127.0.0.1:8000{url}"
+                
+                # 해당 폴더의 최고 위험도 계산
+                # 폴더 내 모든 Photos의 Results를 확인하여 최고 위험도 찾기
+                folder_photos = Photos.objects.filter(
+                    user=target_user,
+                    folder_name=folder['folder_name']
+                )
+                folder_results = Results.objects.filter(photo__in=folder_photos).select_related('followup_check')
+                
+                max_risk_level = '낮음'  # 기본값
+                risk_levels_priority = {
+                    '즉시 주의': 5,
+                    '높음': 4,
+                    '경과 관찰': 3,
+                    '보통': 3,
+                    '중간': 2,
+                    '낮음': 1,
+                    '정상': 0,
+                    '분석 대기': -1,
+                }
+                
+                max_priority = -2
+                for result in folder_results:
+                    # 의사 소견 우선, 없으면 AI 위험도
+                    risk = result.followup_check.doctor_risk_level if (
+                        result.followup_check and 
+                        result.followup_check.doctor_risk_level and 
+                        result.followup_check.doctor_risk_level != '소견 대기'
+                    ) else result.risk_level
+                    
+                    priority = risk_levels_priority.get(risk, 0)
+                    if priority > max_priority:
+                        max_priority = priority
+                        max_risk_level = risk
+                
+                result.append({
+                    'folder_name': folder['folder_name'],
+                    'body_part': latest_photo.body_part,
+                    'capture_date': folder['latest_date'].isoformat() if folder['latest_date'] else None,
+                    'upload_storage_path': image_url,
+                    'max_risk_level': max_risk_level,  # 추가: 최고 위험도
+                })
+        
+        return Response(result, status=status.HTTP_200_OK)
+
+
+# --------------------------------------------------------
+# 2. 기록 목록 뷰 (GET: /api/dashboard/records/)
+# --------------------------------------------------------
+# FE의 '질환 목록' 페이지에서 사용
+# Results가 있으면 Results 반환, 없으면 Photos 반환
 class RecordListView(APIView):
-    pass
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # 쿼리 파라미터
+        user_id = request.query_params.get('user')
+        folder_name = request.query_params.get('folder')
+        
+        # user_id가 제공되면 해당 사용자, 없으면 현재 로그인한 사용자
+        if user_id:
+            try:
+                target_user = Users.objects.get(id=user_id)
+            except Users.DoesNotExist:
+                return Response(
+                    {'error': 'User not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            target_user = request.user
+        
+        # Photos 필터링
+        photos_query = Photos.objects.filter(user=target_user)
+        if folder_name:
+            photos_query = photos_query.filter(folder_name=folder_name)
+        
+        # 해당 Photos와 연결된 Results 가져오기
+        results = Results.objects.filter(photo__in=photos_query).select_related('photo', 'disease', 'followup_check').order_by('-analysis_date')
+        
+        # Results가 있는 Photos ID 목록
+        photos_with_results = [r.photo_id for r in results]
+        
+        # Results가 없는 Photos 가져오기
+        photos_without_results = photos_query.exclude(id__in=photos_with_results).order_by('-capture_date')
+        
+        # 시리얼라이저로 변환
+        records_data = []
+        
+        try:
+            # Results가 있는 경우
+            if results.exists():
+                serializer = ResultMainSerializer(results, many=True, context={'request': request})
+                records_data.extend(serializer.data)
+            
+            # Results가 없는 Photos도 포함 (분석 대기 상태)
+            from django.conf import settings
+            for photo in photos_without_results:
+                # 이미지 URL 생성 (절대 경로)
+                image_url = ''
+                if photo.upload_storage_path:
+                    if photo.upload_storage_path.url.startswith('http'):
+                        image_url = photo.upload_storage_path.url
+                    else:
+                        # 상대 경로를 절대 경로로 변환
+                        image_url = f"http://127.0.0.1:8000{photo.upload_storage_path.url}"
+                
+                records_data.append({
+                    'id': photo.id,
+                    'photo': {
+                        'id': photo.id,
+                        'folder_name': photo.folder_name,
+                        'file_name': photo.file_name,
+                        'body_part': photo.body_part,
+                        'capture_date': photo.capture_date.isoformat() if photo.capture_date else None,
+                        'upload_storage_path': image_url,
+                    },
+                    'disease': None,
+                    'analysis_date': photo.capture_date.isoformat() if photo.capture_date else None,
+                    'risk_level': '분석 대기',
+                    'vlm_analysis_text': None,
+                    'followup_check': None,
+                })
+            
+            # 최종 정렬 (날짜 기준 내림차순)
+            records_data.sort(key=lambda x: x.get('analysis_date') or '', reverse=True)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Serialization error: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        return Response(records_data, status=status.HTTP_200_OK)
 
 
 # --------------------------------------------------------
-# 2. 기록 상세 뷰 (GET: /api/data/records/<int:pk>/)
+# 3. 기록 상세 뷰 (GET: /api/dashboard/records/<int:pk>/)
 # --------------------------------------------------------
+# pk는 Results.id 또는 Photos.id 모두 가능
 class RecordDetailView(APIView):
-   pass
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        from .serializers import ResultDetailSerializer, PhotoDetailSerializer
+        
+        # 1. Results로 먼저 시도
+        try:
+            result = Results.objects.select_related('photo', 'photo__user', 'disease', 'followup_check').get(pk=pk)
+            # 권한 확인: 본인의 결과거나 의사가 담당한 결과여야 함
+            if result.photo.user != request.user and not request.user.is_doctor:
+                return Response(
+                    {'error': 'Permission denied'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            serializer = ResultDetailSerializer(result, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Results.DoesNotExist:
+            # 2. Results가 없으면 Photos로 시도
+            try:
+                photo = Photos.objects.select_related('user').get(pk=pk)
+                # 권한 확인
+                if photo.user != request.user and not request.user.is_doctor:
+                    return Response(
+                        {'error': 'Permission denied'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                
+                # Photos만 있을 때의 응답 구조 (Results 형태와 호환)
+                from django.conf import settings
+                image_url = ''
+                if photo.upload_storage_path:
+                    url = photo.upload_storage_path.url
+                    if url.startswith('http'):
+                        image_url = url
+                    else:
+                        image_url = f"http://127.0.0.1:8000{url}"
+                
+                return Response({
+                    'id': photo.id,
+                    'photo': PhotoDetailSerializer(photo, context={'request': request}).data,
+                    'disease': None,
+                    'analysis_date': photo.capture_date.isoformat() if photo.capture_date else None,
+                    'risk_level': '분석 대기',
+                    'class_probs': {},
+                    'grad_cam_path': '',
+                    'vlm_analysis_text': None,
+                    'followup_check': None,
+                    'user': {
+                        'name': photo.user.name or photo.user.email,
+                        'sex': photo.meta_sex if photo.meta_sex else (photo.user.sex if hasattr(photo.user, 'sex') else '모름'),
+                        'age': photo.meta_age if photo.meta_age else (photo.user.age if hasattr(photo.user, 'age') else None),
+                        'family_history': photo.user.family_history if hasattr(photo.user, 'family_history') else '없음',
+                    }
+                }, status=status.HTTP_200_OK)
+            except Photos.DoesNotExist:
+                return Response(
+                    {'error': 'Record not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+
+# --------------------------------------------------------
+# 4. 기록 수정 뷰 (PATCH: /api/dashboard/records/<int:pk>/)
+# --------------------------------------------------------
+class RecordUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        """기록(Photo) 수정 - 파일명, 신체 부위 등"""
+        try:
+            # Photos로 먼저 시도
+            try:
+                photo = Photos.objects.get(pk=pk)
+                # 권한 확인
+                if photo.user != request.user and not request.user.is_doctor:
+                    return Response(
+                        {'error': 'Permission denied'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                
+                # 수정 가능한 필드만 업데이트
+                if 'file_name' in request.data:
+                    photo.file_name = request.data['file_name']
+                if 'body_part' in request.data:
+                    photo.body_part = request.data['body_part']
+                if 'folder_name' in request.data:
+                    photo.folder_name = request.data['folder_name']
+                
+                photo.save()
+                
+                return Response({
+                    'message': 'Record updated successfully',
+                    'id': photo.id,
+                    'file_name': photo.file_name,
+                    'body_part': photo.body_part,
+                    'folder_name': photo.folder_name,
+                }, status=status.HTTP_200_OK)
+            except Photos.DoesNotExist:
+                # Results로 시도 (Results는 photo를 통해 접근)
+                result = Results.objects.get(pk=pk)
+                if result.photo.user != request.user and not request.user.is_doctor:
+                    return Response(
+                        {'error': 'Permission denied'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                
+                photo = result.photo
+                if 'file_name' in request.data:
+                    photo.file_name = request.data['file_name']
+                if 'body_part' in request.data:
+                    photo.body_part = request.data['body_part']
+                if 'folder_name' in request.data:
+                    photo.folder_name = request.data['folder_name']
+                
+                photo.save()
+                
+                return Response({
+                    'message': 'Record updated successfully',
+                    'id': result.id,
+                    'file_name': photo.file_name,
+                    'body_part': photo.body_part,
+                    'folder_name': photo.folder_name,
+                }, status=status.HTTP_200_OK)
+        except (Photos.DoesNotExist, Results.DoesNotExist):
+            return Response(
+                {'error': 'Record not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+
+# --------------------------------------------------------
+# 5. 기록 삭제 뷰 (DELETE: /api/dashboard/records/<int:pk>/)
+# --------------------------------------------------------
+class RecordDeleteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        """단일 기록(Photo 또는 Result) 삭제"""
+        try:
+            # Photos로 먼저 시도
+            try:
+                photo = Photos.objects.get(pk=pk)
+                # 권한 확인: 본인의 사진이거나 의사가 담당한 사진
+                if photo.user != request.user and not request.user.is_doctor:
+                    return Response(
+                        {'error': 'Permission denied'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                # Photos 삭제 시 연결된 Results도 CASCADE로 삭제됨
+                photo.delete()
+                return Response(
+                    {'message': 'Record deleted successfully'},
+                    status=status.HTTP_200_OK
+                )
+            except Photos.DoesNotExist:
+                # Results로 시도
+                result = Results.objects.get(pk=pk)
+                if result.photo.user != request.user and not request.user.is_doctor:
+                    return Response(
+                        {'error': 'Permission denied'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                # Result 삭제 시 연결된 Photo도 함께 삭제됨
+                result.photo.delete()
+                return Response(
+                    {'message': 'Record deleted successfully'},
+                    status=status.HTTP_200_OK
+                )
+        except (Photos.DoesNotExist, Results.DoesNotExist):
+            return Response(
+                {'error': 'Record not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+
+# --------------------------------------------------------
+# 6. 일괄 삭제 뷰 (DELETE: /api/dashboard/records/bulk/)
+# --------------------------------------------------------
+class BulkDeleteRecordsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request):
+        """여러 기록을 한 번에 삭제"""
+        record_ids = request.data.get('ids', [])
+        if not record_ids:
+            return Response(
+                {'error': 'No IDs provided'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        deleted_count = 0
+        errors = []
+        
+        for record_id in record_ids:
+            try:
+                try:
+                    photo = Photos.objects.get(pk=record_id)
+                    if photo.user != request.user and not request.user.is_doctor:
+                        errors.append(f'Permission denied for record {record_id}')
+                        continue
+                    photo.delete()
+                    deleted_count += 1
+                except Photos.DoesNotExist:
+                    try:
+                        result = Results.objects.get(pk=record_id)
+                        if result.photo.user != request.user and not request.user.is_doctor:
+                            errors.append(f'Permission denied for record {record_id}')
+                            continue
+                        result.photo.delete()
+                        deleted_count += 1
+                    except Results.DoesNotExist:
+                        errors.append(f'Record {record_id} not found')
+            except Exception as e:
+                errors.append(f'Error deleting record {record_id}: {str(e)}')
+        
+        return Response({
+            'deleted_count': deleted_count,
+            'errors': errors if errors else None
+        }, status=status.HTTP_200_OK)
+
+
+# --------------------------------------------------------
+# 7. 폴더 수정 뷰 (PATCH: /api/dashboard/folders/<folder_name>/update/)
+# --------------------------------------------------------
+class FolderUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, folder_name):
+        """폴더명 변경 (해당 폴더의 모든 Photos의 folder_name 업데이트)"""
+        new_folder_name = request.data.get('folder_name')
+        if not new_folder_name:
+            return Response(
+                {'error': 'folder_name is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        user_id = request.query_params.get('user')
+        
+        if user_id:
+            try:
+                target_user = Users.objects.get(id=user_id)
+            except Users.DoesNotExist:
+                return Response(
+                    {'error': 'User not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            target_user = request.user
+        
+        # 권한 확인
+        if target_user != request.user and not request.user.is_doctor:
+            return Response(
+                {'error': 'Permission denied'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # 폴더 내 모든 Photos의 folder_name 업데이트
+        photos = Photos.objects.filter(user=target_user, folder_name=folder_name)
+        count = photos.update(folder_name=new_folder_name)
+        
+        return Response({
+            'message': 'Folder renamed successfully',
+            'old_folder_name': folder_name,
+            'new_folder_name': new_folder_name,
+            'updated_count': count
+        }, status=status.HTTP_200_OK)
+
+
+# --------------------------------------------------------
+# 8. 폴더 삭제 뷰 (DELETE: /api/dashboard/folders/<folder_name>/)
+# --------------------------------------------------------
+class FolderDeleteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, folder_name):
+        """폴더 내 모든 파일 삭제"""
+        user_id = request.query_params.get('user')
+        
+        if user_id:
+            try:
+                target_user = Users.objects.get(id=user_id)
+            except Users.DoesNotExist:
+                return Response(
+                    {'error': 'User not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            target_user = request.user
+        
+        # 권한 확인
+        if target_user != request.user and not request.user.is_doctor:
+            return Response(
+                {'error': 'Permission denied'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # 폴더 내 모든 Photos 삭제 (Results는 CASCADE로 자동 삭제)
+        photos = Photos.objects.filter(user=target_user, folder_name=folder_name)
+        count = photos.count()
+        photos.delete()
+        
+        return Response({
+            'message': f'Folder deleted successfully',
+            'deleted_count': count
+        }, status=status.HTTP_200_OK)
+
+
+# --------------------------------------------------------
+# 9. 환자 목록 뷰 (GET: /api/dashboard/patients/)
+# --------------------------------------------------------
+# FE의 '의사용 환자 목록' 페이지에서 사용
+class PatientsListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # 의사만 접근 가능
+        if not request.user.is_doctor:
+            return Response(
+                {'error': 'Permission denied. Doctor access only.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        try:
+            doctor_record = request.user.doctor_profile
+            doctor_id = doctor_record.uid.id
+        except Doctors.DoesNotExist:
+            return Response(
+                {'error': 'Doctor profile not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # 해당 의사가 담당한 Results의 환자 목록 가져오기
+        # filter 파라미터로 필터링
+        filter_param = request.query_params.get('filter', '전체 보기')
+        
+        # FollowUpCheck에서 해당 의사가 담당한 결과 찾기
+        followup_query = Q(doctor_id=doctor_id)
+        
+        # 필터에 따라 추가 조건
+        if filter_param != '전체 보기':
+            if filter_param == '주의 환자':
+                followup_query &= Q(doctor_risk_level__in=['즉시 주의', '경과 관찰'])
+            elif filter_param in ['즉시 주의', '경과 관찰', '정상', '추가검사 필요', '치료 완료']:
+                followup_query &= Q(doctor_risk_level=filter_param)
+        
+        # 해당 FollowUpCheck와 연결된 Results 가져오기
+        results = Results.objects.filter(
+            followup_check__in=request.user.doctor_profile.followupcheck_set.filter(followup_query)
+        ).select_related('photo__user').distinct()
+        
+        # 환자별로 그룹핑하고 최신 소견 가져오기
+        patients_dict = {}
+        for result in results:
+            patient = result.photo.user
+            patient_id = patient.id
+            
+            if patient_id not in patients_dict:
+                # 최신 FollowUpCheck의 note 가져오기
+                latest_followup = result.followup_check
+                patients_dict[patient_id] = {
+                    'id': patient.id,
+                    'name': patient.name or patient.email,
+                    'latest_note': latest_followup.doctor_note if latest_followup and latest_followup.doctor_note else None,
+                    'has_attention': latest_followup and latest_followup.doctor_risk_level == '즉시 주의' if latest_followup else False,
+                }
+        
+        patients_list = list(patients_dict.values())
+        
+        return Response(patients_list, status=status.HTTP_200_OK)
 
 
 # --------------------------------------------------------

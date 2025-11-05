@@ -12,10 +12,55 @@ from .models import FollowUpCheck
 # -----------------------------------
 class PhotosSerializer(serializers.ModelSerializer):
     """ResultMainSerializer에서 Photos 정보를 중첩하기 위한 시리얼라이저 (환자용)"""
+    
+    upload_storage_path = serializers.SerializerMethodField()
 
     class Meta:
         model = Photos
-        fields = ['body_part', 'folder_name', 'capture_date', 'upload_storage_path']
+        fields = ['id', 'body_part', 'folder_name', 'file_name', 'capture_date', 'upload_storage_path']
+    
+    def get_upload_storage_path(self, obj):
+        """이미지 URL을 절대 경로로 변환"""
+        if obj.upload_storage_path:
+            url = obj.upload_storage_path.url
+            if url.startswith('http'):
+                return url
+            # 상대 경로를 절대 경로로 변환
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(url)
+            return f"http://127.0.0.1:8000{url}"
+        return ''
+
+
+# 🔴 신규: Photos만 있는 경우를 위한 시리얼라이저 (Results 없을 때)
+class PhotoOnlySerializer(serializers.ModelSerializer):
+    """Results가 없는 Photos를 표시하기 위한 시리얼라이저"""
+    
+    photo = PhotosSerializer(source='*', read_only=True)
+    
+    class Meta:
+        model = Photos
+        fields = ['id', 'photo']
+        
+    def to_representation(self, instance):
+        """Photos 객체를 Results 형태로 변환"""
+        return {
+            'id': instance.id,
+            'photo': {
+                'id': instance.id,
+                'folder_name': instance.folder_name,
+                'file_name': instance.file_name,
+                'body_part': instance.body_part,
+                'capture_date': instance.capture_date.isoformat() if instance.capture_date else None,
+                'upload_storage_path': instance.upload_storage_path.url if instance.upload_storage_path else '',
+            },
+            'disease': None,  # Results가 없으므로 None
+            'analysis_date': instance.capture_date.isoformat() if instance.capture_date else None,
+            'risk_level': '분석 대기',  # Results가 없으므로 기본값
+            'vlm_analysis_text': None,
+            'followup_check': None,
+        }
 
 
 class DiseaseInfoSerializer(serializers.ModelSerializer):
@@ -24,7 +69,6 @@ class DiseaseInfoSerializer(serializers.ModelSerializer):
     class Meta:
         model = DiseaseInfo
         fields = ['name_ko']
-
 
 # 🔴 신규: 의사 화면에 필요한 환자 정보 (Users 모델 사용)
 # 🔴 신규: 의사 화면에 필요한 환자 정보 (Users 모델 사용)
@@ -60,25 +104,103 @@ class PhotoSymptomsSerializer(serializers.ModelSerializer):
         # 상처로 인한 감염, 통증, 가려움 태그를 위한 필드
         fields = ['body_part', 'folder_name', 'capture_date', 'onset_date', 'symptoms_itch', 'symptoms_pain',
                   'symptoms_infection']
-    # -----------------------------------
+
+
+# 🔴 신규: 상세 페이지용 Photo 시리얼라이저 (모든 증상 필드 포함)
+class PhotoDetailSerializer(serializers.ModelSerializer):
+    """상세 페이지에서 사용하는 Photo 시리얼라이저"""
+    
+    upload_storage_path = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Photos
+        fields = [
+            'id', 'folder_name', 'file_name', 'body_part', 'capture_date',
+            'upload_storage_path', 'symptoms_itch', 'symptoms_pain', 'symptoms_color',
+            'symptoms_infection', 'symptoms_blood', 'onset_date', 'meta_age', 'meta_sex'
+        ]
+    
+    def get_upload_storage_path(self, obj):
+        """이미지 URL을 절대 경로로 변환"""
+        if obj.upload_storage_path:
+            url = obj.upload_storage_path.url
+            if url.startswith('http'):
+                return url
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(url)
+            return f"http://127.0.0.1:8000{url}"
+        return ''
+
+
+# 🔴 신규: 상세 페이지용 Disease 시리얼라이저
+class DiseaseDetailSerializer(serializers.ModelSerializer):
+    """상세 페이지에서 사용하는 Disease 시리얼라이저"""
+    
+    class Meta:
+        model = DiseaseInfo
+        fields = ['name_ko', 'name_en', 'classification', 'description', 'recommendation']
 
 
 # 1. FollowUpCheck (의사 소견) 시리얼라이저
 class FollowUpCheckSerializer(serializers.ModelSerializer):
     class Meta:
         model = FollowUpCheck
-        fields = ['current_status', 'doctor_risk_level', 'doctor_note']
+        fields = ['current_status', 'doctor_risk_level', 'doctor_note', 'last_updated_at']
+
+
+# 🔴 신규: 상세 페이지용 Result 시리얼라이저
+class ResultDetailSerializer(serializers.ModelSerializer):
+    """상세 페이지에서 사용하는 Result 시리얼라이저"""
+    
+    photo = PhotoDetailSerializer(read_only=True)
+    disease = DiseaseDetailSerializer(read_only=True)
+    followup_check = FollowUpCheckSerializer(read_only=True, required=False)
+    user = serializers.SerializerMethodField()
+    grad_cam_path = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Results
+        fields = [
+            'id', 'photo', 'disease', 'analysis_date', 'risk_level', 'class_probs',
+            'grad_cam_path', 'vlm_analysis_text', 'followup_check', 'user'
+        ]
+    
+    def get_user(self, obj):
+        """환자 정보 가져오기"""
+        user = obj.photo.user
+        # Photos에서 메타 정보 사용 (없으면 Users 모델의 정보 사용)
+        photo = obj.photo
+        return {
+            'name': user.name or user.email,
+            'sex': photo.meta_sex if photo.meta_sex else (user.sex if hasattr(user, 'sex') else '모름'),
+            'age': photo.meta_age if photo.meta_age else (user.age if hasattr(user, 'age') else None),
+            'family_history': user.family_history if hasattr(user, 'family_history') else '없음',
+        }
+    
+    def get_grad_cam_path(self, obj):
+        """GradCAM 이미지 URL 생성"""
+        if obj.grad_cam_path:
+            url = obj.grad_cam_path.url
+            if url.startswith('http'):
+                return url
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(url)
+            return f"http://127.0.0.1:8000{url}"
+        return ''
 
 
 # 2. DiagnosisResult (MainPage/DoctorMainPage의 History Card 데이터) 시리얼라이저
 class ResultMainSerializer(serializers.ModelSerializer):
-    # 🔴 photo 필드는 DoctorCardSerializer에서 재정의할 수 있도록 임시로 제거
+    # 🔴 photo 필드 추가 (HistoryDetailPage에서 필요)
+    photo = PhotosSerializer(read_only=True)
     disease = DiseaseInfoSerializer(read_only=True)
     followup_check = FollowUpCheckSerializer(read_only=True, required=False)
 
     class Meta:
         model = Results
-        fields = ['id', 'disease', 'analysis_date', 'risk_level', 'vlm_analysis_text', 'followup_check']
+        fields = ['id', 'photo', 'disease', 'analysis_date', 'risk_level', 'vlm_analysis_text', 'followup_check']
 
 
 # 🔴 신규: 의사 대시보드용 Result 시리얼라이저

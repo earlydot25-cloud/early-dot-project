@@ -1,26 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-// 💡 경로 수정: ../../services/ -> ../services/
-import { fetchUserProfile, updateProfile, deleteAccount, removePatient } from '../../services/userServices';
-import { clearAuth } from '../../services/authServices';
-
-// =========================================================================
-// 💡 타입 정의를 외부 파일에서 import 하여 사용하도록 수정 (TS2345 에러 해결)
-// 로컬 타입 정의(UserProfile, AssignedDoctor, DoctorProfile, PatientListItem)를 모두 제거하고
-// ../../types/UserTypes.ts에서 가져와 사용합니다.
 import {
     UserProfile,
-    PatientListItem, // PatientListItem도 UserTypes.ts에서 가져옵니다.
-    AssignedDoctorInfo, // AssignedDoctor 대신 AssignedDoctorInfo를 사용합니다.
-    DoctorProfile as DoctorProfileType // 충돌 방지를 위해 별칭 사용 (선택 사항)
+    PatientListItem,
+    AssignedDoctorInfo,
+    DoctorProfile as DoctorProfileType
 } from '../../types/UserTypes';
-// =========================================================================
-
+import { fetchUserProfile, updateProfile, deleteAccount, removePatient } from '../../services/userServices';
+import { clearAuth } from '../../services/authServices';
 
 interface MyPageProps {}
 
 const MyPage: React.FC<MyPageProps> = () => {
-  // 💡 UserProfile 타입을 외부에서 가져온 타입으로 지정
+
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -395,21 +387,20 @@ const PatientSpecificFields: React.FC = () => {
                 <>
                   <button
                     type="button"
-                    onClick={() => setShowDeleteModal(true)} // 회원 탈퇴 버튼 연동 (모달 열기)
-                    className="px-4 py-1.5 border border-red-500 text-red-600 text-sm rounded-lg hover:bg-red-50 transition duration-150"                  >
+
+                    onClick={() => setShowDeleteModal(true)}
+                    className="px-6 py-2 border border-red-500 text-red-500 rounded-lg hover:bg-red-50 transition duration-150 text-sm whitespace-nowrap"
+                  >
                     회원 탈퇴
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition duration-150 text-sm whitespace-nowrap"
+                  >
+                    정보 수정
+                  </button>
 
-                  {/* isUserEditable (의사 또는 담당의사 있는 환자)일 때만 '정보 수정' 버튼 표시 */}
-                  {isUserEditable && (
-                    <button
-                      type="button"
-                      onClick={() => setIsEditing(true)} // 정보 수정 버튼 연동 (수정 모드 활성화)
-                      className="px-4 py-1.5 bg-blue-600 text-white rounded-lg font-semibold text-sm hover:bg-blue-700 transition duration-150"
-                    >
-                      정보 수정
-                    </button>
-                  )}
                 </>
               )}
             </div>
@@ -424,9 +415,11 @@ const PatientSpecificFields: React.FC = () => {
                 <div className="p-6 bg-white rounded-lg shadow-md border-t-4 border-purple-500">
                     <h3 className="text-2xl font-bold mb-4 text-purple-700 text-left">나의 진단 기록</h3>
                     <p className="text-gray-600 text-left">최근 진단 결과를 확인하고 후속 조치를 요청할 수 있습니다.</p>
-                    <button
-                      onClick={handleGoToDiagnosis}
-                      className="mt-4 px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600">
+                    <button 
+                      onClick={() => navigate('/dashboard/history')}
+                      className="mt-4 px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600"
+                    >
+
                       기록 보러가기
                     </button>
                 </div>

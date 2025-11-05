@@ -51,8 +51,23 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
     ...restOptions, // method, cache 등 나머지 옵션
   });
 
-  // JSON 파싱 (비JSON 응답 대비)
-  const data = await res.json().catch(() => ({} as any));
+  // JSON 파싱 (비JSON 응답 대비) - 더 안전하게 처리
+  let data: any = {};
+  try {
+    const text = await res.text();
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        // JSON 파싱 실패 시 (예: HTML 에러 페이지 등)
+        console.error('JSON parse error:', text.substring(0, 100));
+        data = { detail: text || `서버 오류 (${res.status})` };
+      }
+    }
+  } catch (e) {
+    console.error('Response read error:', e);
+    data = { detail: '응답을 읽을 수 없습니다.' };
+  }
 
 
   // 401 처리: 첫 시도라면 refresh 한 번 시도

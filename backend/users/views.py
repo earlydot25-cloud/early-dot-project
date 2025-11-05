@@ -14,14 +14,35 @@ class UserSignupView(APIView):
     parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     def post(self, request):
-        serializer = RegisterSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            # 요청 데이터 로깅
+            print("=== SIGNUP REQUEST ===")
+            print("Request data keys:", list(request.data.keys()))
+            print("is_doctor:", request.data.get('is_doctor'))
+            print("has license_file:", 'license_file' in request.data)
+            
+            serializer = RegisterSerializer(data=request.data)
+            if not serializer.is_valid():
+                print("Validation errors:", serializer.errors)
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        print("Validated Data:", serializer.validated_data)
+            print("Validated Data:", serializer.validated_data)
 
-        user = serializer.save()
-        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+            user = serializer.save()
+            print("User created successfully:", user.id)
+            return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            import traceback
+            error_msg = str(e)
+            error_trace = traceback.format_exc()
+            print("=" * 50)
+            print(f"ERROR in UserSignupView.post: {error_msg}")
+            print(error_trace)
+            print("=" * 50)
+            return Response(
+                {"detail": f"회원가입 중 오류가 발생했습니다: {error_msg}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 User = get_user_model() # 사용자 모델을 가져오는 더 안전한 방법
