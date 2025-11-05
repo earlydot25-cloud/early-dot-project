@@ -38,10 +38,21 @@ async function jsonFetch<T>(url: string, init: RequestInit = {}): Promise<T> {
 
   const res = await fetch(url, { ...init, headers, credentials: 'omit' });
   const text = await res.text();
-  const data = text ? JSON.parse(text) : {};
+  
+  // JSON 파싱 안전하게 처리
+  let data: any = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      // JSON 파싱 실패 시 (예: HTML 에러 페이지, "Proxy erro..." 등)
+      console.error('JSON parse error:', text.substring(0, 100));
+      data = { detail: text || `서버 오류 (${res.status})` };
+    }
+  }
 
   if (!res.ok) {
-    const err: any = new Error(`HTTP ${res.status}`);
+    const err: any = new Error(data?.detail || `HTTP ${res.status}`);
     err.status = res.status;
     err.data = data;
     throw err;

@@ -1,0 +1,65 @@
+name: early_dot
+
+services:
+  db:
+    image: mysql:8
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - early_dot_network
+
+  django:
+    build: ./backend
+    container_name: project_django
+    env_file:
+      - .env
+    environment:
+      DJANGO_SETTINGS_MODULE: early_dot.settings
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - fastapi
+    networks:
+      - early_dot_network
+
+  fastapi:
+    build: ./model_api
+    container_name: project_model_api
+    env_file:
+      - .env
+    volumes:
+      - ./model_api:/app
+    ports:
+      - "8001:8001"
+    networks:
+      - early_dot_network
+
+  frontend:
+    build: ./frontend
+    container_name: project_frontend
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - django
+    networks:
+      - early_dot_network
+
+volumes:
+  db_data:
+
+networks:
+  early_dot_network:
+    driver: bridge
