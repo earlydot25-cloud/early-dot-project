@@ -61,6 +61,7 @@ class Photos(models.Model):
     file_name = models.CharField(max_length=100)
 
     body_part = models.CharField(max_length=50)
+    hair = models.CharField(max_length=20)
     capture_date = models.DateTimeField(auto_now_add=True)
     symptoms_itch = models.TextField(blank=True, null=True)
     symptoms_pain = models.TextField(blank=True, null=True)
