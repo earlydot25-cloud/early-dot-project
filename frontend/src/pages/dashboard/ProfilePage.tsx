@@ -98,6 +98,7 @@ const MyPage: React.FC<MyPageProps> = () => {
         name: formData.name,
         sex: formData.sex,
         age: formData.age ? Number(formData.age) : undefined, // 나이는 숫자로 변환
+        birth_date: formData.birth_date || undefined,
         // birth_date는 백엔드 시리얼라이저에 없으므로 (UserProfileUpdateSerializer),
         // age와 name으로 대체되어 계산되는 경우 제외하고는 제거하는 것이 좋습니다.
         // 백엔드 시리얼라이저(UserProfileUpdateSerializer) 필드에 맞게 birth_date 제거
@@ -387,15 +388,22 @@ const PatientSpecificFields: React.FC = () => {
                 <>
                   <button
                     type="button"
-
-                    onClick={() => setShowDeleteModal(true)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowDeleteModal(true);
+                    }}
                     className="px-6 py-2 border border-red-500 text-red-500 rounded-lg hover:bg-red-50 transition duration-150 text-sm whitespace-nowrap"
                   >
                     회원 탈퇴
                   </button>
                   <button
                     type="button"
-                    onClick={() => setIsEditing(true)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsEditing(true);
+                    }}
                     className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition duration-150 text-sm whitespace-nowrap"
                   >
                     정보 수정

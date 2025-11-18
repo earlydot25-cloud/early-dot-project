@@ -49,6 +49,7 @@ const SavePhotoPage: React.FC = () => {
 
   const [folderName, setFolderName] = useState<string>('');
   const [fileName, setFileName] = useState<string>('');
+  const [fileNameTouched, setFileNameTouched] = useState<boolean>(false);
   const [itch, setItch] = useState<typeof SEVERITY[number]>('없음');
   const [pain, setPain] = useState<typeof SEVERITY[number]>('없음');
   const [color, setColor] = useState<typeof SEVERITY[number]>('없음');
@@ -113,8 +114,14 @@ const SavePhotoPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!fileName && suggestedName) setFileName(suggestedName);
-  }, [fileName, suggestedName]);
+    setFileNameTouched(false);
+    if (suggestedName) setFileName(suggestedName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, previewUrl]);
+
+  useEffect(() => {
+    if (!fileNameTouched && suggestedName) setFileName(suggestedName);
+  }, [suggestedName, fileNameTouched]);
 
   const handleRetake = () => {
     navigate('/diagnosis/body-select', { replace: false, state: { bodyPart } });
@@ -123,6 +130,7 @@ const SavePhotoPage: React.FC = () => {
   const handleRefreshFields = () => {
     setFolderName('');
     setFileName(suggestedName);
+    setFileNameTouched(false);
     setItch('없음');
     setPain('없음');
     setColor('없음');
@@ -170,22 +178,23 @@ const SavePhotoPage: React.FC = () => {
 
     const fd = new FormData();
     
-    // 파일명에 확장자가 있는지 확인하고, 없으면 파일의 원래 확장자 사용
-    let finalFileName = fileName;
-    if (!fileName.includes('.')) {
-      // 파일명에 확장자가 없으면 원본 파일의 확장자 추가
+    let finalFileName = fileName.trim();
+    if (!finalFileName) {
+      finalFileName = suggestedName || `capture_${Date.now()}.jpg`;
+    }
+    if (!finalFileName.includes('.')) {
       const originalName = finalFile.name;
       const extension = originalName.includes('.') 
         ? originalName.split('.').pop() 
-        : 'jpg'; // 기본값 jpg
-      finalFileName = `${fileName}.${extension}`;
+        : 'jpg';
+      finalFileName = `${finalFileName}.${extension}`;
     }
     
     // 백엔드 모델의 실제 필드명인 'upload_storage_path' 사용
     // FormData.append의 세 번째 인자는 파일명이므로 확장자를 포함한 파일명 사용
     fd.append('upload_storage_path', finalFile, finalFileName);
     fd.append('folder_name', finalFolderName);
-    fd.append('file_name', fileName);
+    fd.append('file_name', finalFileName);
     fd.append('body_part', bodyPart);
     fd.append('symptoms_itch', itch);
     fd.append('symptoms_pain', pain);
@@ -308,10 +317,14 @@ const SavePhotoPage: React.FC = () => {
             <input
               type="text"
               value={fileName}
-              onChange={(e) => setFileName(e.target.value)}
+              onChange={(e) => {
+                setFileNameTouched(true);
+                setFileName(e.target.value);
+              }}
               placeholder="예) capture_123.jpg"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
             />
+            <p className="text-xs text-gray-500 mt-1">확장자를 포함해 입력하거나 비워두면 자동 생성됩니다.</p>
           </div>
 
           <div>

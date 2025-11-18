@@ -13,8 +13,6 @@ export interface AssignedDoctorInfo {
   family_history?: string;
   is_doctor?: boolean;
   date_joined?: string;
-  // 수정 가능한 공통 필드 (Models에 없지만 UI에 필요한 필드)
-  
 }
 
 // 2. 의사 정보 타입 (DoctorProfile)

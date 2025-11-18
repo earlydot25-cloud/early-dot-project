@@ -314,6 +314,7 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
     sex = serializers.CharField(required=False, allow_blank=True)
     age = serializers.IntegerField(required=False)
     family_history = serializers.CharField(required=False, allow_blank=True)
+    birth_date = serializers.DateField(required=False, allow_null=True, format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
 
     # 의사 전용 필드 (Doctors 모델 업데이트용)
     specialty = serializers.CharField(write_only=True, required=False, allow_blank=True)
@@ -324,7 +325,7 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['name', 'sex', 'age', 'family_history', 'specialty', 'hospital', 'assigned_doctor_name']
+        fields = ['name', 'sex', 'age', 'birth_date', 'family_history', 'specialty', 'hospital', 'assigned_doctor_name']
 
     def update(self, instance: User, validated_data):
         # 1. User 모델의 일반 필드 업데이트
@@ -332,6 +333,7 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
         instance.sex = validated_data.get('sex', instance.sex)
         instance.age = validated_data.get('age', instance.age)
         instance.family_history = validated_data.get('family_history', instance.family_history)
+        instance.birth_date = validated_data.get('birth_date', instance.birth_date)
 
         # 2. 의사 전용 필드 업데이트 (Doctors 모델)
         if instance.is_doctor and hasattr(instance, 'doctor_profile'):

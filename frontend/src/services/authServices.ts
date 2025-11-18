@@ -216,4 +216,9 @@ export function clearAuth() {
   localStorage.removeItem(STORAGE.access);
   localStorage.removeItem(STORAGE.refresh);
   localStorage.removeItem(STORAGE.user);
+  localStorage.removeItem('userName');
+  localStorage.removeItem('isDoctor');
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('auth:update'));
+  }
 }

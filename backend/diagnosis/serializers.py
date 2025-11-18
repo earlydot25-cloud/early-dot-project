@@ -50,6 +50,21 @@ class PhotoUploadSerializer(serializers.ModelSerializer):
             return int(value)
         except (ValueError, TypeError):
             raise serializers.ValidationError("meta_age는 정수여야 합니다.")
+    
+    def to_representation(self, instance):
+        """응답에서 이미지 URL을 절대 경로로 변환"""
+        representation = super().to_representation(instance)
+        if instance.upload_storage_path:
+            url = instance.upload_storage_path.url
+            if url.startswith('http'):
+                representation['upload_storage_path'] = url
+            else:
+                request = self.context.get('request')
+                if request:
+                    representation['upload_storage_path'] = request.build_absolute_uri(url)
+                else:
+                    representation['upload_storage_path'] = f"http://127.0.0.1:8000{url}"
+        return representation
 
 
 class PhotoDetailSerializer(serializers.ModelSerializer):

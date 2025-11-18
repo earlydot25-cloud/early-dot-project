@@ -77,7 +77,8 @@ class PhotoUploadView(APIView):
 
         # request.data는 프론트에서 보낸 FormData 객체를 담고 있습니다.
         # many=False (기본값) : 단일 객체를 생성합니다.
-        serializer = PhotoUploadSerializer(data=request.data)
+        # request context를 전달하여 이미지 URL을 절대 경로로 변환할 수 있도록 함
+        serializer = PhotoUploadSerializer(data=request.data, context={'request': request})
 
         if not serializer.is_valid():
             # 유효성 검사 실패 시 (예: 필수 필드가 누락된 경우)
@@ -97,6 +98,7 @@ class PhotoUploadView(APIView):
         try:
             photo_instance = serializer.save(user=request.user)
             # 저장 성공 후 ID를 포함한 응답 반환 (프론트엔드에서 결과 페이지로 이동하기 위해 필요)
+            # serializer.data는 to_representation을 통해 이미지 URL이 절대 경로로 변환됨
             return Response(
                 {
                     "id": photo_instance.id,
