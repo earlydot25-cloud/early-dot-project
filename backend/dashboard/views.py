@@ -548,7 +548,7 @@ class PatientsListView(APIView):
             followup_check__in=request.user.doctor_profile.followupcheck_set.filter(followup_query)
         ).select_related('photo__user').distinct()
         
-        # 환자별로 그룹핑하고 최신 소견 가져오기
+        # 환자별로 그룹핑하고 최신 소견 및 최고 위험도 가져오기
         patients_dict = {}
         for result in results:
             patient = result.photo.user
@@ -562,7 +562,37 @@ class PatientsListView(APIView):
                     'name': patient.name or patient.email,
                     'latest_note': latest_followup.doctor_note if latest_followup and latest_followup.doctor_note else None,
                     'has_attention': latest_followup and latest_followup.doctor_risk_level == '즉시 주의' if latest_followup else False,
+                    'doctor_risk_level': latest_followup.doctor_risk_level if latest_followup and latest_followup.doctor_risk_level else None,
+                    'needs_review': latest_followup is None or (latest_followup.doctor_risk_level == '소견 대기' if latest_followup else True),
                 }
+            else:
+                # 환자별 최고 위험도 계산 (의사 소견 우선)
+                existing_patient = patients_dict[patient_id]
+                current_followup = result.followup_check
+                current_risk = current_followup.doctor_risk_level if current_followup and current_followup.doctor_risk_level and current_followup.doctor_risk_level != '소견 대기' else None
+                
+                # 위험도 우선순위
+                risk_priority = {
+                    '즉시 주의': 5,
+                    '경과 관찰': 4,
+                    '추가검사 필요': 3,
+                    '정상': 2,
+                    '치료 완료': 1,
+                }
+                
+                # 최고 위험도 업데이트
+                if current_risk:
+                    existing_risk = existing_patient.get('doctor_risk_level')
+                    existing_priority = risk_priority.get(existing_risk, 0) if existing_risk else 0
+                    current_priority = risk_priority.get(current_risk, 0)
+                    
+                    if current_priority > existing_priority:
+                        existing_patient['doctor_risk_level'] = current_risk
+                        existing_patient['has_attention'] = current_risk == '즉시 주의'
+                
+                # 소견 미작성 여부 업데이트
+                if current_followup is None or (current_followup.doctor_risk_level == '소견 대기' if current_followup else True):
+                    existing_patient['needs_review'] = True
         
         patients_list = list(patients_dict.values())
         
