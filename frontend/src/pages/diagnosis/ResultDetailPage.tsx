@@ -222,7 +222,8 @@ const ResultDetailPage: React.FC = () => {
         <h3 className="text-base font-bold mb-3 text-gray-900">AI 예측 진단 이미지 분석</h3>
 
         {/* 탭 버튼 (GradCAM이 있을 때만 표시) */}
-        {data.disease && gradcamUrl && (
+        {/* {data.disease && gradcamUrl && (  */} 
+        {data.disease && (  
           <div className="flex justify-around mb-3 border-b border-gray-200">
             <button
               className={`text-sm font-semibold pb-2 flex-1 ${
