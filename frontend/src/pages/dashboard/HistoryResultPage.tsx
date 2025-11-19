@@ -1,4 +1,3 @@
-// frontend/src/pages/dashboard/HistoryResultPage.tsx
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
@@ -57,29 +56,28 @@ interface ResultDetail {
   user: UserInfo;
 }
 
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000';
+
+const normalizeHost = (url: string) =>
+  url.replace(/^http:\/\/(?:django|project_django)(?::\d+)?/i, API_BASE_URL);
+
 // ✅ 경로 보정 함수
 const resolveMediaUrl = (rawPath?: string) => {
   if (!rawPath) return '';
-  const base = 'http://127.0.0.1:8000';
   let path = rawPath.replace(/\\/g, '/');
 
-  // 이미 절대 URL이면 그대로
-  if (/^https?:\/\//i.test(path)) return path;
+  if (/^https?:\/\//i.test(path)) return normalizeHost(path);
+  if (path.startsWith('/')) return `${API_BASE_URL}${path}`;
+  if (path.startsWith('media/')) return `${API_BASE_URL}/${path}`;
 
-  // 이미 /media/ 로 시작하면 base만 붙임
-  if (path.startsWith('/media/')) return `${base}${path}`;
-  if (path.startsWith('media/')) return `${base}/${path}`;
-
-  // /media/가 포함되어 있으면 base만 추가
   if (path.includes('/media/')) {
     const parts = path.split('/media/');
     if (parts.length > 1) {
-      return `${base}/media/${parts[parts.length - 1]}`;
+      return `${API_BASE_URL}/media/${parts[parts.length - 1]}`;
     }
   }
 
-  // 나머지는 /media/ 접두사 붙여서 반환
-  return `${base}/media/${path}`;
+  return `${API_BASE_URL}/media/${path}`;
 };
 
 // ------------------- Component -------------------
@@ -145,8 +143,9 @@ const HistoryResultPage: React.FC = () => {
   const gradcamUrl = data.grad_cam_path ? resolveMediaUrl(data.grad_cam_path) : '';
 
   // ✅ 위험도 색상 스타일
-  const hasDoctorNote = data.followup_check && 
-    data.followup_check.doctor_risk_level && 
+  const hasDoctorNote =
+    data.followup_check &&
+    data.followup_check.doctor_risk_level &&
     data.followup_check.doctor_risk_level !== '소견 대기';
   const finalRiskLevel = hasDoctorNote && data.followup_check
     ? data.followup_check.doctor_risk_level
@@ -200,9 +199,7 @@ const HistoryResultPage: React.FC = () => {
           <div className="flex justify-around mb-3 border-b border-gray-200">
             <button
               className={`text-xs font-semibold pb-2 ${
-                !showGradCam
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-500'
+                !showGradCam ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'
               }`}
               onClick={() => setShowGradCam(false)}
             >
@@ -210,9 +207,7 @@ const HistoryResultPage: React.FC = () => {
             </button>
             <button
               className={`text-xs font-semibold pb-2 ${
-                showGradCam
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-500'
+                showGradCam ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'
               }`}
               onClick={() => setShowGradCam(true)}
             >
@@ -228,7 +223,8 @@ const HistoryResultPage: React.FC = () => {
             alt={showGradCam ? 'GradCAM' : 'Original'}
             className="w-full h-auto max-h-96 object-contain"
             onError={(e) => {
-              (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em"%3E이미지 없음%3C/text%3E%3C/svg%3E';
+              (e.target as HTMLImageElement).src =
+                'data:image/svg+xml,%3Csvg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"100\"%3E%3Ctext x=\"50%25\" y=\"50%25\" text-anchor=\"middle\" dy=\".3em\"%3E이미지 없음%3C/text%3E%3C/svg%3E';
             }}
           />
           <p className="text-gray-500 text-xs mt-2 pb-1">
@@ -240,14 +236,16 @@ const HistoryResultPage: React.FC = () => {
       {/* 질환명 및 위험도 */}
       {data.disease && (
         <div className="bg-white p-4 rounded-xl shadow-sm mb-4">
-          <p className="text-xs text-blue-600 font-semibold mb-1">
-            AI 예측 진단명
-          </p>
+          <p className="text-xs text-blue-600 font-semibold mb-1">AI 예측 진단명</p>
           <p className="font-bold text-lg mb-2">
             {data.disease.name_en} ({data.disease.name_ko})
           </p>
           <div className="flex items-center gap-2">
-            <RiskLevelIcon riskLevel={finalRiskLevel} source={riskSource as 'AI' | '의사' | '대기'} size={20} />
+            <RiskLevelIcon
+              riskLevel={finalRiskLevel}
+              source={riskSource as 'AI' | '의사' | '대기'}
+              size={20}
+            />
             <p className={`text-xs px-2 py-1 rounded border ${riskColor}`}>
               {riskSource} 위험도: {finalRiskLevel}
             </p>
@@ -258,9 +256,7 @@ const HistoryResultPage: React.FC = () => {
       {/* 분석 대기 상태 (Results가 없을 때) */}
       {!data.disease && (
         <div className="bg-white p-4 rounded-xl shadow-sm mb-4">
-          <p className="text-xs text-gray-600 font-semibold mb-1">
-            진단 상태
-          </p>
+          <p className="text-xs text-gray-600 font-semibold mb-1">진단 상태</p>
           <div className="flex items-center gap-2">
             <RiskLevelIcon riskLevel="분석 대기" source="대기" size={20} />
             <p className="text-sm text-gray-700">
@@ -359,3 +355,4 @@ const HistoryResultPage: React.FC = () => {
 };
 
 export default HistoryResultPage;
+

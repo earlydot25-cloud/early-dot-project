@@ -3,6 +3,8 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000';
+
 interface Folder {
   folder_name: string;
   body_part: string;
@@ -33,15 +35,17 @@ const HistoryPage: React.FC = () => {
     const fetchFolders = async () => {
       try {
         const token = localStorage.getItem('accessToken');
-        const response = await axios.get<Folder[]>('/api/dashboard/folders/', {
+        const response = await axios.get<Folder[]>(`${API_BASE_URL}/api/dashboard/folders/`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
+        console.log('[HistoryPage] 폴더 목록 응답:', response.data);
         setAllFolders(response.data); // 원본 데이터 저장
         applyFiltersAndSort(response.data); // 필터 및 정렬 적용
       } catch (err: any) {
         console.error('Failed to fetch folders:', err);
+        console.error('Error details:', err.response?.data || err.message);
         setFolders([]);
         setAllFolders([]);
       } finally {

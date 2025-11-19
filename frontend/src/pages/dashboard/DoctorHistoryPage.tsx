@@ -4,6 +4,8 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import RiskLevelIcon from '../../components/RiskLevelIcon';
 
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000';
+
 interface Patient {
   id: number;
   name: string;
@@ -50,14 +52,16 @@ const DoctorHistoryPage: React.FC = () => {
     const fetchPatients = async () => {
       try {
         const token = localStorage.getItem('accessToken');
-        const response = await axios.get<Patient[]>('/api/dashboard/patients/', {
+        const response = await axios.get<Patient[]>(`${API_BASE_URL}/api/dashboard/patients/`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
+        console.log('[DoctorHistoryPage] 환자 목록 응답:', response.data);
         setPatients(response.data);
       } catch (err: any) {
         console.error('Failed to fetch patients:', err);
+        console.error('Error details:', err.response?.data || err.message);
         setPatients([]);
       } finally {
         setIsLoading(false);
@@ -77,16 +81,19 @@ const DoctorHistoryPage: React.FC = () => {
     const fetchFolders = async () => {
       try {
         const token = localStorage.getItem('accessToken');
-        const response = await axios.get<Folder[]>('/api/dashboard/folders/', {
+        console.log('[DoctorHistoryPage] 폴더 목록 요청: patient_id=', selectedPatientId);
+        const response = await axios.get<Folder[]>(`${API_BASE_URL}/api/dashboard/folders/`, {
           params: { user: selectedPatientId },
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
+        console.log('[DoctorHistoryPage] 폴더 목록 응답:', response.data);
         setFolders(response.data);
         setViewMode('folders');
       } catch (err: any) {
         console.error('Failed to fetch folders:', err);
+        console.error('Error details:', err.response?.data || err.message);
         setFolders([]);
       }
     };
@@ -100,16 +107,19 @@ const DoctorHistoryPage: React.FC = () => {
 
     try {
       const token = localStorage.getItem('accessToken');
-      const response = await axios.get<RecordItem[]>('/api/dashboard/records/', {
+      console.log('[DoctorHistoryPage] 진단 기록 요청: patient_id=', selectedPatientId, 'folder=', folderName);
+      const response = await axios.get<RecordItem[]>(`${API_BASE_URL}/api/dashboard/records/`, {
         params: { user: selectedPatientId, folder: folderName },
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
+      console.log('[DoctorHistoryPage] 진단 기록 응답:', response.data);
       setRecords(response.data);
       setViewMode('records');
     } catch (err: any) {
       console.error('Failed to fetch records:', err);
+      console.error('Error details:', err.response?.data || err.message);
       setRecords([]);
     }
   };

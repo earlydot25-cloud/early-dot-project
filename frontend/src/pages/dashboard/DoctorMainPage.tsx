@@ -346,7 +346,8 @@ const DoctorMainPage: React.FC = () => {
 
   // 진단 내역 전체보기 버튼 클릭 핸들러
   const handleViewAllHistory = () => {
-    navigate('/api/dashboard/patients');
+    navigate('/dashboard/doctor/history');
+    
   };
 
   return (

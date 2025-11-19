@@ -58,24 +58,28 @@ interface ResultDetail {
   user: UserInfo;
 }
 
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000';
+
+const normalizeHost = (url: string) =>
+  url.replace(/^http:\/\/(?:django|project_django)(?::\d+)?/i, API_BASE_URL);
+
 // ✅ 경로 보정 함수
 const resolveMediaUrl = (rawPath?: string) => {
   if (!rawPath) return '';
-  const base = 'http://127.0.0.1:8000';
   let path = rawPath.replace(/\\/g, '/');
 
-  if (/^https?:\/\//i.test(path)) return path;
-  if (path.startsWith('/media/')) return `${base}${path}`;
-  if (path.startsWith('media/')) return `${base}/${path}`;
+  if (/^https?:\/\//i.test(path)) return normalizeHost(path);
+  if (path.startsWith('/')) return `${API_BASE_URL}${path}`;
+  if (path.startsWith('media/')) return `${API_BASE_URL}/${path}`;
 
   if (path.includes('/media/')) {
     const parts = path.split('/media/');
     if (parts.length > 1) {
-      return `${base}/media/${parts[parts.length - 1]}`;
+      return `${API_BASE_URL}/media/${parts[parts.length - 1]}`;
     }
   }
 
-  return `${base}/media/${path}`;
+  return `${API_BASE_URL}/media/${path}`;
 };
 
 // 증상 심각도 순서 (심한 것부터)
@@ -114,6 +118,10 @@ const ResultDetailPage: React.FC = () => {
             Authorization: `Bearer ${token}`,
           },
         });
+        console.log('[ResultDetailPage] 받은 데이터:', response.data);
+        console.log('[ResultDetailPage] disease:', response.data.disease);
+        console.log('[ResultDetailPage] class_probs:', response.data.class_probs);
+        console.log('[ResultDetailPage] risk_level:', response.data.risk_level);
         setData(response.data);
       } catch (err: any) {
         console.error('Failed to fetch result detail:', err);
@@ -292,6 +300,54 @@ const ResultDetailPage: React.FC = () => {
             <RiskLevelIcon riskLevel="분석 대기" source="대기" size={24} />
             <p className="text-sm text-gray-700">
               AI 분석이 진행 중입니다. 잠시 후 다시 확인해주세요.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* AI 진단 결과 */}
+      {data.disease && data.class_probs && (
+        <div className="bg-white p-4 rounded-xl shadow-sm mb-4">
+          <p className="text-sm font-semibold mb-3 text-gray-900">AI 진단 결과</p>
+          
+          {/* 예측된 질병 및 위험도 */}
+          <div className="mb-3">
+            <div className="flex items-center gap-2 mb-2">
+              <RiskLevelIcon riskLevel={data.risk_level} source="AI" size={20} />
+              <p className="text-sm font-semibold text-gray-900">
+                예측 질병: {data.disease.name_ko}
+              </p>
+            </div>
+            <p className="text-xs text-gray-600 mb-2">
+              위험도: <span className="font-semibold">{data.risk_level}</span>
+            </p>
+          </div>
+
+          {/* 각 질병별 확률 */}
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-xs font-semibold text-gray-700 mb-2">질병별 예측 확률</p>
+            <div className="space-y-1.5">
+              {Object.entries(data.class_probs)
+                .sort(([, a], [, b]) => (b as number) - (a as number))
+                .map(([disease, prob]) => (
+                  <div key={disease} className="flex justify-between items-center">
+                    <span className="text-xs text-gray-700">{disease}</span>
+                    <span className="text-xs font-semibold text-gray-900">
+                      {((prob as number) * 100).toFixed(2)}%
+                    </span>
+                  </div>
+                ))}
+            </div>
+          </div>
+
+          {/* 요약 메시지 */}
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <p className="text-xs text-gray-700 leading-relaxed">
+              <span className="font-semibold">{Object.entries(data.class_probs)
+                .sort(([, a], [, b]) => (b as number) - (a as number))[0][0]}</span>
+              {' '}가 {((Object.entries(data.class_probs)
+                .sort(([, a], [, b]) => (b as number) - (a as number))[0][1] as number) * 100).toFixed(1)}% 확률로 예측되며,{' '}
+              <span className="font-semibold">{data.risk_level}</span>으로 위험도가 예상됩니다.
             </p>
           </div>
         </div>

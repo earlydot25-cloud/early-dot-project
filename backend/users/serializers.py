@@ -229,10 +229,15 @@ class PatientListItemSerializer(serializers.ModelSerializer):
         fields = ['id', 'email', 'name', 'birth_date', 'age', 'sex', 'last_diagnosis_date']
 
     def get_last_diagnosis_date(self, obj: User):
-        # Results 모델에 user(FK) 필드가 있고, created_at/date 필드가 있다고 가정
-        last_result = Results.objects.filter(user=obj).order_by('-created_at').first()
-        if last_result:
-            return last_result.created_at.date()  # 날짜만 반환
+        # Results 모델은 photo를 통해 user에 접근 (photo__user)
+        # analysis_date 필드를 사용 (created_at 대신)
+        try:
+            last_result = Results.objects.filter(photo__user=obj).order_by('-analysis_date').first()
+            if last_result:
+                return last_result.analysis_date.date() if last_result.analysis_date else None
+        except Exception as e:
+            print(f"Error in get_last_diagnosis_date: {e}")
+            return None
         return None
 
 

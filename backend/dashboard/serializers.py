@@ -140,6 +140,12 @@ class DiseaseDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = DiseaseInfo
         fields = ['name_ko', 'name_en', 'classification', 'description', 'recommendation']
+    
+    def to_representation(self, instance):
+        """DiseaseInfo 인스턴스를 직렬화"""
+        if instance is None:
+            return None
+        return super().to_representation(instance)
 
 
 # 1. FollowUpCheck (의사 소견) 시리얼라이저
@@ -154,7 +160,7 @@ class ResultDetailSerializer(serializers.ModelSerializer):
     """상세 페이지에서 사용하는 Result 시리얼라이저"""
     
     photo = PhotoDetailSerializer(read_only=True)
-    disease = DiseaseDetailSerializer(read_only=True)
+    disease = DiseaseDetailSerializer(read_only=True, allow_null=True)
     followup_check = FollowUpCheckSerializer(read_only=True, required=False)
     user = serializers.SerializerMethodField()
     grad_cam_path = serializers.SerializerMethodField()
@@ -165,6 +171,18 @@ class ResultDetailSerializer(serializers.ModelSerializer):
             'id', 'photo', 'disease', 'analysis_date', 'risk_level', 'class_probs',
             'grad_cam_path', 'vlm_analysis_text', 'followup_check', 'user'
         ]
+    
+    def to_representation(self, instance):
+        """Results 인스턴스를 직렬화할 때 disease가 None이 아닌지 확인"""
+        data = super().to_representation(instance)
+        
+        # 디버깅: disease 필드 확인
+        if hasattr(instance, 'disease') and instance.disease:
+            print(f"[ResultDetailSerializer] Disease 존재: {instance.disease.name_ko} (ID: {instance.disease.id})")
+        else:
+            print(f"[ResultDetailSerializer] ⚠️ Disease가 None입니다!")
+        
+        return data
     
     def get_user(self, obj):
         """환자 정보 가져오기"""
