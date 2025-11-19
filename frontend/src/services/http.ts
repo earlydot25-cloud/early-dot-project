@@ -28,6 +28,16 @@ export const STORAGE = {
   user: 'user',
 } as const;
 
+function broadcastLogout() {
+  try {
+    localStorage.removeItem('userName');
+    localStorage.removeItem('isDoctor');
+    window.dispatchEvent(new Event('auth:update'));
+  } catch (e) {
+    // noop
+  }
+}
+
 function authHeader(): Record<string, string> {
   const token = localStorage.getItem(STORAGE.access);
   // 토큰이 있을 때만 Authorization 헤더를 반환
@@ -81,6 +91,7 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
       localStorage.removeItem(STORAGE.access);
       localStorage.removeItem(STORAGE.refresh);
       localStorage.removeItem(STORAGE.user);
+      broadcastLogout();
       throw new Error(data?.detail || '인증이 만료되었습니다. 다시 로그인 해주세요.');
     }
   }

@@ -1,45 +1,3 @@
-# # backend/diagnosis/views.py
-#
-# from rest_framework.views import APIView
-# from rest_framework.response import Response
-# from rest_framework import status
-# from rest_framework.permissions import IsAuthenticated, AllowAny
-#
-#
-# # --------------------------------------------------------
-# # 1. 이미지 업로드 뷰 (POST: /api/diag/upload/)
-# # --------------------------------------------------------
-# class ImageUploadView(APIView):
-#     # 진단 시작은 로그인이 필요함
-#     permission_classes = [IsAuthenticated]
-#
-#     def post(self, request):
-#         # 💡 현재는 로직 없이 pass 후, FE가 요청을 보냈을 때 최소 응답 반환
-#         pass  # 실제 구현은 팀원에게 위임 (NCP 저장 및 DB 기록)
-#
-#         # 임시 응답: 202 Accepted (FE가 성공을 기대하며, 다음 단계인 predict로 넘어갈 수 있게 ID 반환)
-#         return Response(
-#             {'message': '이미지 업로드 API 경로 확인됨 (로직 구현 필요)', 'image_id': 'MOCK-IMG-001'},
-#             status=status.HTTP_202_ACCEPTED
-#         )
-#
-#
-# # --------------------------------------------------------
-# # 2. 모델 예측 뷰 (POST: /api/diag/predict/)
-# # --------------------------------------------------------
-# class ModelPredictionView(APIView):
-#     # 모델 예측 요청도 로그인이 필요함
-#     permission_classes = [IsAuthenticated]
-#
-#     def post(self, request):
-#         # 💡 현재는 로직 없이 pass 후, FE가 요청을 보냈을 때 최소 응답 반환
-#         pass  # 실제 구현은 팀원에게 위임 (FastAPI 호출 및 결과 저장)
-#
-#         # 임시 응답: 200 OK (FE가 진단 결과를 기대함)
-#         return Response(
-#             {'message': '모델 예측 API 경로 확인됨 (로직 구현 필요)', 'result': 'MOCK-POSITIVE', 'confidence': 0.95},
-#             status=status.HTTP_200_OK
-#         )
 
 # backend/diagnosis/views.py
 
@@ -80,7 +38,8 @@ class PhotoUploadView(APIView):
 
         # request.data는 프론트에서 보낸 FormData 객체를 담고 있습니다.
         # many=False (기본값) : 단일 객체를 생성합니다.
-        serializer = PhotoUploadSerializer(data=request.data)
+        # request context를 전달하여 이미지 URL을 절대 경로로 변환할 수 있도록 함
+        serializer = PhotoUploadSerializer(data=request.data, context={'request': request})
 
         if not serializer.is_valid():
             # 유효성 검사 실패 시 (예: 필수 필드가 누락된 경우)
@@ -271,13 +230,14 @@ class PhotoUploadView(APIView):
                     traceback.print_exc()
             
             # 저장 성공 후 ID를 포함한 응답 반환 (프론트엔드에서 결과 페이지로 이동하기 위해 필요)
-            # AI 예측이 성공하여 Results가 생성되었으면 result.id를 반환, 아니면 photo.id를 반환
+            # serializer.data는 to_representation을 통해 이미지 URL이 절대 경로로 변환됨
+            # AI 예측이 성공하여 Results가 생성되었다면 result.id를, 아니라면 photo.id를 반환
+            result_id = serializer.data.get('result_id')
             response_id = result_id if result_id else photo_instance.id
+
             return Response(
                 {
                     "id": response_id,
-                    "photo_id": photo_instance.id,  # Photos ID도 함께 반환 (참고용)
-                    "result_id": result_id,  # Results ID (있는 경우)
                     "message": "Photo uploaded successfully",
                     **serializer.data
                 },

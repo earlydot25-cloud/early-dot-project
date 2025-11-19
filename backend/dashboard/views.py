@@ -21,25 +21,17 @@ class FoldersListView(APIView):
         # 쿼리 파라미터에서 user ID 확인 (의사용일 경우)
         user_id = request.query_params.get('user')
         
-        print(f"[FoldersListView] 요청 파라미터 user_id: {user_id}")
-        print(f"[FoldersListView] 현재 로그인한 사용자: {request.user.id} ({request.user.email})")
-        
         # user_id가 제공되면 해당 사용자, 없으면 현재 로그인한 사용자
         if user_id:
             try:
                 target_user = Users.objects.get(id=user_id)
-                print(f"[FoldersListView] 파라미터로 지정된 사용자: {target_user.id} ({target_user.email})")
             except Users.DoesNotExist:
-                print(f"[FoldersListView] ❌ 사용자를 찾을 수 없음: user_id={user_id}")
                 return Response(
                     {'error': 'User not found'},
                     status=status.HTTP_404_NOT_FOUND
                 )
         else:
             target_user = request.user
-            print(f"[FoldersListView] 파라미터 없음, 현재 로그인한 사용자 사용")
-        
-        print(f"[FoldersListView] 최종 대상 사용자: {target_user.id} ({target_user.email})")
         
         # 해당 사용자의 Photos에서 folder_name으로 그룹핑
         # 각 폴더별로 최신 capture_date를 가진 사진 정보 반환
@@ -47,103 +39,67 @@ class FoldersListView(APIView):
             latest_date=Max('capture_date')
         ).order_by('-latest_date')
         
-        print(f"[FoldersListView] 발견된 폴더 수: {folders_data.count()}")
-        for folder in folders_data:
-            print(f"[FoldersListView] 폴더: {folder['folder_name']}, 최신 날짜: {folder['latest_date']}")
-        
         # 각 폴더의 상세 정보 조회
         result = []
-        try:
-            for folder in folders_data:
-                folder_name = folder.get('folder_name')
-                if not folder_name:
-                    print(f"[FoldersListView] 경고: folder_name이 없는 폴더 건너뜀")
-                    continue
+        for folder in folders_data:
+            # 해당 폴더의 가장 최근 사진 정보 가져오기
+            latest_photo = Photos.objects.filter(
+                user=target_user,
+                folder_name=folder['folder_name']
+            ).order_by('-capture_date').first()
+            
+            if latest_photo:
+                # 이미지 URL 생성 (절대 경로)
+                image_url = ''
+                if latest_photo.upload_storage_path:
+                    url = latest_photo.upload_storage_path.url
+                    if url.startswith('http'):
+                        image_url = url
+                    else:
+                        image_url = f"http://127.0.0.1:8000{url}"
                 
-                # 해당 폴더의 가장 최근 사진 정보 가져오기
-                try:
-                    latest_photo = Photos.objects.filter(
-                        user=target_user,
-                        folder_name=folder_name
-                    ).order_by('-capture_date').first()
+                # 해당 폴더의 최고 위험도 계산
+                # 폴더 내 모든 Photos의 Results를 확인하여 최고 위험도 찾기
+                folder_photos = Photos.objects.filter(
+                    user=target_user,
+                    folder_name=folder['folder_name']
+                )
+                folder_results = Results.objects.filter(photo__in=folder_photos).select_related('followup_check')
+                
+                max_risk_level = '낮음'  # 기본값
+                risk_levels_priority = {
+                    '즉시 주의': 5,
+                    '높음': 4,
+                    '경과 관찰': 3,
+                    '보통': 3,
+                    '중간': 2,
+                    '낮음': 1,
+                    '정상': 0,
+                    '분석 대기': -1,
+                }
+                
+                max_priority = -2
+                for result in folder_results:
+                    # 의사 소견 우선, 없으면 AI 위험도
+                    risk = result.followup_check.doctor_risk_level if (
+                        result.followup_check and 
+                        result.followup_check.doctor_risk_level and 
+                        result.followup_check.doctor_risk_level != '소견 대기'
+                    ) else result.risk_level
                     
-                    if not latest_photo:
-                        print(f"[FoldersListView] 경고: 폴더 '{folder_name}'에 사진이 없음")
-                        continue
-                    
-                    # 이미지 URL 생성 (절대 경로)
-                    image_url = ''
-                    try:
-                        if latest_photo.upload_storage_path:
-                            url = latest_photo.upload_storage_path.url
-                            if url.startswith('http'):
-                                image_url = url
-                            else:
-                                image_url = f"http://127.0.0.1:8000{url}"
-                    except Exception as e:
-                        print(f"[FoldersListView] 경고: 이미지 URL 생성 실패 ({folder_name}): {e}")
-                        image_url = ''
-                    
-                    # 해당 폴더의 최고 위험도 계산
-                    # 폴더 내 모든 Photos의 Results를 확인하여 최고 위험도 찾기
-                    max_risk_level = '분석 대기'  # 기본값
-                    try:
-                        folder_photos = Photos.objects.filter(
-                            user=target_user,
-                            folder_name=folder_name
-                        )
-                        folder_results = Results.objects.filter(photo__in=folder_photos).select_related('followup_check')
-                        
-                        risk_levels_priority = {
-                            '즉시 주의': 5,
-                            '높음': 4,
-                            '경과 관찰': 3,
-                            '보통': 3,
-                            '중간': 2,
-                            '낮음': 1,
-                            '정상': 0,
-                            '분석 대기': -1,
-                        }
-                        
-                        max_priority = -2
-                        for result_obj in folder_results:
-                            # 의사 소견 우선, 없으면 AI 위험도
-                            risk = result_obj.followup_check.doctor_risk_level if (
-                                result_obj.followup_check and 
-                                result_obj.followup_check.doctor_risk_level and 
-                                result_obj.followup_check.doctor_risk_level != '소견 대기'
-                            ) else (result_obj.risk_level if result_obj.risk_level else '분석 대기')
-                            
-                            priority = risk_levels_priority.get(risk, 0)
-                            if priority > max_priority:
-                                max_priority = priority
-                                max_risk_level = risk
-                    except Exception as e:
-                        print(f"[FoldersListView] 경고: 위험도 계산 실패 ({folder_name}): {e}")
-                        max_risk_level = '분석 대기'
-                    
-                    result.append({
-                        'folder_name': folder_name,
-                        'body_part': latest_photo.body_part if latest_photo.body_part else '정보 없음',
-                        'capture_date': folder['latest_date'].isoformat() if folder.get('latest_date') else None,
-                        'upload_storage_path': image_url,
-                        'max_risk_level': max_risk_level,
-                    })
-                except Exception as e:
-                    print(f"[FoldersListView] 에러: 폴더 '{folder_name}' 처리 중 오류: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    continue
-        except Exception as e:
-            print(f"[FoldersListView] 치명적 에러: {e}")
-            import traceback
-            traceback.print_exc()
-            return Response(
-                {'error': f'폴더 목록 조회 중 오류가 발생했습니다: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+                    priority = risk_levels_priority.get(risk, 0)
+                    if priority > max_priority:
+                        max_priority = priority
+                        max_risk_level = risk
+                
+                result.append({
+                    'folder_name': folder['folder_name'],
+                    'body_part': latest_photo.body_part,
+                    'capture_date': folder['latest_date'].isoformat() if folder['latest_date'] else None,
+                    'upload_storage_path': image_url,
+                    'max_risk_level': max_risk_level,  # 추가: 최고 위험도
+                })
         
-        print(f"[FoldersListView] 반환할 폴더 수: {len(result)}")
         return Response(result, status=status.HTTP_200_OK)
 
 
@@ -256,11 +212,7 @@ class RecordDetailView(APIView):
                     status=status.HTTP_403_FORBIDDEN
                 )
             
-            print(f"[RecordDetailView] Results 찾음: ID={result.id}, Disease={result.disease}, Disease ID={result.disease.id if result.disease else None}")
             serializer = ResultDetailSerializer(result, context={'request': request})
-            print(f"[RecordDetailView] Serialized data - disease: {serializer.data.get('disease')}")
-            print(f"[RecordDetailView] Serialized data - class_probs: {serializer.data.get('class_probs')}")
-            print(f"[RecordDetailView] Serialized data - risk_level: {serializer.data.get('risk_level')}")
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Results.DoesNotExist:
             # 2. Results가 없으면 Photos로 시도
@@ -570,65 +522,92 @@ class PatientsListView(APIView):
         
         try:
             doctor_record = request.user.doctor_profile
+            doctor_id = doctor_record.uid.id
         except Doctors.DoesNotExist:
             return Response(
                 {'error': 'Doctor profile not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        print(f"[PatientsListView] 의사: {doctor_record.uid.id} ({doctor_record.name})")
-        
-        # 해당 의사가 담당한 Results의 환자 목록 가져오기
         # filter 파라미터로 필터링
         filter_param = request.query_params.get('filter', '전체 보기')
         
-        # FollowUpCheck에서 해당 의사가 담당한 결과 찾기
-        # doctor 필드는 Doctors 모델을 가리키므로, doctor_record를 직접 사용
-        followup_query = Q(doctor=doctor_record)
+        # ✅ 변경: user.doctor가 해당 의사인 모든 환자를 먼저 조회 (Results가 없어도 표시)
+        # 1. 해당 의사에게 할당된 모든 환자 가져오기
+        assigned_patients = Users.objects.filter(
+            doctor=doctor_record,
+            is_doctor=False
+        ).select_related('doctor')
         
-        # 필터에 따라 추가 조건
-        if filter_param != '전체 보기':
-            if filter_param == '주의 환자':
-                followup_query &= Q(doctor_risk_level__in=['즉시 주의', '경과 관찰'])
-            elif filter_param in ['즉시 주의', '경과 관찰', '정상', '추가검사 필요', '치료 완료']:
-                followup_query &= Q(doctor_risk_level=filter_param)
-        
-        # 해당 FollowUpCheck와 연결된 Results 가져오기
-        # FollowUpCheck 모델의 related_name이 'followup_checks_assigned'이므로 이를 사용
-        followup_checks = doctor_record.followup_checks_assigned.filter(followup_query)
-        print(f"[PatientsListView] 발견된 FollowUpCheck 수: {followup_checks.count()}")
-        
-        results = Results.objects.filter(
-            followup_check__in=followup_checks
-        ).select_related('photo__user', 'followup_check').distinct()
-        
-        print(f"[PatientsListView] 발견된 Results 수: {results.count()}")
-        
-        # 환자별로 그룹핑하고 최신 소견 가져오기
+        # 2. 환자별로 Results와 FollowUpCheck 정보 수집
         patients_dict = {}
-        for result in results:
-            patient = result.photo.user
+        for patient in assigned_patients:
             patient_id = patient.id
             
+            # 해당 환자의 모든 Results 가져오기
+            patient_results = Results.objects.filter(
+                photo__user=patient
+            ).select_related('photo__user', 'followup_check').order_by('-analysis_date')
+            
+            # 필터에 따라 Results 필터링 (필터가 '전체 보기'가 아니면)
+            filtered_results = patient_results
+            if filter_param != '전체 보기':
+                if filter_param == '주의 환자':
+                    filtered_results = patient_results.filter(
+                        followup_check__doctor_risk_level__in=['즉시 주의', '경과 관찰']
+                    )
+                elif filter_param in ['즉시 주의', '경과 관찰', '정상', '소견 대기']:
+                    filtered_results = patient_results.filter(
+                        followup_check__doctor_risk_level=filter_param
+                    )
+            
+            # 필터링된 Results가 없으면 해당 환자는 건너뛰기 (필터가 적용된 경우)
+            if filter_param != '전체 보기' and not filtered_results.exists():
+                continue
+            
+            # Results가 없어도 환자는 표시 (필터가 '전체 보기'인 경우)
             if patient_id not in patients_dict:
-                # 최신 FollowUpCheck의 note 가져오기
-                latest_followup = result.followup_check
+                # 최신 Results의 FollowUpCheck 가져오기
+                latest_result = patient_results.first()
+                latest_followup = latest_result.followup_check if latest_result and hasattr(latest_result, 'followup_check') else None
+                
                 patients_dict[patient_id] = {
                     'id': patient.id,
                     'name': patient.name or patient.email,
                     'latest_note': latest_followup.doctor_note if latest_followup and latest_followup.doctor_note else None,
                     'has_attention': latest_followup and latest_followup.doctor_risk_level == '즉시 주의' if latest_followup else False,
+                    'doctor_risk_level': latest_followup.doctor_risk_level if latest_followup and latest_followup.doctor_risk_level else None,
+                    'needs_review': latest_followup is None or (latest_followup.doctor_risk_level == '소견 대기' if latest_followup else True),
                 }
-                print(f"[PatientsListView] 환자 추가: {patient.name or patient.email} (ID: {patient_id})")
-            else:
-                # 이미 존재하는 환자면, 더 최신 FollowUpCheck가 있는지 확인
-                existing_followup = patients_dict[patient_id].get('latest_followup')
-                if latest_followup and (not existing_followup or latest_followup.last_updated_at > existing_followup.last_updated_at):
-                    patients_dict[patient_id]['latest_note'] = latest_followup.doctor_note if latest_followup.doctor_note else None
-                    patients_dict[patient_id]['has_attention'] = latest_followup.doctor_risk_level == '즉시 주의' if latest_followup.doctor_risk_level else False
+            
+            # 환자별 최고 위험도 계산 (여러 Results가 있는 경우)
+            for result in patient_results:
+                current_followup = getattr(result, 'followup_check', None)
+                current_risk = current_followup.doctor_risk_level if current_followup and current_followup.doctor_risk_level and current_followup.doctor_risk_level != '소견 대기' else None
+                
+                # 위험도 우선순위
+                risk_priority = {
+                    '즉시 주의': 3,
+                    '경과 관찰': 2,
+                    '정상': 1,
+                    '소견 대기': 0,
+                }
+                
+                # 최고 위험도 업데이트
+                if current_risk:
+                    existing_risk = patients_dict[patient_id].get('doctor_risk_level')
+                    existing_priority = risk_priority.get(existing_risk, 0) if existing_risk else 0
+                    current_priority = risk_priority.get(current_risk, 0)
+                    
+                    if current_priority > existing_priority:
+                        patients_dict[patient_id]['doctor_risk_level'] = current_risk
+                        patients_dict[patient_id]['has_attention'] = current_risk == '즉시 주의'
+                
+                # 소견 미작성 여부 업데이트
+                if current_followup is None or (current_followup.doctor_risk_level == '소견 대기' if current_followup else True):
+                    patients_dict[patient_id]['needs_review'] = True
         
         patients_list = list(patients_dict.values())
-        print(f"[PatientsListView] 반환할 환자 수: {len(patients_list)}")
         
         return Response(patients_list, status=status.HTTP_200_OK)
 

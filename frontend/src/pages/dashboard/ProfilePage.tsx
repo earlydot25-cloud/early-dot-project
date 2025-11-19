@@ -98,6 +98,7 @@ const MyPage: React.FC<MyPageProps> = () => {
         name: formData.name,
         sex: formData.sex,
         age: formData.age ? Number(formData.age) : undefined, // 나이는 숫자로 변환
+        birth_date: formData.birth_date || undefined,
         // birth_date는 백엔드 시리얼라이저에 없으므로 (UserProfileUpdateSerializer),
         // age와 name으로 대체되어 계산되는 경우 제외하고는 제거하는 것이 좋습니다.
         // 백엔드 시리얼라이저(UserProfileUpdateSerializer) 필드에 맞게 birth_date 제거
@@ -307,20 +308,52 @@ const PatientSpecificFields: React.FC = () => {
         <ul className="space-y-3 text-left">
           {/* profile.patients는 PatientListItem[] | undefined | null 타입입니다. */}
           {profile.patients && profile.patients.length > 0 ? (
-            profile.patients.map((patient: PatientListItem) => (
-              <li key={patient.id} className="flex justify-between items-center p-3 border rounded-lg bg-gray-50 hover:bg-gray-100 transition duration-150">
-                <div className="flex flex-col text-left">
-                  <span className="font-semibold text-gray-800">{patient.name}</span>
-                  <span className="text-sm text-gray-500">ID: {patient.id} | Email: {patient.email}</span>
-                </div>
-                <button
-                  onClick={() => handleRemovePatient(patient.id)}
-                  className="px-3 py-1 bg-red-500 text-white text-sm rounded-md hover:bg-red-600 transition duration-150"
-                >
-                  삭제
-                </button>
-              </li>
-            ))
+            profile.patients.map((patient: PatientListItem) => {
+              // 성별을 간단하게 표시 (남/여)
+              const sexDisplay = patient.sex === '남성' || patient.sex === 'M' ? '남' : 
+                                patient.sex === '여성' || patient.sex === 'F' ? '여' : 
+                                patient.sex || '-';
+              
+              // AI 진단 심각도 표시
+              const aiRiskDisplay = patient.ai_risk_level || '미진단';
+              
+              return (
+                <li key={patient.id} className="flex justify-between items-center p-3 border rounded-lg bg-gray-50 hover:bg-gray-100 transition duration-150">
+                  <div className="flex flex-col text-left flex-1">
+                    <span className="font-semibold text-gray-800">{patient.name}</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-sm text-gray-600">성별: {sexDisplay}</span>
+                      <span className="text-sm text-gray-400">|</span>
+                      <span className={`text-sm ${patient.needs_review ? 'text-yellow-600 font-medium' : 'text-gray-600'}`}>
+                        {patient.needs_review ? '소견 필요' : '소견 완료'}
+                      </span>
+                      <span className="text-sm text-gray-400">|</span>
+                      <span className="text-sm text-gray-600">
+                        AI진단: {aiRiskDisplay}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleRemovePatient(patient.id)}
+                    className="bg-red-500 text-white text-sm rounded-md hover:bg-red-600 transition duration-150 flex-shrink-0 ml-3"
+                    style={{ 
+                      writingMode: 'horizontal-tb',
+                      minWidth: '60px',
+                      minHeight: '38px',
+                      padding: '8px 16px',
+                      whiteSpace: 'nowrap',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      lineHeight: 'normal',
+                      textOrientation: 'mixed'
+                    }}
+                  >
+                    삭제
+                  </button>
+                </li>
+              );
+            })
           ) : (
             <p className="text-gray-500">현재 담당하고 있는 환자가 없습니다.</p>
           )}
@@ -387,15 +420,22 @@ const PatientSpecificFields: React.FC = () => {
                 <>
                   <button
                     type="button"
-
-                    onClick={() => setShowDeleteModal(true)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowDeleteModal(true);
+                    }}
                     className="px-6 py-2 border border-red-500 text-red-500 rounded-lg hover:bg-red-50 transition duration-150 text-sm whitespace-nowrap"
                   >
                     회원 탈퇴
                   </button>
                   <button
                     type="button"
-                    onClick={() => setIsEditing(true)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsEditing(true);
+                    }}
                     className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition duration-150 text-sm whitespace-nowrap"
                   >
                     정보 수정
