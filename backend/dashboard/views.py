@@ -556,7 +556,7 @@ class PatientsListView(APIView):
                     filtered_results = patient_results.filter(
                         followup_check__doctor_risk_level__in=['즉시 주의', '경과 관찰']
                     )
-                elif filter_param in ['즉시 주의', '경과 관찰', '정상', '추가검사 필요', '치료 완료']:
+                elif filter_param in ['즉시 주의', '경과 관찰', '정상', '소견 대기']:
                     filtered_results = patient_results.filter(
                         followup_check__doctor_risk_level=filter_param
                     )
@@ -589,9 +589,8 @@ class PatientsListView(APIView):
                 risk_priority = {
                     '즉시 주의': 5,
                     '경과 관찰': 4,
-                    '추가검사 필요': 3,
                     '정상': 2,
-                    '치료 완료': 1,
+                    '소견 대기': 0,
                 }
                 
                 # 최고 위험도 업데이트

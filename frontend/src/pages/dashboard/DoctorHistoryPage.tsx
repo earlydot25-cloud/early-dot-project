@@ -128,11 +128,10 @@ const DoctorHistoryPage: React.FC = () => {
       
       // 위험도 우선순위
       const riskPriority: Record<string, number> = {
-        '즉시 주의': 5,
-        '경과 관찰': 4,
-        '추가검사 필요': 3,
-        '정상': 2,
-        '치료 완료': 1,
+        '즉시 주의': 3,
+        '경과 관찰': 2,
+        '정상': 1,
+        '소견 대기': 0,
       };
       
       // 소견 미작성 환자: AI 위험도 또는 기본값으로 정렬
@@ -155,11 +154,10 @@ const DoctorHistoryPage: React.FC = () => {
     } else if (sortOption === '의사 위험도순') {
       // 의사가 선정한 위험도 기준으로 정렬 (소견 미작성은 하단)
       const riskPriority: Record<string, number> = {
-        '즉시 주의': 5,
-        '경과 관찰': 4,
-        '추가검사 필요': 3,
-        '정상': 2,
-        '치료 완료': 1,
+        '즉시 주의': 3,
+        '경과 관찰': 2,
+        '정상': 1,
+        '소견 대기': 0,
       };
       
       sorted.sort((a, b) => {

@@ -99,9 +99,13 @@ class PhotoUploadView(APIView):
             photo_instance = serializer.save(user=request.user)
             # 저장 성공 후 ID를 포함한 응답 반환 (프론트엔드에서 결과 페이지로 이동하기 위해 필요)
             # serializer.data는 to_representation을 통해 이미지 URL이 절대 경로로 변환됨
+            # AI 예측이 성공하여 Results가 생성되었다면 result.id를, 아니라면 photo.id를 반환
+            result_id = serializer.data.get('result_id')
+            response_id = result_id if result_id else photo_instance.id
+
             return Response(
                 {
-                    "id": photo_instance.id,
+                    "id": response_id,
                     "message": "Photo uploaded successfully",
                     **serializer.data
                 },
