@@ -8,10 +8,12 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME}
       MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
     ports:
       - "3307:3306"
     volumes:
       - db_data:/var/lib/mysql
+      - ./mysql.conf:/etc/mysql/conf.d/mysql.cnf
     networks:
       - early_dot_network
 
@@ -41,7 +43,7 @@ services:
     volumes:
       - ./model_api:/app
     ports:
-      - "8001:8001"
+    - "8001:8001"
     networks:
       - early_dot_network
 
@@ -50,6 +52,7 @@ services:
     container_name: project_frontend
     volumes:
       - ./frontend:/app
+      - /app/node_modules
     ports:
       - "3000:3000"
     depends_on:
