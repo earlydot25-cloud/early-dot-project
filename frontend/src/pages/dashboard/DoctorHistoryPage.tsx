@@ -128,8 +128,18 @@ const DoctorHistoryPage: React.FC = () => {
   };
 
   // ✅ 환자 정렬 (소견 필요순, 위험도순, 이름순)
+  const normalizedPatients = useMemo(
+    () =>
+      patients.map((patient) => ({
+        ...patient,
+        needs_review:
+          typeof patient.needs_review === 'boolean' ? patient.needs_review : true,
+      })),
+    [patients]
+  );
+
   const sortedPatients = useMemo(() => {
-    let sorted = [...patients];
+    let sorted = [...normalizedPatients];
 
     if (sortOption === '소견 필요순') {
       // 소견 미작성 환자 우선, 그 다음 위험도순
@@ -185,7 +195,7 @@ const DoctorHistoryPage: React.FC = () => {
     }
 
     return sorted;
-  }, [patients, sortOption]);
+  }, [normalizedPatients, sortOption]);
 
   // ✅ 검색 및 필터 적용
   const filteredPatients = useMemo(() => {
@@ -202,10 +212,15 @@ const DoctorHistoryPage: React.FC = () => {
     if (riskFilter !== '전체 보기') {
       filtered = filtered.filter(p => {
         if (riskFilter === '주의 환자') {
-          return p.has_attention || 
-            (p.latest_note && (p.latest_note.includes('즉시 주의') || p.latest_note.includes('주의')));
+          return (
+            p.has_attention ||
+            (p.latest_note && (p.latest_note.includes('즉시 주의') || p.latest_note.includes('주의')))
+          );
         }
-        return p.latest_note?.includes(riskFilter);
+        if (riskFilter === '소견 필요') {
+          return !!p.needs_review;
+        }
+        return (p.doctor_risk_level || '') === riskFilter;
       });
     }
 
@@ -288,6 +303,7 @@ const DoctorHistoryPage: React.FC = () => {
               <option value="전체 보기">전체 보기</option>
               <option value="주의 환자">주의 환자</option>
               <option value="경과 관찰">경과 관찰</option>
+              <option value="소견 필요">소견 필요</option>
               <option value="소견 대기">소견 대기</option>
               <option value="정상">정상</option>
             </select>
@@ -315,10 +331,14 @@ const DoctorHistoryPage: React.FC = () => {
                 className={`flex items-center rounded-xl p-4 shadow-sm hover:shadow-md cursor-pointer transition ${
                   patient.needs_review
                     ? 'bg-yellow-50 border-2 border-yellow-300'
-                    : patient.has_attention || 
+                    : patient.doctor_risk_level === '경과 관찰'
+                    ? 'bg-orange-50 border-2 border-orange-200'
+                    : patient.doctor_risk_level === '정상'
+                    ? 'bg-green-50 border-2 border-green-200'
+                    : patient.has_attention ||
                       (patient.latest_note && (patient.latest_note.includes('즉시 주의') || patient.latest_note.includes('주의')))
                     ? 'bg-red-50 border-2 border-red-200'
-                    : 'bg-white'
+                    : 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
                 }`}
               >
                 <div className="flex-1 text-left leading-tight">

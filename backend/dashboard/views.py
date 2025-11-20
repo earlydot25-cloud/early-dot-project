@@ -6,7 +6,8 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from diagnosis.models import Results, Photos
 from users.models import Users, Doctors
-from .serializers import ResultMainSerializer, DoctorCardSerializer
+from .models import FollowUpCheck
+from .serializers import ResultMainSerializer, DoctorCardSerializer, FollowUpCheckSerializer
 from django.db.models import Q, Max  # 복잡한 쿼리를 위해 필요
 from django.utils import timezone
 
@@ -79,13 +80,13 @@ class FoldersListView(APIView):
                 }
                 
                 max_priority = -2
-                for result in folder_results:
+                for folder_result in folder_results:
                     # 의사 소견 우선, 없으면 AI 위험도
-                    risk = result.followup_check.doctor_risk_level if (
-                        result.followup_check and 
-                        result.followup_check.doctor_risk_level and 
-                        result.followup_check.doctor_risk_level != '소견 대기'
-                    ) else result.risk_level
+                    risk = folder_result.followup_check.doctor_risk_level if (
+                        folder_result.followup_check and 
+                        folder_result.followup_check.doctor_risk_level and 
+                        folder_result.followup_check.doctor_risk_level != '소견 대기'
+                    ) else folder_result.risk_level
                     
                     priority = risk_levels_priority.get(risk, 0)
                     if priority > max_priority:
@@ -607,6 +608,12 @@ class PatientsListView(APIView):
                 if current_followup is None or (current_followup.doctor_risk_level == '소견 대기' if current_followup else True):
                     patients_dict[patient_id]['needs_review'] = True
         
+        # 최종 정리: 소견 필요 여부를 의사 판정 기준으로 다시 계산
+        for patient_data in patients_dict.values():
+            doctor_risk = patient_data.get('doctor_risk_level')
+            # 전문의 판정이 없거나 '소견 대기'이면 항상 소견 필요 상태로 표시
+            patient_data['needs_review'] = doctor_risk is None or doctor_risk == '소견 대기'
+        
         patients_list = list(patients_dict.values())
         
         return Response(patients_list, status=status.HTTP_200_OK)
@@ -723,3 +730,138 @@ class DoctorDashboardMainView(APIView):
             'summary': summary_data,
             'history': history_data
         })
+
+
+# --------------------------------------------------------
+# 전문의 소견 신청 뷰
+# --------------------------------------------------------
+class RequestFollowUpView(APIView):
+    """
+    Results에 대해 전문의 소견을 신청하는 API
+    POST: /api/dashboard/records/<result_id>/request-followup/
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, pk):
+        try:
+            # pk는 Results.id
+            result = Results.objects.select_related('photo__user').get(pk=pk)
+            
+            # 권한 확인: 본인의 결과여야 함
+            if result.photo.user != request.user:
+                return Response(
+                    {'error': 'Permission denied'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # 이미 FollowUpCheck가 있는지 확인
+            if hasattr(result, 'followup_check'):
+                return Response(
+                    {'message': '이미 전문의 소견이 신청되었습니다.', 'followup_check_id': result.followup_check.id},
+                    status=status.HTTP_200_OK
+                )
+            
+            # FollowUpCheck 생성
+            patient_user = result.photo.user
+            # 담당 의사 찾기 (환자에게 할당된 의사가 있으면 사용)
+            assigned_doctor = None
+            if hasattr(patient_user, 'doctor'):
+                assigned_doctor = patient_user.doctor
+            
+            followup_check = FollowUpCheck.objects.create(
+                result=result,
+                user=patient_user,
+                doctor=assigned_doctor,
+                current_status='요청중',
+                doctor_risk_level=None,
+                doctor_note=None,
+            )
+            
+            return Response(
+                {
+                    'message': '전문의 소견 신청이 완료되었습니다.',
+                    'followup_check_id': followup_check.id
+                },
+                status=status.HTTP_201_CREATED
+            )
+            
+        except Results.DoesNotExist:
+            return Response(
+                {'error': 'Result not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+
+# --------------------------------------------------------
+# 전문의 소견 작성/수정 뷰
+# --------------------------------------------------------
+class FollowUpUpdateView(APIView):
+    """
+    전문의가 FollowUpCheck에 소견과 위험도를 입력/수정하는 API
+    PATCH: /api/dashboard/records/<result_id>/followup/update/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        # 의사만 작성 가능
+        if not request.user.is_doctor:
+            return Response(
+                {'error': 'Permission denied. Doctor access only.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            result = Results.objects.select_related('photo__user').get(pk=pk)
+        except Results.DoesNotExist:
+            return Response(
+                {'error': 'Result not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        followup = getattr(result, 'followup_check', None)
+        doctor_profile = getattr(request.user, 'doctor_profile', None)
+
+        if not followup:
+            followup = FollowUpCheck.objects.create(
+                result=result,
+                user=result.photo.user,
+                doctor=doctor_profile,
+                current_status='요청중',
+                doctor_risk_level='소견 대기',
+                doctor_note=''
+            )
+        elif doctor_profile and followup.doctor is None:
+            followup.doctor = doctor_profile
+
+        doctor_risk_level = request.data.get('doctor_risk_level')
+        doctor_note = request.data.get('doctor_note')
+        current_status = request.data.get('current_status')
+
+        risk_choices = [choice[0] for choice in FollowUpCheck._meta.get_field('doctor_risk_level').choices]
+        status_choices = [choice[0] for choice in FollowUpCheck._meta.get_field('current_status').choices]
+
+        if doctor_risk_level:
+            if doctor_risk_level not in risk_choices:
+                return Response(
+                    {'error': f'Invalid doctor_risk_level. Allowed: {risk_choices}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            followup.doctor_risk_level = doctor_risk_level
+
+        if doctor_note is not None:
+            followup.doctor_note = doctor_note
+
+        if current_status:
+            if current_status not in status_choices:
+                return Response(
+                    {'error': f'Invalid current_status. Allowed: {status_choices}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            followup.current_status = current_status
+        elif doctor_risk_level or doctor_note is not None:
+            followup.current_status = '확인 완료'
+
+        followup.save()
+
+        serializer = FollowUpCheckSerializer(followup)
+        return Response(serializer.data, status=status.HTTP_200_OK)
