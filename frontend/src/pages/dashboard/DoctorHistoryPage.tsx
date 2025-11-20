@@ -46,7 +46,7 @@ const DoctorHistoryPage: React.FC = () => {
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [riskFilter, setRiskFilter] = useState<string>('전체 보기');
-  const [sortOption, setSortOption] = useState<'소견 필요순' | '의사 위험도순' | '이름순'>('소견 필요순');
+  const [sortOption, setSortOption] = useState<'소견 필요순' | '위험도순' | '이름순'>('소견 필요순');
   const [viewMode, setViewMode] = useState<'patients' | 'folders' | 'records'>('patients');
   const [isLoading, setIsLoading] = useState(true);
 
@@ -127,12 +127,12 @@ const DoctorHistoryPage: React.FC = () => {
     }
   };
 
-  // ✅ 환자 정렬 (소견 필요순, 의사 위험도순, 이름순)
+  // ✅ 환자 정렬 (소견 필요순, 위험도순, 이름순)
   const sortedPatients = useMemo(() => {
     let sorted = [...patients];
 
     if (sortOption === '소견 필요순') {
-      // 소견 미작성 환자 우선, 그 다음 의사 위험도순
+      // 소견 미작성 환자 우선, 그 다음 위험도순
       const needsReview = sorted.filter(p => p.needs_review);
       const reviewed = sorted.filter(p => !p.needs_review);
       
@@ -152,7 +152,7 @@ const DoctorHistoryPage: React.FC = () => {
         return a.name.localeCompare(b.name);
       });
       
-      // 소견 작성 완료 환자: 의사 위험도순
+      // 소견 작성 완료 환자: 위험도순
       const sortedReviewed = reviewed.sort((a, b) => {
         const priorityA = riskPriority[a.doctor_risk_level || ''] || 0;
         const priorityB = riskPriority[b.doctor_risk_level || ''] || 0;
@@ -161,7 +161,7 @@ const DoctorHistoryPage: React.FC = () => {
       });
       
       sorted = [...sortedNeedsReview, ...sortedReviewed];
-    } else if (sortOption === '의사 위험도순') {
+    } else if (sortOption === '위험도순') {
       // 의사가 선정한 위험도 기준으로 정렬 (소견 미작성은 하단)
       const riskPriority: Record<string, number> = {
         '즉시 주의': 3,
@@ -287,18 +287,17 @@ const DoctorHistoryPage: React.FC = () => {
             >
               <option value="전체 보기">전체 보기</option>
               <option value="주의 환자">주의 환자</option>
-              <option value="즉시 주의">즉시 주의</option>
               <option value="경과 관찰">경과 관찰</option>
-              <option value="추가검사 필요">추가검사 필요</option>
-              <option value="치료 완료">치료 완료</option>
+              <option value="소견 대기">소견 대기</option>
+              <option value="정상">정상</option>
             </select>
             <select
               value={sortOption}
-              onChange={(e) => setSortOption(e.target.value as '소견 필요순' | '의사 위험도순' | '이름순')}
+              onChange={(e) => setSortOption(e.target.value as '소견 필요순' | '위험도순' | '이름순')}
               className="flex-1 text-xs border border-gray-300 rounded-md px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-400"
             >
               <option value="소견 필요순">소견 필요순</option>
-              <option value="의사 위험도순">의사 위험도순</option>
+              <option value="위험도순">위험도순</option>
               <option value="이름순">이름순</option>
             </select>
           </div>

@@ -322,14 +322,14 @@ const PatientSpecificFields: React.FC = () => {
                   <div className="flex flex-col text-left flex-1">
                     <span className="font-semibold text-gray-800">{patient.name}</span>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-sm text-gray-600">성별: {sexDisplay}</span>
-                      <span className="text-sm text-gray-400">|</span>
-                      <span className={`text-sm ${patient.needs_review ? 'text-yellow-600 font-medium' : 'text-gray-600'}`}>
+                      <span className="text-xs text-gray-600">{sexDisplay}</span>
+                      <span className="text-xs text-gray-400">|</span>
+                      <span className={`text-xs ${patient.needs_review ? 'text-yellow-600 font-medium' : 'text-gray-600'}`}>
                         {patient.needs_review ? '소견 필요' : '소견 완료'}
                       </span>
-                      <span className="text-sm text-gray-400">|</span>
-                      <span className="text-sm text-gray-600">
-                        AI진단: {aiRiskDisplay}
+                      <span className="text-xs text-gray-400">|</span>
+                      <span className="text-xs text-gray-600">
+                        {aiRiskDisplay}
                       </span>
                     </div>
                   </div>
