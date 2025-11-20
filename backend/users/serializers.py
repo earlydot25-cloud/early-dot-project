@@ -187,7 +187,7 @@ class RegisterSerializer(serializers.ModelSerializer):
                     specialty=specialty or "",
                     hospital=hospital or "",
                     cert_path=license_file,  # ← 업로드 파일 객체를 그대로 전달
-                    status="pending",
+                    status="미승인",
                 )
             except Exception as e:
                 print(f"Error creating Doctors object: {e}")
@@ -223,16 +223,52 @@ class PatientListItemSerializer(serializers.ModelSerializer):
 
     # 마지막 진료 결과의 날짜를 가져오는 필드 추가 (Results 모델 사용 가정)
     last_diagnosis_date = serializers.SerializerMethodField()
+    # ✅ 추가: 소견 필요 여부
+    needs_review = serializers.SerializerMethodField()
+    # ✅ 추가: AI 진단 심각도
+    ai_risk_level = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'email', 'name', 'birth_date', 'age', 'sex', 'last_diagnosis_date']
+        fields = ['id', 'email', 'name', 'birth_date', 'age', 'sex', 'last_diagnosis_date', 'needs_review', 'ai_risk_level']
 
     def get_last_diagnosis_date(self, obj: User):
-        # Results 모델에 user(FK) 필드가 있고, created_at/date 필드가 있다고 가정
-        last_result = Results.objects.filter(user=obj).order_by('-created_at').first()
-        if last_result:
-            return last_result.created_at.date()  # 날짜만 반환
+        # ✅ 수정: Results는 photo를 통해 Photos와 연결되고, Photos가 user와 연결됨
+        # Results 모델에는 user 필드가 없고, photo__user를 통해 접근해야 함
+        # analysis_date 필드를 사용 (created_at이 아님)
+        try:
+            last_result = Results.objects.filter(photo__user=obj).order_by('-analysis_date').first()
+            if last_result:
+                return last_result.analysis_date.date()  # 날짜만 반환
+        except Exception as e:
+            print(f"Error in get_last_diagnosis_date: {e}")
+        return None
+
+    def get_needs_review(self, obj: User):
+        """소견 필요 여부 확인"""
+        try:
+            from dashboard.models import FollowUpCheck
+            # 최신 Results의 FollowUpCheck 확인
+            last_result = Results.objects.filter(photo__user=obj).order_by('-analysis_date').first()
+            if last_result:
+                followup = getattr(last_result, 'followup_check', None)
+                if followup is None:
+                    return True  # FollowUpCheck가 없으면 소견 필요
+                if followup.doctor_risk_level == '소견 대기':
+                    return True  # 소견 대기 상태면 소견 필요
+            return False
+        except Exception as e:
+            print(f"Error in get_needs_review: {e}")
+        return False
+
+    def get_ai_risk_level(self, obj: User):
+        """AI 진단 심각도 (최신 Results의 risk_level)"""
+        try:
+            last_result = Results.objects.filter(photo__user=obj).order_by('-analysis_date').first()
+            if last_result:
+                return last_result.risk_level  # '높음', '보통', '낮음' 등
+        except Exception as e:
+            print(f"Error in get_ai_risk_level: {e}")
         return None
 
 
@@ -314,6 +350,7 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
     sex = serializers.CharField(required=False, allow_blank=True)
     age = serializers.IntegerField(required=False)
     family_history = serializers.CharField(required=False, allow_blank=True)
+    birth_date = serializers.DateField(required=False, allow_null=True, format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
 
     # 의사 전용 필드 (Doctors 모델 업데이트용)
     specialty = serializers.CharField(write_only=True, required=False, allow_blank=True)
@@ -324,7 +361,7 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['name', 'sex', 'age', 'family_history', 'specialty', 'hospital', 'assigned_doctor_name']
+        fields = ['name', 'sex', 'age', 'birth_date', 'family_history', 'specialty', 'hospital', 'assigned_doctor_name']
 
     def update(self, instance: User, validated_data):
         # 1. User 모델의 일반 필드 업데이트
@@ -332,6 +369,7 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
         instance.sex = validated_data.get('sex', instance.sex)
         instance.age = validated_data.get('age', instance.age)
         instance.family_history = validated_data.get('family_history', instance.family_history)
+        instance.birth_date = validated_data.get('birth_date', instance.birth_date)
 
         # 2. 의사 전용 필드 업데이트 (Doctors 모델)
         if instance.is_doctor and hasattr(instance, 'doctor_profile'):

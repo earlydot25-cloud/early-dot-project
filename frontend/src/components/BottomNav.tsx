@@ -16,19 +16,27 @@ function useAuthStore() {
   const getSnapshot = React.useCallback(() => {
     const loggedIn = !!localStorage.getItem('accessToken');
     const name = localStorage.getItem('userName') || '';
-    return JSON.stringify({ loggedIn, name });
+    const isDoctor = localStorage.getItem('isDoctor') === '1';
+    return JSON.stringify({ loggedIn, name, isDoctor });
   }, []);
   const snap = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  return React.useMemo(() => JSON.parse(snap) as { loggedIn: boolean; name: string }, [snap]);
+  return React.useMemo(() => JSON.parse(snap) as { loggedIn: boolean; name: string; isDoctor: boolean }, [snap]);
 }
 
 const BottomNav: React.FC = () => {
-  const { loggedIn } = useAuthStore();
+  const { loggedIn, isDoctor } = useAuthStore();
 
   const items = [
     { key: 'home', to: loggedIn ? '/home' : '/', label: '메인화면', Icon: FaHome },
     { key: 'diagnosis', to: loggedIn ? '/diagnosis' : '/', label: '촬영', Icon: FaCamera },
-    { key: 'history', to: loggedIn ? '/dashboard/history' : '/', label: '진단내역', Icon: FaClipboardList },
+    { 
+      key: 'history', 
+      to: loggedIn 
+        ? (isDoctor ? '/dashboard/doctor/history' : '/dashboard/history')
+        : '/', 
+      label: '진단내역', 
+      Icon: FaClipboardList 
+    },
     { key: 'profile', to: loggedIn ? '/dashboard/profile' : '/login', label: loggedIn ? '내 정보' : '로그인', Icon: loggedIn ? FaUser : FaUserPlus },
   ];
 

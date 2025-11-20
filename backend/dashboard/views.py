@@ -529,40 +529,83 @@ class PatientsListView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        # 해당 의사가 담당한 Results의 환자 목록 가져오기
         # filter 파라미터로 필터링
         filter_param = request.query_params.get('filter', '전체 보기')
         
-        # FollowUpCheck에서 해당 의사가 담당한 결과 찾기
-        followup_query = Q(doctor_id=doctor_id)
+        # ✅ 변경: user.doctor가 해당 의사인 모든 환자를 먼저 조회 (Results가 없어도 표시)
+        # 1. 해당 의사에게 할당된 모든 환자 가져오기
+        assigned_patients = Users.objects.filter(
+            doctor=doctor_record,
+            is_doctor=False
+        ).select_related('doctor')
         
-        # 필터에 따라 추가 조건
-        if filter_param != '전체 보기':
-            if filter_param == '주의 환자':
-                followup_query &= Q(doctor_risk_level__in=['즉시 주의', '경과 관찰'])
-            elif filter_param in ['즉시 주의', '경과 관찰', '정상', '추가검사 필요', '치료 완료']:
-                followup_query &= Q(doctor_risk_level=filter_param)
-        
-        # 해당 FollowUpCheck와 연결된 Results 가져오기
-        results = Results.objects.filter(
-            followup_check__in=request.user.doctor_profile.followupcheck_set.filter(followup_query)
-        ).select_related('photo__user').distinct()
-        
-        # 환자별로 그룹핑하고 최신 소견 가져오기
+        # 2. 환자별로 Results와 FollowUpCheck 정보 수집
         patients_dict = {}
-        for result in results:
-            patient = result.photo.user
+        for patient in assigned_patients:
             patient_id = patient.id
             
+            # 해당 환자의 모든 Results 가져오기
+            patient_results = Results.objects.filter(
+                photo__user=patient
+            ).select_related('photo__user', 'followup_check').order_by('-analysis_date')
+            
+            # 필터에 따라 Results 필터링 (필터가 '전체 보기'가 아니면)
+            filtered_results = patient_results
+            if filter_param != '전체 보기':
+                if filter_param == '주의 환자':
+                    filtered_results = patient_results.filter(
+                        followup_check__doctor_risk_level__in=['즉시 주의', '경과 관찰']
+                    )
+                elif filter_param in ['즉시 주의', '경과 관찰', '정상', '소견 대기']:
+                    filtered_results = patient_results.filter(
+                        followup_check__doctor_risk_level=filter_param
+                    )
+            
+            # 필터링된 Results가 없으면 해당 환자는 건너뛰기 (필터가 적용된 경우)
+            if filter_param != '전체 보기' and not filtered_results.exists():
+                continue
+            
+            # Results가 없어도 환자는 표시 (필터가 '전체 보기'인 경우)
             if patient_id not in patients_dict:
-                # 최신 FollowUpCheck의 note 가져오기
-                latest_followup = result.followup_check
+                # 최신 Results의 FollowUpCheck 가져오기
+                latest_result = patient_results.first()
+                latest_followup = latest_result.followup_check if latest_result and hasattr(latest_result, 'followup_check') else None
+                
                 patients_dict[patient_id] = {
                     'id': patient.id,
                     'name': patient.name or patient.email,
                     'latest_note': latest_followup.doctor_note if latest_followup and latest_followup.doctor_note else None,
                     'has_attention': latest_followup and latest_followup.doctor_risk_level == '즉시 주의' if latest_followup else False,
+                    'doctor_risk_level': latest_followup.doctor_risk_level if latest_followup and latest_followup.doctor_risk_level else None,
+                    'needs_review': latest_followup is None or (latest_followup.doctor_risk_level == '소견 대기' if latest_followup else True),
                 }
+            
+            # 환자별 최고 위험도 계산 (여러 Results가 있는 경우)
+            for result in patient_results:
+                current_followup = getattr(result, 'followup_check', None)
+                current_risk = current_followup.doctor_risk_level if current_followup and current_followup.doctor_risk_level and current_followup.doctor_risk_level != '소견 대기' else None
+                
+                # 위험도 우선순위
+                risk_priority = {
+                    '즉시 주의': 3,
+                    '경과 관찰': 2,
+                    '정상': 1,
+                    '소견 대기': 0,
+                }
+                
+                # 최고 위험도 업데이트
+                if current_risk:
+                    existing_risk = patients_dict[patient_id].get('doctor_risk_level')
+                    existing_priority = risk_priority.get(existing_risk, 0) if existing_risk else 0
+                    current_priority = risk_priority.get(current_risk, 0)
+                    
+                    if current_priority > existing_priority:
+                        patients_dict[patient_id]['doctor_risk_level'] = current_risk
+                        patients_dict[patient_id]['has_attention'] = current_risk == '즉시 주의'
+                
+                # 소견 미작성 여부 업데이트
+                if current_followup is None or (current_followup.doctor_risk_level == '소견 대기' if current_followup else True):
+                    patients_dict[patient_id]['needs_review'] = True
         
         patients_list = list(patients_dict.values())
         

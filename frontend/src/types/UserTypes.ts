@@ -13,8 +13,6 @@ export interface AssignedDoctorInfo {
   family_history?: string;
   is_doctor?: boolean;
   date_joined?: string;
-  // 수정 가능한 공통 필드 (Models에 없지만 UI에 필요한 필드)
-  
 }
 
 // 2. 의사 정보 타입 (DoctorProfile)
@@ -37,6 +35,8 @@ export interface PatientListItem {
   age: number;
   sex: '남성' | '여성' | string; // UserSerializer에서 M/F 대신 남성/여성 사용 가정
   last_diagnosis_date: string | null;
+  needs_review?: boolean; // ✅ 추가
+  ai_risk_level?: string | null; // ✅ 추가 ('높음', '보통', '낮음' 등)
 }
 
 // 4. 공통 사용자 정보 (User) - Users 모델 기반

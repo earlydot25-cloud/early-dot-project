@@ -43,7 +43,7 @@ services:
     volumes:
       - ./model_api:/app
     ports:
-      - "8001:8001"
+    - "8001:8001"
     networks:
       - early_dot_network
 
@@ -52,6 +52,7 @@ services:
     container_name: project_frontend
     volumes:
       - ./frontend:/app
+      - /app/node_modules
     ports:
       - "3000:3000"
     depends_on:

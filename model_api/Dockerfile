@@ -23,7 +23,7 @@ SHELL ["conda", "run", "-n", "model_env", "/bin/bash", "-c"]
 COPY . .
 
 # 포트 개방
-EXPOSE 8000
+EXPOSE 8001
 
 # ❗ 장고 서버 CMD가 아닌, FastAPI 서버 CMD로 변경해야 합니다 ❗
-CMD ["conda", "run", "--no-capture-output", "-n", "model_env", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["conda", "run", "--no-capture-output", "-n", "model_env", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]

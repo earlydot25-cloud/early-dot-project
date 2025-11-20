@@ -1,45 +1,3 @@
-# # backend/diagnosis/views.py
-#
-# from rest_framework.views import APIView
-# from rest_framework.response import Response
-# from rest_framework import status
-# from rest_framework.permissions import IsAuthenticated, AllowAny
-#
-#
-# # --------------------------------------------------------
-# # 1. 이미지 업로드 뷰 (POST: /api/diag/upload/)
-# # --------------------------------------------------------
-# class ImageUploadView(APIView):
-#     # 진단 시작은 로그인이 필요함
-#     permission_classes = [IsAuthenticated]
-#
-#     def post(self, request):
-#         # 💡 현재는 로직 없이 pass 후, FE가 요청을 보냈을 때 최소 응답 반환
-#         pass  # 실제 구현은 팀원에게 위임 (NCP 저장 및 DB 기록)
-#
-#         # 임시 응답: 202 Accepted (FE가 성공을 기대하며, 다음 단계인 predict로 넘어갈 수 있게 ID 반환)
-#         return Response(
-#             {'message': '이미지 업로드 API 경로 확인됨 (로직 구현 필요)', 'image_id': 'MOCK-IMG-001'},
-#             status=status.HTTP_202_ACCEPTED
-#         )
-#
-#
-# # --------------------------------------------------------
-# # 2. 모델 예측 뷰 (POST: /api/diag/predict/)
-# # --------------------------------------------------------
-# class ModelPredictionView(APIView):
-#     # 모델 예측 요청도 로그인이 필요함
-#     permission_classes = [IsAuthenticated]
-#
-#     def post(self, request):
-#         # 💡 현재는 로직 없이 pass 후, FE가 요청을 보냈을 때 최소 응답 반환
-#         pass  # 실제 구현은 팀원에게 위임 (FastAPI 호출 및 결과 저장)
-#
-#         # 임시 응답: 200 OK (FE가 진단 결과를 기대함)
-#         return Response(
-#             {'message': '모델 예측 API 경로 확인됨 (로직 구현 필요)', 'result': 'MOCK-POSITIVE', 'confidence': 0.95},
-#             status=status.HTTP_200_OK
-#         )
 
 # backend/diagnosis/views.py
 
@@ -50,9 +8,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 # IsAuthenticated: 로그인한 사용자만 접근 가능하게 함
+import requests
+import os
 
-from .models import Photos
+from .models import Photos, Results, DiseaseInfo
 from .serializers import PhotoUploadSerializer, PhotoDetailSerializer
+from dashboard.models import FollowUpCheck
 
 
 # (만약 기존에 views.py에 다른 코드가 있었다면 그 아래에 추가하세요)
@@ -77,7 +38,8 @@ class PhotoUploadView(APIView):
 
         # request.data는 프론트에서 보낸 FormData 객체를 담고 있습니다.
         # many=False (기본값) : 단일 객체를 생성합니다.
-        serializer = PhotoUploadSerializer(data=request.data)
+        # request context를 전달하여 이미지 URL을 절대 경로로 변환할 수 있도록 함
+        serializer = PhotoUploadSerializer(data=request.data, context={'request': request})
 
         if not serializer.is_valid():
             # 유효성 검사 실패 시 (예: 필수 필드가 누락된 경우)
@@ -96,10 +58,186 @@ class PhotoUploadView(APIView):
         # request.user는 IsAuthenticated 권한을 통해 인증된 사용자 객체입니다.
         try:
             photo_instance = serializer.save(user=request.user)
+            
+            # Results ID 추적 (AI 예측 성공 시 사용)
+            result_id = None
+            
+            # 💡 털 제거 파이프라인 호출 (전처리 모델 역할)
+            # FastAPI 서버에 이미지 전송하여 털 제거 처리
+            # ⚠️ 중요: 원본 이미지는 이미 저장되어 있으므로, 처리 실패해도 문제 없음
+            try:
+                # 저장된 이미지 파일 읽기
+                if photo_instance.upload_storage_path:
+                    image_path = photo_instance.upload_storage_path.path
+                    
+                    # 이미지 파일 존재 확인
+                    if not os.path.exists(image_path):
+                        print(f"[Diagnosis] 경고: 이미지 파일이 존재하지 않습니다: {image_path}")
+                    else:
+                        print(f"[Diagnosis] 이미지 파일 확인: {image_path} (크기: {os.path.getsize(image_path)} bytes)")
+                        
+                        with open(image_path, 'rb') as f:
+                            image_bytes = f.read()
+                        
+                        # FastAPI 서버 호출
+                        fastapi_url = os.getenv('FASTAPI_URL', 'http://fastapi:8001')
+                        file_name = os.path.basename(image_path)
+                        print(f"[Diagnosis] FastAPI 호출 시작: {fastapi_url}/remove-hair")
+                        
+                        response = requests.post(
+                            f"{fastapi_url}/remove-hair",
+                            files={"file": (file_name, image_bytes, "image/jpeg")},
+                            timeout=300  # 5분 타임아웃 (처리 시간이 길 수 있음)
+                        )
+                        
+                        if response.status_code == 200:
+                            # 처리된 이미지로 원본 파일 덮어쓰기
+                            processed_image_bytes = response.content
+                            print(f"[Diagnosis] 처리된 이미지 크기: {len(processed_image_bytes)} bytes")
+                            
+                            # 기존 파일 백업 (선택적)
+                            backup_path = f"{image_path}.backup"
+                            if os.path.exists(image_path):
+                                import shutil
+                                shutil.copy2(image_path, backup_path)
+                            
+                            with open(image_path, 'wb') as f:
+                                f.write(processed_image_bytes)
+                            print(f"[Diagnosis] 털 제거 처리 완료: Photo ID {photo_instance.id}")
+                            
+                            # 💡 AI 모델 예측 호출 (털 제거된 이미지로 예측)
+                            try:
+                                print(f"[Diagnosis] ========== AI 모델 예측 시작 ==========")
+                                print(f"[Diagnosis] FastAPI URL: {fastapi_url}/predict")
+                                print(f"[Diagnosis] 이미지 크기: {len(processed_image_bytes)} bytes")
+                                predict_response = requests.post(
+                                    f"{fastapi_url}/predict",
+                                    files={"file": (file_name, processed_image_bytes, "image/png")},
+                                    timeout=300  # 5분 타임아웃
+                                )
+                                
+                                print(f"[Diagnosis] 예측 응답 상태 코드: {predict_response.status_code}")
+                                
+                                if predict_response.status_code == 200:
+                                    prediction_data = predict_response.json()
+                                    print(f"[Diagnosis] ========== AI 예측 완료 ==========")
+                                    print(f"[Diagnosis] 예측 데이터: {prediction_data}")
+                                    print(f"[Diagnosis] disease_name_ko: {prediction_data.get('disease_name_ko')}")
+                                    print(f"[Diagnosis] disease_name_en: {prediction_data.get('disease_name_en')}")
+                                    print(f"[Diagnosis] risk_level: {prediction_data.get('risk_level')}")
+                                    print(f"[Diagnosis] class_probs: {prediction_data.get('class_probs')}")
+                                    
+                                    # DiseaseInfo에서 질병 찾기 또는 생성
+                                    disease_name_ko = prediction_data.get("disease_name_ko", "알 수 없음")
+                                    disease_name_en = prediction_data.get("disease_name_en", "Unknown")
+                                    
+                                    print(f"[Diagnosis] DiseaseInfo 조회/생성 시작: name_ko={disease_name_ko}")
+                                    disease, created = DiseaseInfo.objects.get_or_create(
+                                        name_ko=disease_name_ko,
+                                        defaults={
+                                            "name_en": disease_name_en,
+                                            "classification": "기타",  # 기본값, 필요시 수정
+                                            "description": None,
+                                            "recommendation": None,
+                                        }
+                                    )
+                                    
+                                    if created:
+                                        print(f"[Diagnosis] ✅ 새로운 질병 정보 생성: {disease_name_ko} (ID: {disease.id})")
+                                    else:
+                                        print(f"[Diagnosis] ✅ 기존 질병 정보 사용: {disease_name_ko} (ID: {disease.id})")
+                                    
+                                    # GradCAM 이미지 저장 (있는 경우)
+                                    grad_cam_path = None
+                                    if prediction_data.get("grad_cam_bytes"):
+                                        import base64
+                                        from django.core.files.base import ContentFile
+                                        
+                                        grad_cam_bytes = base64.b64decode(prediction_data["grad_cam_bytes"])
+                                        grad_cam_filename = f"gradcam_{photo_instance.id}.png"
+                                        grad_cam_path = ContentFile(grad_cam_bytes, name=grad_cam_filename)
+                                    
+                                    # Results 테이블에 저장
+                                    print(f"[Diagnosis] Results 생성 시작: photo_id={photo_instance.id}, disease_id={disease.id}")
+                                    result = Results.objects.create(
+                                        photo=photo_instance,
+                                        risk_level=prediction_data.get("risk_level", "중간"),
+                                        class_probs=prediction_data.get("class_probs", {}),
+                                        grad_cam_path=grad_cam_path,
+                                        vlm_analysis_text=prediction_data.get("vlm_analysis_text"),
+                                        disease=disease,
+                                    )
+                                    result_id = result.id  # Results ID 저장
+                                    print(f"[Diagnosis] ✅ Results 저장 완료: Result ID {result.id}, Disease ID {result.disease.id}, Disease Name: {result.disease.name_ko}")
+                                    
+                                    # 💡 FollowUpCheck 자동 생성 (환자의 담당 의사가 있는 경우)
+                                    patient_user = photo_instance.user
+                                    if patient_user.doctor:
+                                        try:
+                                            # FollowUpCheck가 이미 존재하는지 확인
+                                            followup_check, created = FollowUpCheck.objects.get_or_create(
+                                                result=result,
+                                                defaults={
+                                                    'user': patient_user,
+                                                    'doctor': patient_user.doctor,
+                                                    'current_status': '요청중',
+                                                    'doctor_risk_level': None,  # 의사가 아직 소견을 작성하지 않음
+                                                    'doctor_note': None,
+                                                }
+                                            )
+                                            if created:
+                                                print(f"[Diagnosis] ✅ FollowUpCheck 자동 생성: FollowUpCheck ID {followup_check.id}, 의사 ID {patient_user.doctor.uid.id}")
+                                            else:
+                                                print(f"[Diagnosis] ℹ️ FollowUpCheck 이미 존재: FollowUpCheck ID {followup_check.id}")
+                                        except Exception as e:
+                                            print(f"[Diagnosis] ⚠️ FollowUpCheck 생성 실패: {e}")
+                                            import traceback
+                                            traceback.print_exc()
+                                    else:
+                                        print(f"[Diagnosis] ℹ️ 환자에게 담당 의사가 없어 FollowUpCheck를 생성하지 않습니다.")
+                                else:
+                                    print(f"[Diagnosis] ❌ AI 예측 실패: 상태 코드 {predict_response.status_code}")
+                                    print(f"[Diagnosis] 응답 내용: {predict_response.text[:500]}")
+                                    # 예측 실패해도 Photos는 저장되어 있음
+                            except requests.exceptions.RequestException as e:
+                                print(f"[Diagnosis] ❌ AI 예측 요청 실패: {str(e)}")
+                                import traceback
+                                if settings.DEBUG:
+                                    traceback.print_exc()
+                            except Exception as e:
+                                print(f"[Diagnosis] ❌ AI 예측 처리 중 오류 발생: {str(e)}")
+                                import traceback
+                                print(f"[Diagnosis] 에러 상세:\n{traceback.format_exc()}")
+                                if settings.DEBUG:
+                                    traceback.print_exc()
+                        else:
+                            print(f"[Diagnosis] 털 제거 처리 실패: {response.status_code}")
+                            print(f"[Diagnosis] 응답 내용: {response.text[:500]}")  # 처음 500자만 출력
+                            # 원본 이미지는 그대로 유지됨
+                else:
+                    print(f"[Diagnosis] 이미지 파일이 없어 털 제거 처리를 건너뜁니다: Photo ID {photo_instance.id}")
+            except requests.exceptions.RequestException as e:
+                # 네트워크 에러 등
+                print(f"[Diagnosis] FastAPI 요청 실패 (이미지는 저장됨): {str(e)}")
+                import traceback
+                if settings.DEBUG:
+                    traceback.print_exc()
+            except Exception as e:
+                # 기타 에러
+                print(f"[Diagnosis] 털 제거 처리 중 오류 발생 (이미지는 저장됨): {str(e)}")
+                import traceback
+                if settings.DEBUG:
+                    traceback.print_exc()
+            
             # 저장 성공 후 ID를 포함한 응답 반환 (프론트엔드에서 결과 페이지로 이동하기 위해 필요)
+            # serializer.data는 to_representation을 통해 이미지 URL이 절대 경로로 변환됨
+            # AI 예측이 성공하여 Results가 생성되었다면 result.id를, 아니라면 photo.id를 반환
+            result_id = serializer.data.get('result_id')
+            response_id = result_id if result_id else photo_instance.id
+
             return Response(
                 {
-                    "id": photo_instance.id,
+                    "id": response_id,
                     "message": "Photo uploaded successfully",
                     **serializer.data
                 },

@@ -4,6 +4,7 @@ import { fetchUserProfile } from '../../services/userServices';
 
 // 백엔드 업로드 엔드포인트
 const API_URL = 'http://127.0.0.1:8000/api/diagnosis/upload/';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000';
 
 // 드롭다운 공통 옵션
 const SEVERITY = ['없음', '약간~보통', '심각'] as const;
@@ -49,6 +50,7 @@ const SavePhotoPage: React.FC = () => {
 
   const [folderName, setFolderName] = useState<string>('');
   const [fileName, setFileName] = useState<string>('');
+  const [fileNameTouched, setFileNameTouched] = useState<boolean>(false);
   const [itch, setItch] = useState<typeof SEVERITY[number]>('없음');
   const [pain, setPain] = useState<typeof SEVERITY[number]>('없음');
   const [color, setColor] = useState<typeof SEVERITY[number]>('없음');
@@ -57,6 +59,11 @@ const SavePhotoPage: React.FC = () => {
   const [onset, setOnset] = useState<typeof ONSET[number]>('1달 내');
   const [sex, setSex] = useState<typeof SEX[number]>('모름');
   const [birth, setBirth] = useState<string>('');
+  const [folderList, setFolderList] = useState<string[]>([]);
+  const [folderListVisible, setFolderListVisible] = useState<boolean>(false);
+  const [folderListLoading, setFolderListLoading] = useState<boolean>(false);
+  const [folderListError, setFolderListError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const suggestedName = useMemo(() => {
     if (file?.name) return file.name;
@@ -113,8 +120,14 @@ const SavePhotoPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!fileName && suggestedName) setFileName(suggestedName);
-  }, [fileName, suggestedName]);
+    setFileNameTouched(false);
+    if (suggestedName) setFileName(suggestedName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, previewUrl]);
+
+  useEffect(() => {
+    if (!fileNameTouched && suggestedName) setFileName(suggestedName);
+  }, [suggestedName, fileNameTouched]);
 
   const handleRetake = () => {
     navigate('/diagnosis/body-select', { replace: false, state: { bodyPart } });
@@ -123,6 +136,7 @@ const SavePhotoPage: React.FC = () => {
   const handleRefreshFields = () => {
     setFolderName('');
     setFileName(suggestedName);
+    setFileNameTouched(false);
     setItch('없음');
     setPain('없음');
     setColor('없음');
@@ -131,6 +145,48 @@ const SavePhotoPage: React.FC = () => {
     setOnset('1달 내');
     setSex('모름');
     setBirth('');
+  };
+
+  const handleToggleFolderList = async () => {
+    if (folderListVisible) {
+      setFolderListVisible(false);
+      return;
+    }
+    setFolderListLoading(true);
+    setFolderListError(null);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(`${API_BASE_URL}/api/dashboard/folders/`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('폴더 목록 API 오류:', errorText);
+        throw new Error('폴더 목록을 불러오지 못했습니다.');
+      }
+      const data = await res.json();
+      console.log('[SavePhotoPage] 폴더 목록 응답:', data);
+      const names = Array.isArray(data)
+        ? data
+            .map((folder: any) => folder?.folder_name)
+            .filter((name: string) => typeof name === 'string' && name.trim().length > 0)
+        : [];
+      console.log('[SavePhotoPage] 추출된 폴더명:', names);
+      setFolderList(names);
+    } catch (error: any) {
+      console.error('Failed to load folder list:', error);
+      setFolderListError(error?.message || '폴더 목록을 불러오지 못했습니다.');
+    } finally {
+      setFolderListLoading(false);
+      setFolderListVisible(true);
+    }
+  };
+
+  const handleSelectFolder = (name: string) => {
+    setFolderName(name);
+    setFolderListVisible(false);
   };
 
   const onSubmit = async () => {
@@ -170,22 +226,23 @@ const SavePhotoPage: React.FC = () => {
 
     const fd = new FormData();
     
-    // 파일명에 확장자가 있는지 확인하고, 없으면 파일의 원래 확장자 사용
-    let finalFileName = fileName;
-    if (!fileName.includes('.')) {
-      // 파일명에 확장자가 없으면 원본 파일의 확장자 추가
+    let finalFileName = fileName.trim();
+    if (!finalFileName) {
+      finalFileName = suggestedName || `capture_${Date.now()}.jpg`;
+    }
+    if (!finalFileName.includes('.')) {
       const originalName = finalFile.name;
       const extension = originalName.includes('.') 
         ? originalName.split('.').pop() 
-        : 'jpg'; // 기본값 jpg
-      finalFileName = `${fileName}.${extension}`;
+        : 'jpg';
+      finalFileName = `${finalFileName}.${extension}`;
     }
     
     // 백엔드 모델의 실제 필드명인 'upload_storage_path' 사용
     // FormData.append의 세 번째 인자는 파일명이므로 확장자를 포함한 파일명 사용
     fd.append('upload_storage_path', finalFile, finalFileName);
     fd.append('folder_name', finalFolderName);
-    fd.append('file_name', fileName);
+    fd.append('file_name', finalFileName);
     fd.append('body_part', bodyPart);
     fd.append('symptoms_itch', itch);
     fd.append('symptoms_pain', pain);
@@ -203,6 +260,7 @@ const SavePhotoPage: React.FC = () => {
       fd.append('meta_age', String(30));
     }
 
+    setIsSubmitting(true);
     try {
       const token = localStorage.getItem('accessToken');
       const res = await fetch(API_URL, { 
@@ -230,13 +288,21 @@ const SavePhotoPage: React.FC = () => {
           errMessage = errText || '업로드 실패';
         }
         console.error('업로드 실패 응답:', errText);
+        setIsSubmitting(false);
         alert(errMessage);
         return;
       }
       const data = await res.json();
-      console.log('업로드 성공:', data);
+      console.log('[SavePhotoPage] 업로드 성공 응답:', data);
+      console.log('[SavePhotoPage] result_id:', data.result_id);
+      console.log('[SavePhotoPage] photo_id:', data.photo_id);
+      console.log('[SavePhotoPage] id (사용할 ID):', data.id);
+      
       // 응답에서 id를 확인하거나 photo 객체의 id 사용
-      const resultId = data.id || data.photo?.id;
+      // result_id가 있으면 result_id를 우선 사용 (AI 예측이 완료된 경우)
+      const resultId = data.result_id || data.id || data.photo?.id;
+      console.log('[SavePhotoPage] 최종 사용할 ID:', resultId);
+      
       if (resultId) {
         navigate(`/diagnosis/detail/${resultId}`, { replace: true });
       } else {
@@ -245,11 +311,25 @@ const SavePhotoPage: React.FC = () => {
     } catch (e: any) {
       console.error('업로드 중 예외:', e);
       alert(`업로드 실패: ${e.message || '네트워크 오류가 발생했습니다.'}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="py-4">
+    <div className="py-4 relative">
+      {/* 로딩 오버레이 */}
+      {isSubmitting && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+             <div className="bg-white rounded-lg p-6 shadow-xl max-w-[300px] w-full mx-4">
+            <div className="flex flex-col items-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+              <p className="text-gray-700 text-center">수초 ~ 수분 소요됩니다.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 제목 */}
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">[Diagnosis] 2단계: 사진 저장</h2>
@@ -292,15 +372,50 @@ const SavePhotoPage: React.FC = () => {
       <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6 shadow-sm">
         <div className="space-y-4">
           {/* 기본 정보 */}
-          <div>
+          <div className="relative">
             <label className="block text-sm font-medium text-gray-700 mb-2">폴더명</label>
-            <input
-              type="text"
-              value={folderName}
-              onChange={(e) => setFolderName(e.target.value)}
-              placeholder="예) 김민준_25"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={folderName}
+                onChange={(e) => setFolderName(e.target.value)}
+                placeholder="예) 김민준_25"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleToggleFolderList}
+                className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-600 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                aria-label="폴더 목록 열기"
+              >
+                ☰
+              </button>
+            </div>
+            {folderListVisible && (
+              <div className="absolute z-10 mt-2 w-full max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg">
+                {folderListLoading ? (
+                  <p className="px-4 py-3 text-sm text-gray-500">불러오는 중...</p>
+                ) : folderListError ? (
+                  <p className="px-4 py-3 text-sm text-red-500">{folderListError}</p>
+                ) : folderList.length === 0 ? (
+                  <p className="px-4 py-3 text-sm text-gray-500">폴더가 존재하지 않습니다.</p>
+                ) : (
+                  <ul>
+                    {folderList.map((name) => (
+                      <li key={name}>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectFolder(name)}
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-blue-50"
+                        >
+                          {name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
 
           <div>
@@ -308,10 +423,14 @@ const SavePhotoPage: React.FC = () => {
             <input
               type="text"
               value={fileName}
-              onChange={(e) => setFileName(e.target.value)}
+              onChange={(e) => {
+                setFileNameTouched(true);
+                setFileName(e.target.value);
+              }}
               placeholder="예) capture_123.jpg"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
             />
+            <p className="text-xs text-gray-500 mt-1">확장자를 포함해 입력하거나 비워두면 자동 생성됩니다.</p>
           </div>
 
           <div>
@@ -428,12 +547,14 @@ const SavePhotoPage: React.FC = () => {
       </div>
 
       {/* 제출 버튼 */}
-      <button 
-        onClick={onSubmit}
-        className="w-full py-4 rounded-xl bg-blue-600 text-white font-bold text-lg hover:bg-blue-700 transition-colors shadow-md"
-      >
-        제출하고 결과로 이동
-      </button>
+      <div>
+        <button 
+          onClick={onSubmit}
+          className="w-full py-4 rounded-xl bg-blue-600 text-white font-bold text-lg hover:bg-blue-700 transition-colors shadow-md"
+        >
+          제출하고 결과로 이동
+        </button>
+      </div>
     </div>
   );
 };

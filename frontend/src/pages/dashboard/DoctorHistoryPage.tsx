@@ -4,11 +4,15 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import RiskLevelIcon from '../../components/RiskLevelIcon';
 
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000';
+
 interface Patient {
   id: number;
   name: string;
   latest_note?: string;
   has_attention?: boolean; // 주의가 필요한 환자 여부
+  doctor_risk_level?: string; // 의사가 선정한 위험도
+  needs_review?: boolean; // 소견 미작성 여부
 }
 
 interface Folder {
@@ -42,6 +46,7 @@ const DoctorHistoryPage: React.FC = () => {
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [riskFilter, setRiskFilter] = useState<string>('전체 보기');
+  const [sortOption, setSortOption] = useState<'소견 필요순' | '의사 위험도순' | '이름순'>('소견 필요순');
   const [viewMode, setViewMode] = useState<'patients' | 'folders' | 'records'>('patients');
   const [isLoading, setIsLoading] = useState(true);
 
@@ -50,14 +55,16 @@ const DoctorHistoryPage: React.FC = () => {
     const fetchPatients = async () => {
       try {
         const token = localStorage.getItem('accessToken');
-        const response = await axios.get<Patient[]>('/api/dashboard/patients/', {
+        const response = await axios.get<Patient[]>(`${API_BASE_URL}/api/dashboard/patients/`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
+        console.log('[DoctorHistoryPage] 환자 목록 응답:', response.data);
         setPatients(response.data);
       } catch (err: any) {
         console.error('Failed to fetch patients:', err);
+        console.error('Error details:', err.response?.data || err.message);
         setPatients([]);
       } finally {
         setIsLoading(false);
@@ -77,16 +84,19 @@ const DoctorHistoryPage: React.FC = () => {
     const fetchFolders = async () => {
       try {
         const token = localStorage.getItem('accessToken');
-        const response = await axios.get<Folder[]>('/api/dashboard/folders/', {
+        console.log('[DoctorHistoryPage] 폴더 목록 요청: patient_id=', selectedPatientId);
+        const response = await axios.get<Folder[]>(`${API_BASE_URL}/api/dashboard/folders/`, {
           params: { user: selectedPatientId },
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
+        console.log('[DoctorHistoryPage] 폴더 목록 응답:', response.data);
         setFolders(response.data);
         setViewMode('folders');
       } catch (err: any) {
         console.error('Failed to fetch folders:', err);
+        console.error('Error details:', err.response?.data || err.message);
         setFolders([]);
       }
     };
@@ -100,32 +110,82 @@ const DoctorHistoryPage: React.FC = () => {
 
     try {
       const token = localStorage.getItem('accessToken');
-      const response = await axios.get<RecordItem[]>('/api/dashboard/records/', {
+      console.log('[DoctorHistoryPage] 진단 기록 요청: patient_id=', selectedPatientId, 'folder=', folderName);
+      const response = await axios.get<RecordItem[]>(`${API_BASE_URL}/api/dashboard/records/`, {
         params: { user: selectedPatientId, folder: folderName },
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
+      console.log('[DoctorHistoryPage] 진단 기록 응답:', response.data);
       setRecords(response.data);
       setViewMode('records');
     } catch (err: any) {
       console.error('Failed to fetch records:', err);
+      console.error('Error details:', err.response?.data || err.message);
       setRecords([]);
     }
   };
 
-  // ✅ 주의가 필요한 환자 필터링 및 정렬
+  // ✅ 환자 정렬 (소견 필요순, 의사 위험도순, 이름순)
   const sortedPatients = useMemo(() => {
-    const attentionPatients = patients.filter(p => p.has_attention || 
-      (p.latest_note && (p.latest_note.includes('즉시 주의') || p.latest_note.includes('주의'))));
-    const normalPatients = patients.filter(p => !attentionPatients.includes(p));
+    let sorted = [...patients];
 
-    // 주의 환자는 최상위, 각 그룹은 이름 오름차순
-    const sortedAttention = [...attentionPatients].sort((a, b) => a.name.localeCompare(b.name));
-    const sortedNormal = [...normalPatients].sort((a, b) => a.name.localeCompare(b.name));
+    if (sortOption === '소견 필요순') {
+      // 소견 미작성 환자 우선, 그 다음 의사 위험도순
+      const needsReview = sorted.filter(p => p.needs_review);
+      const reviewed = sorted.filter(p => !p.needs_review);
+      
+      // 위험도 우선순위
+      const riskPriority: Record<string, number> = {
+        '즉시 주의': 3,
+        '경과 관찰': 2,
+        '정상': 1,
+        '소견 대기': 0,
+      };
+      
+      // 소견 미작성 환자: AI 위험도 또는 기본값으로 정렬
+      const sortedNeedsReview = needsReview.sort((a, b) => {
+        const priorityA = riskPriority[a.doctor_risk_level || ''] || 0;
+        const priorityB = riskPriority[b.doctor_risk_level || ''] || 0;
+        if (priorityB !== priorityA) return priorityB - priorityA;
+        return a.name.localeCompare(b.name);
+      });
+      
+      // 소견 작성 완료 환자: 의사 위험도순
+      const sortedReviewed = reviewed.sort((a, b) => {
+        const priorityA = riskPriority[a.doctor_risk_level || ''] || 0;
+        const priorityB = riskPriority[b.doctor_risk_level || ''] || 0;
+        if (priorityB !== priorityA) return priorityB - priorityA;
+        return a.name.localeCompare(b.name);
+      });
+      
+      sorted = [...sortedNeedsReview, ...sortedReviewed];
+    } else if (sortOption === '의사 위험도순') {
+      // 의사가 선정한 위험도 기준으로 정렬 (소견 미작성은 하단)
+      const riskPriority: Record<string, number> = {
+        '즉시 주의': 3,
+        '경과 관찰': 2,
+        '정상': 1,
+        '소견 대기': 0,
+      };
+      
+      sorted.sort((a, b) => {
+        // 소견 미작성 환자는 하단
+        if (a.needs_review && !b.needs_review) return 1;
+        if (!a.needs_review && b.needs_review) return -1;
+        
+        const priorityA = riskPriority[a.doctor_risk_level || ''] || 0;
+        const priorityB = riskPriority[b.doctor_risk_level || ''] || 0;
+        if (priorityB !== priorityA) return priorityB - priorityA;
+        return a.name.localeCompare(b.name);
+      });
+    } else if (sortOption === '이름순') {
+      sorted.sort((a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true, sensitivity: 'base' }));
+    }
 
-    return [...sortedAttention, ...sortedNormal];
-  }, [patients]);
+    return sorted;
+  }, [patients, sortOption]);
 
   // ✅ 검색 및 필터 적용
   const filteredPatients = useMemo(() => {
@@ -204,22 +264,26 @@ const DoctorHistoryPage: React.FC = () => {
         <h2 className="text-lg font-bold mb-3 text-left">진단 기록</h2>
       )}
 
-      {/* 검색 및 필터 (환자 목록에서만 표시, 겹쳐서 배치) */}
+      {/* 검색 및 필터 (환자 목록에서만 표시) */}
       {viewMode === 'patients' && (
-        <div className="mb-4 relative">
-          {/* 검색 입력과 드롭다운을 겹쳐서 배치 */}
+        <div className="mb-4 space-y-2">
+          {/* 검색 입력 */}
           <div className="relative">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="환자 이름 검색..."
-              className="w-full pr-24 pl-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+              className="w-full pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
             />
+          </div>
+          
+          {/* 필터 및 정렬 */}
+          <div className="flex gap-2">
             <select
               value={riskFilter}
               onChange={(e) => setRiskFilter(e.target.value)}
-              className="absolute right-1 top-1/2 -translate-y-1/2 text-xs border border-gray-300 rounded-md px-2 py-1 bg-white focus:ring-2 focus:ring-indigo-400"
+              className="flex-1 text-xs border border-gray-300 rounded-md px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-400"
             >
               <option value="전체 보기">전체 보기</option>
               <option value="주의 환자">주의 환자</option>
@@ -227,6 +291,15 @@ const DoctorHistoryPage: React.FC = () => {
               <option value="경과 관찰">경과 관찰</option>
               <option value="추가검사 필요">추가검사 필요</option>
               <option value="치료 완료">치료 완료</option>
+            </select>
+            <select
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value as '소견 필요순' | '의사 위험도순' | '이름순')}
+              className="flex-1 text-xs border border-gray-300 rounded-md px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-400"
+            >
+              <option value="소견 필요순">소견 필요순</option>
+              <option value="의사 위험도순">의사 위험도순</option>
+              <option value="이름순">이름순</option>
             </select>
           </div>
         </div>
@@ -241,8 +314,10 @@ const DoctorHistoryPage: React.FC = () => {
                 key={patient.id}
                 onClick={() => setSelectedPatientId(patient.id)}
                 className={`flex items-center rounded-xl p-4 shadow-sm hover:shadow-md cursor-pointer transition ${
-                  patient.has_attention || 
-                  (patient.latest_note && (patient.latest_note.includes('즉시 주의') || patient.latest_note.includes('주의')))
+                  patient.needs_review
+                    ? 'bg-yellow-50 border-2 border-yellow-300'
+                    : patient.has_attention || 
+                      (patient.latest_note && (patient.latest_note.includes('즉시 주의') || patient.latest_note.includes('주의')))
                     ? 'bg-red-50 border-2 border-red-200'
                     : 'bg-white'
                 }`}
@@ -252,10 +327,20 @@ const DoctorHistoryPage: React.FC = () => {
                     <h3 className="text-base font-semibold text-gray-900">
                       {patient.name}
                     </h3>
+                    {patient.needs_review && (
+                      <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
+                        소견 필요
+                      </span>
+                    )}
                     {(patient.has_attention || 
                       (patient.latest_note && (patient.latest_note.includes('즉시 주의') || patient.latest_note.includes('주의')))) && (
                       <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
                         주의
+                      </span>
+                    )}
+                    {patient.doctor_risk_level && !patient.needs_review && (
+                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                        {patient.doctor_risk_level}
                       </span>
                     )}
                   </div>
