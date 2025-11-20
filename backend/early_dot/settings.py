@@ -227,6 +227,7 @@ CORS_ALLOWED_ORIGINS = [
 
     # Mac 네트워크 이름 접근 (같은 와이파이 내 다른 PC에서 접근)
     "http://sondongbin-ui-MacBookPro.local:3000",
+    "http://tasha@Dayeongui-MacBookAir.local:3000",
     "http://sondongbin-ui-MacBookPro.local:5173",
 ]
 
@@ -239,6 +240,7 @@ CSRF_TRUSTED_ORIGINS = [
     "http://0.0.0.0:8000",
     "http://django:8000",
     "http://sondongbin-ui-MacBookPro.local:3000",
+    "http://tasha@Dayeongui-MacBookAir.local:3000",
     "http://sondongbin-ui-MacBookPro.local:5173",
 ]
 
