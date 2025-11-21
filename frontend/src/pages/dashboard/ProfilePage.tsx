@@ -314,22 +314,24 @@ const PatientSpecificFields: React.FC = () => {
                                 patient.sex === '여성' || patient.sex === 'F' ? '여' : 
                                 patient.sex || '-';
               
-              // AI 진단 심각도 표시
-              const aiRiskDisplay = patient.ai_risk_level || '미진단';
+              // 위험도 표시 (의사 위험도 우선, 없으면 AI 위험도)
+              const riskDisplay = patient.ai_risk_level || '미진단';
+              // 의사 위험도인지 AI 위험도인지 구분 (의사 위험도: '즉시 주의', '경과 관찰', '정상', '소견 대기')
+              const isDoctorRisk = riskDisplay && ['즉시 주의', '경과 관찰', '정상', '소견 대기'].includes(riskDisplay);
               
               return (
                 <li key={patient.id} className="flex justify-between items-center p-3 border rounded-lg bg-gray-50 hover:bg-gray-100 transition duration-150">
                   <div className="flex flex-col text-left flex-1">
                     <span className="font-semibold text-gray-800">{patient.name}</span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-gray-600">{sexDisplay}</span>
-                      <span className="text-xs text-gray-400">|</span>
-                      <span className={`text-xs ${patient.needs_review ? 'text-yellow-600 font-medium' : 'text-gray-600'}`}>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      <span className="text-[10px] text-gray-600 whitespace-nowrap">{sexDisplay}</span>
+                      <span className="text-[10px] text-gray-400">|</span>
+                      <span className={`text-[10px] whitespace-nowrap ${patient.needs_review ? 'text-yellow-600 font-medium' : 'text-gray-600'}`}>
                         {patient.needs_review ? '소견 필요' : '소견 완료'}
                       </span>
-                      <span className="text-xs text-gray-400">|</span>
-                      <span className="text-xs text-gray-600">
-                        {aiRiskDisplay}
+                      <span className="text-[10px] text-gray-400">|</span>
+                      <span className="text-[10px] text-gray-600 whitespace-nowrap" title={isDoctorRisk ? '의사 위험도' : 'AI 위험도'}>
+                        {riskDisplay}
                       </span>
                     </div>
                   </div>

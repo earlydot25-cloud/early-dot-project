@@ -673,63 +673,114 @@ class DoctorDashboardMainView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # 1. 💡 request.user는 이미 인증된 Users 객체입니다.
-        user = request.user
-
-        # 1. 의사 여부 확인
-        if not user.is_doctor:
-            return Response({'error': '접근 권한이 없습니다. 의사 계정으로 로그인해야 합니다.'}, status=status.HTTP_403_FORBIDDEN)
-
-        # 2. 🚨 로그인한 Users와 연결된 Doctors 레코드의 ID 가져오기
         try:
-            # related_name='doctor_profile'을 통해 Doctors 인스턴스를 가져옵니다.
-            doctor_record = user.doctor_profile
+            # 1. 💡 request.user는 이미 인증된 Users 객체입니다.
+            user = request.user
+            print(f"[DoctorDashboardMainView] 요청 사용자: {user.email} (ID: {user.id}, is_doctor: {user.is_doctor})")
 
-            # Doctors 테이블의 PK (uid)가 Users의 ID를 참조하므로, user.id가 곧 doctor_id 입니다.
-            # 하지만 쿼리 필터링 시에는 doctor_record.uid.id 또는 doctor_record.pk를 사용하거나,
-            # 아니면 Doctors의 PK인 user.id를 사용해도 됩니다.
-            doctor_id = doctor_record.uid.id  # Users의 ID와 동일
+            # 1. 의사 여부 확인
+            if not user.is_doctor:
+                print(f"[DoctorDashboardMainView] 접근 거부: {user.email}은 의사 계정이 아닙니다.")
+                return Response({'error': '접근 권한이 없습니다. 의사 계정으로 로그인해야 합니다.'}, status=status.HTTP_403_FORBIDDEN)
 
-        except Doctors.DoesNotExist:
-            print(f"ERROR: {user.email} 사용자는 is_doctor=True 이지만 Doctors 테이블에 레코드가 없습니다.")
-            return Response(
-                {'error': 'Doctors 테이블에 의사 정보가 누락되었습니다.'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            # 2. 🚨 로그인한 Users와 연결된 Doctors 레코드의 ID 가져오기
+            doctor_id = None
+            try:
+                # related_name='doctor_profile'을 통해 Doctors 인스턴스를 가져옵니다.
+                # Doctors.DoesNotExist 또는 AttributeError를 모두 처리합니다.
+                doctor_record = Doctors.objects.get(uid=user)
+                doctor_id = doctor_record.uid.id  # Users의 ID와 동일
+                print(f"[DoctorDashboardMainView] Doctors 레코드 발견: doctor_id={doctor_id}")
 
-        # 3. 쿼리 로직 수정: doctor_id 사용 (이 부분은 유지)
-        doctor_assigned_results = Results.objects.filter(
-            followup_check__doctor_id=doctor_id  # 💡 doctor_id는 Doctors 테이블의 PK (user.id)
-        ).order_by('-analysis_date')[:5]
+            except (Doctors.DoesNotExist, AttributeError) as e:
+                print(f"[DoctorDashboardMainView] WARNING: {user.email} (ID: {user.id}) 사용자는 is_doctor=True 이지만 Doctors 테이블에 레코드가 없습니다.")
+                print(f"[DoctorDashboardMainView] Exception type: {type(e).__name__}, Message: {str(e)}")
+                # Doctors 레코드가 없으면 자동으로 생성
+                try:
+                    doctor_record = Doctors.objects.create(
+                        uid=user,
+                        name=user.name if hasattr(user, 'name') else user.email.split('@')[0],
+                        specialty='피부과',  # 기본값
+                        hospital='',  # 기본값
+                        status='승인'  # 기본값
+                    )
+                    doctor_id = doctor_record.uid.id
+                    print(f"[DoctorDashboardMainView] SUCCESS: Doctors 레코드를 자동으로 생성했습니다. (ID: {doctor_id})")
+                except Exception as create_error:
+                    print(f"[DoctorDashboardMainView] ERROR: Doctors 레코드 자동 생성 실패: {type(create_error).__name__}: {str(create_error)}")
+                    import traceback
+                    print(f"[DoctorDashboardMainView] Traceback: {traceback.format_exc()}")
+                    return Response(
+                        {'error': 'Doctors 테이블에 의사 정보가 누락되었고, 자동 생성에도 실패했습니다. 관리자에게 문의하세요.'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+            except Exception as e:
+                print(f"[DoctorDashboardMainView] ERROR: 의사 정보 조회 중 예상치 못한 오류 발생: {type(e).__name__}: {str(e)}")
+                import traceback
+                print(f"[DoctorDashboardMainView] Traceback: {traceback.format_exc()}")
+                return Response(
+                    {'error': f'의사 정보 조회 중 오류가 발생했습니다: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
-        # 🔴 DoctorCardSerializer를 사용하여 환자 정보 및 증상을 포함하여 직렬화합니다.
-        try:
-            history_data = DoctorCardSerializer(doctor_assigned_results, many=True).data
+            if doctor_id is None:
+                print(f"[DoctorDashboardMainView] ERROR: doctor_id가 None입니다.")
+                return Response(
+                    {'error': '의사 ID를 확인할 수 없습니다.'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
+            # 3. 쿼리 로직 수정: 의사에게 할당된 환자들의 모든 진단 결과 조회
+            print(f"[DoctorDashboardMainView] 쿼리 시작: doctor_id={doctor_id}")
+            # 의사에게 할당된 환자들의 모든 진단 결과 조회 (FollowUpCheck 유무와 관계없이)
+            doctor_assigned_results = Results.objects.filter(
+                photo__user__doctor=doctor_record  # 의사에게 할당된 환자들의 진단 결과
+            ).select_related('photo__user', 'disease', 'followup_check').order_by('-analysis_date')[:5]
+            print(f"[DoctorDashboardMainView] 쿼리 결과 개수: {doctor_assigned_results.count()}")
+
+            # 🔴 DoctorCardSerializer를 사용하여 환자 정보 및 증상을 포함하여 직렬화합니다.
+            try:
+                history_data = DoctorCardSerializer(doctor_assigned_results, many=True).data
+                print(f"[DoctorDashboardMainView] 시리얼라이즈 완료: {len(history_data)}개 항목")
+            except Exception as e:
+                print(f"[DoctorDashboardMainView] Serializer Error: {type(e).__name__}: {str(e)}")
+                import traceback
+                print(f"[DoctorDashboardMainView] Traceback: {traceback.format_exc()}")
+                return Response(
+                    {'error': f'시리얼라이즈 과정 오류 발생: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
+            # 2. 요약 정보 (즉시 주의 건수 계산)
+            #    - 의사 소견(doctor_risk_level)이 '즉시 주의'인 경우만 계산
+            immediate_attention_count = Results.objects.filter(
+                photo__user__doctor=doctor_record,
+                followup_check__doctor_risk_level='즉시 주의'
+            ).count()
+            total_assigned_count = Results.objects.filter(
+                photo__user__doctor=doctor_record
+            ).count()
+            print(f"[DoctorDashboardMainView] 요약 정보: total={total_assigned_count}, immediate_attention={immediate_attention_count}")
+
+            summary_data = {
+                'total_assigned_count': total_assigned_count,
+                'immediate_attention_count': immediate_attention_count,
+            }
+
+            # 3. 최종 응답 (DoctorDashboardSerializer 구조 사용)
+            print(f"[DoctorDashboardMainView] 응답 생성 완료")
+            return Response({
+                'summary': summary_data,
+                'history': history_data
+            })
         except Exception as e:
-            print(f"Serializer Error: {e}")
+            print(f"[DoctorDashboardMainView] FATAL ERROR: {type(e).__name__}: {str(e)}")
+            import traceback
+            print(f"[DoctorDashboardMainView] Full Traceback:\n{traceback.format_exc()}")
             return Response(
-                {'error': f'시리얼라이즈 과정 오류 발생: {e}'},
+                {'error': f'의사 대시보드 데이터를 불러오는 중 오류가 발생했습니다: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-        # 2. 요약 정보 (즉시 주의 건수 계산)
-        #    - 의사 소견(doctor_risk_level)이 '즉시 주의'인 경우만 계산
-        immediate_attention_count = Results.objects.filter(
-            followup_check__doctor_id=doctor_id,
-            followup_check__doctor_risk_level='즉시 주의'
-        ).count()
-        total_assigned_count = doctor_assigned_results.count()
-
-        summary_data = {
-            'total_assigned_count': total_assigned_count,
-            'immediate_attention_count': immediate_attention_count,
-        }
-
-        # 3. 최종 응답 (DoctorDashboardSerializer 구조 사용)
-        return Response({
-            'summary': summary_data,
-            'history': history_data
-        })
 
 
 # --------------------------------------------------------

@@ -328,17 +328,17 @@ const DoctorHistoryPage: React.FC = () => {
               <div
                 key={patient.id}
                 onClick={() => setSelectedPatientId(patient.id)}
-                className={`flex items-center rounded-xl p-4 shadow-sm hover:shadow-md cursor-pointer transition ${
+                className={`flex items-center rounded-xl p-4 shadow-sm hover:shadow-md cursor-pointer transition bg-white ${
                   patient.needs_review
-                    ? 'bg-yellow-50 border-2 border-yellow-300'
+                    ? 'border-2 border-yellow-300'
                     : patient.doctor_risk_level === '경과 관찰'
-                    ? 'bg-orange-50 border-2 border-orange-200'
+                    ? 'border-2 border-orange-200'
                     : patient.doctor_risk_level === '정상'
-                    ? 'bg-green-50 border-2 border-green-200'
+                    ? 'border-2 border-green-200'
                     : patient.has_attention ||
                       (patient.latest_note && (patient.latest_note.includes('즉시 주의') || patient.latest_note.includes('주의')))
-                    ? 'bg-red-50 border-2 border-red-200'
-                    : 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
+                    ? 'border-2 border-red-200'
+                    : 'border border-gray-200'
                 }`}
               >
                 <div className="flex-1 text-left leading-tight">
