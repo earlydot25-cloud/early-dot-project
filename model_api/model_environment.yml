@@ -18,6 +18,7 @@ dependencies:
     - pydantic
     - uvicorn
     - python-multipart
+    - ultralytics==8.3.218
     - segmentation-models-pytorch==0.5.0
     - timm==1.0.21
     - albumentations==0.5.2

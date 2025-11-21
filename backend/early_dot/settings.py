@@ -207,6 +207,12 @@ ALLOWED_HOSTS = [
     "django",     # Docker 네트워크 내부 접근용
     # Mac 로컬 네트워크 접근 허용 (맥북 이름 부분은 각자 환경에 맞게)
     "sondongbin-ui-MacBookPro.local",
+    "tasha@Dayeongui-MacBookAir.local",
+    '*',
+    # 나중에 도메인이 변경될 경우를 대비해 ngrok 와일드카드를 추가해 둘 수도 있습니다.
+    'asley-merocrine-discommodiously.ngrok-free.dev',
+    '*.ngrok-free.dev',
+    '*.ngrok-free.app',
 ]
 
 # 개발 중에는 모든 오리진 허용 (편의성)
@@ -227,6 +233,7 @@ CORS_ALLOWED_ORIGINS = [
 
     # Mac 네트워크 이름 접근 (같은 와이파이 내 다른 PC에서 접근)
     "http://sondongbin-ui-MacBookPro.local:3000",
+    "http://tasha@Dayeongui-MacBookAir.local:3000",
     "http://sondongbin-ui-MacBookPro.local:5173",
 ]
 
@@ -239,6 +246,7 @@ CSRF_TRUSTED_ORIGINS = [
     "http://0.0.0.0:8000",
     "http://django:8000",
     "http://sondongbin-ui-MacBookPro.local:3000",
+    "http://tasha@Dayeongui-MacBookAir.local:3000",
     "http://sondongbin-ui-MacBookPro.local:5173",
 ]
 
