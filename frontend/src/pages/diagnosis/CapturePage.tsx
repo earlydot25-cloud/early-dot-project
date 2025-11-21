@@ -1,18 +1,20 @@
 import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 import Webcam from 'react-webcam';
 import { useNavigate, useLocation } from 'react-router-dom';
-// Fi 아이콘 사용을 유지합니다. (사용자 제공 코드 기반)
+// Fi 아이콘 사용을 유지합니다.
 import { FiArrowLeft, FiZap, FiZapOff, FiImage } from 'react-icons/fi';
 
 const MAX_STAGE_WIDTH = 430;
+// 💡 [수정] 카메라 스테이지의 상하 수직 여백을 80px에서 100px로 늘려 화면을 더 축소
+const STAGE_VERTICAL_PADDING = 100;
 
-// 💡 [추가] YOLO API 호출 주소 (FastAPI 컨테이너 호스트 포트 8001)
+// 💡 YOLO API 호출 주소 (FastAPI 컨테이너 호스트 포트 8001)
 const DETECTION_API_URL = 'http://localhost:8001/api/detect/stream';
 
-// 💡 [추가] 탐지 결과 타입 정의
+// 💡 탐지 결과 타입 정의
 interface DetectionResult {
   box: [number, number, number, number]; // [x1, y1, x2, y2] (0~1000 스케일)
-  label: string; // 백엔드 통신을 위해 유지하지만, UI에는 출력하지 않음
+  label: string;
   confidence: number;
 }
 
@@ -67,7 +69,7 @@ const styles: Record<string, React.CSSProperties> = {
     inset: 0,            // top:0, right:0, bottom:0, left:0
     display: 'flex',
     justifyContent: 'center', // 중앙 정렬
-    alignItems: 'stretch',
+    alignItems: 'flex-start', // 상단부터 배치되도록 수정 (dynamic style로 margin-top 조정 예정)
     background: 'transparent' // 검정색이 바깥으로 새는걸 방지(배경은 stage가 가짐)
   },
 
@@ -126,14 +128,13 @@ const CapturePage: React.FC = () => {
 
   const navigate = useNavigate();
   const [torchOn, setTorchOn] = useState(false);
-  // [수정] guideOn 상태는 이제 AI 탐지 여부와 연동됩니다.
-  // const [guideOn, setGuideOn] = useState(true);
 
   const webcamRef = useRef<Webcam>(null);
   const { top, bottom } = useNavInsets();
 
-  // 💡 [추가] AI 탐지 상태 및 결과
+  // 💡 AI 탐지 상태 및 결과
   const [isDetecting, setIsDetecting] = useState(false);
+  // NOTE: 탐지된 결과가 환부가 아닌 '사람' 전체를 잡는 문제가 발생하고 있음 (백엔드 AI 모델 문제)
   const [detections, setDetections] = useState<DetectionResult[]>([]);
 
 
@@ -162,10 +163,9 @@ const CapturePage: React.FC = () => {
 
   // ✅ 촬영 → 업로드하지 말고 저장 페이지로 이동
   const handleCapture = useCallback(() => {
-    // 💡 [수정] isDetecting 모드일 때는 촬영을 막을 수 있음 (선택 사항)
+    // 💡 AI 감지 중에도 캡처 허용
     if (isDetecting) {
-        console.warn("감지 모드에서는 촬영할 수 없습니다.");
-        return;
+        console.warn("AI 감지 중 촬영이 완료되었습니다.");
     }
 
     const shot = webcamRef.current?.getScreenshot();
@@ -195,10 +195,14 @@ const CapturePage: React.FC = () => {
     });
   };
 
-  // 💡 [수정] 감지 토글 함수: isDetecting 상태를 토글
-  const handleToggleDetection = () => {
-    setIsDetecting(v => !v);
-  };
+  // 💡 감지 토글 함수
+  const handleToggleDetection = useCallback(() => {
+    setIsDetecting(v => {
+      const newState = !v;
+      console.log(`[AI Detection Toggle] State changed from ${v} to ${newState}.`);
+      return newState;
+    });
+  }, []);
 
   const videoConstraints: MediaStreamConstraints['video'] = {
     width: { ideal: 720 },
@@ -231,71 +235,78 @@ const CapturePage: React.FC = () => {
   };
   useEffect(() => { applyTorch(torchOn); }, [torchOn]);
 
-  // 💡 [추가] 실시간 탐지 로직 (isDetecting 상태 변경 감지)
+  // 💡 실시간 탐지 로직: 1초(1000ms) 간격으로 유지
   useEffect(() => {
-    let intervalId: number | undefined;
+    const DELAY_MS = 1000;
 
-    const DELAY_MS = 500;
-
-    if (isDetecting) {
-        intervalId = window.setInterval(async () => {
-            const shot = webcamRef.current?.getScreenshot();
-            if (!shot || shot.startsWith('data:,') || !shot.includes('base64')) {
-              // 캡처 실패 또는 비디오가 아직 로드되지 않음
-              return;
-            }
-
-            try {
-                // Base64 Data URL에서 데이터 부분만 추출 (data:image/jpeg;base64,...)
-                const base64Data = shot.split(',')[1];
-
-                const response = await fetch(DETECTION_API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image_base64: `data:image/jpeg;base64,${base64Data}` }), // 전체 Data URL 형식으로 전송
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Detection API failed: ${response.status}`);
-                }
-
-                const data: DetectionResult[] = await response.json();
-
-                // 탐지된 데이터만 업데이트
-                if (data.length > 0) {
-                   setDetections(data);
-                } else {
-                   setDetections([]);
-                }
-
-            } catch (error) {
-                console.error("탐지 요청 실패:", error);
-                setDetections([]);
-            }
-
-        }, DELAY_MS);
-    } else {
-        // 탐지 모드가 꺼지면 박스 초기화 및 인터벌 종료
-        setDetections([]);
+    if (!isDetecting) {
+      // isDetecting이 false일 때: 탐지 중지 및 바운딩 박스 제거
+      setDetections([]);
+      console.log("AI 감지 모드 중지 완료: 박스 초기화 및 타이머 시작 방지.");
+      return;
     }
 
-    // 클린업: 인터벌 해제
-    return () => {
-        if (intervalId) window.clearInterval(intervalId);
-    };
-  }, [isDetecting]);
+    // isDetecting이 true인 경우: 타이머 시작
+    console.log(`AI 감지 모드 시작: ${DELAY_MS}ms 간격으로 API 호출`);
+    const intervalId = window.setInterval(async () => {
+        const shot = webcamRef.current?.getScreenshot();
+        if (!shot || shot.startsWith('data:,') || !shot.includes('base64')) {
+          return;
+        }
 
-  // 네비 사이만 정확히 차도록
+        try {
+            // Base64 Data URL에서 데이터 부분만 추출
+            const base64Data = shot.split(',')[1];
+
+            // NOTE: fetch 호출 시 API 키나 인증은 이 환경에서 생략
+            const response = await fetch(DETECTION_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image_base64: `data:image/jpeg;base64,${base64Data}` }),
+            });
+
+            if (!response.ok) {
+                console.error(`Detection API failed: ${response.status} ${response.statusText}`);
+                return;
+            }
+
+            const data: DetectionResult[] = await response.json();
+
+            if (data.length > 0) {
+               // [NOTE] 모델이 환부가 아닌 사람/배경을 잡는 경우, 여기로 잘못된 결과가 들어옴
+               setDetections(data);
+            } else {
+               setDetections([]);
+            }
+
+        } catch (error) {
+            console.error("탐지 요청 실패:", error);
+            setDetections([]);
+        }
+
+    }, DELAY_MS);
+
+    // 💡 클린업 함수: isDetecting이 false로 바뀌거나 컴포넌트가 언마운트될 때 호출되어 타이머를 중지합니다.
+    return () => {
+        console.log(`[Cleanup] 타이머 ${intervalId}를 해제합니다.`);
+        window.clearInterval(intervalId);
+    };
+  }, [isDetecting]); // isDetecting 상태에만 의존
+
+  // 네비 사이만 정확히 차도록 (수직 여백 추가)
   const stageDynamicStyle: React.CSSProperties = {
-    marginTop: top,
-    height: `calc(100dvh - ${top + bottom}px)`,
+    // [수정] 상단 네비 높이에 증가된 수직 여백(100px)을 더합니다.
+    marginTop: top + STAGE_VERTICAL_PADDING,
+    // [수정] 전체 사용 가능한 높이에서 상하 여백(2 * PADDING)만큼 꿉니다.
+    height: `calc(100dvh - ${top + bottom + 2 * STAGE_VERTICAL_PADDING}px)`,
   };
 
-  // 💡 [추가] 탐지된 단일 박스
+  // 💡 탐지된 단일 박스
   const detection = detections.length > 0 ? detections[0] : null;
 
   return (
     <div style={styles.outerWrapper}>
+      {/* 스테이지에 수정된 동적 스타일 적용 */}
       <div style={{ ...styles.stage, ...stageDynamicStyle }}>
         <div style={styles.webcamWrapper}>
           <Webcam
@@ -316,10 +327,10 @@ const CapturePage: React.FC = () => {
           <div style={{ ...styles.gridLineH, top: '33.3%' }} />
           <div style={{ ...styles.gridLineH, top: '66.6%' }} />
 
-          {/* 💡 [수정] 가이드 박스: AI 감지 중이 아닐 때(!isDetecting)만 표시 */}
+          {/* 💡 가이드 박스: AI 감지 중이 아닐 때(!isDetecting)만 표시 */}
           {!isDetecting && <div style={styles.guideBox} />}
 
-          {/* 💡 [추가] 탐지된 단일 바운딩 박스 렌더링 (신뢰도만 표시) */}
+          {/* 💡 탐지된 단일 바운딩 박스 렌더링 */}
           {detection && (
             <div
               style={{
@@ -329,32 +340,21 @@ const CapturePage: React.FC = () => {
                 top: `${detection.box[1] / 10}%`,
                 width: `${(detection.box[2] - detection.box[0]) / 10}%`,
                 height: `${(detection.box[3] - detection.box[1]) / 10}%`,
-                border: '3px solid #FFC107',
+                // 테두리 두께 2px 유지 (시각적 부담 최소화)
+                border: '2px solid #FFC107',
                 borderRadius: 4,
                 boxSizing: 'border-box',
               }}
             >
-              <span style={{
-                position: 'absolute',
-                top: detection.box[1] / 10 > 5 ? -25 : 'calc(100% + 5px)',
-                left: 0,
-                backgroundColor: '#FFC107',
-                color: 'black',
-                padding: '2px 4px',
-                fontSize: 12,
-                borderRadius: 2,
-                pointerEvents: 'none',
-                lineHeight: '1',
-              }}>
-                {detection.confidence.toFixed(2)}
-              </span>
+              {/* 신뢰도 텍스트 제거됨 */}
             </div>
           )}
         </div>
 
-        {/* 💡 [수정] 가이드 텍스트: isDetecting 상태에 따라 표시 */}
+        {/* 💡 가이드 텍스트: isDetecting 상태에 따라 표시 */}
         {!isDetecting && <div style={styles.guideText}>환부를 초록 박스에 맞춰 촬영해주세요</div>}
-        {isDetecting && <div style={{...styles.guideText, color: '#FFC107'}}>AI가 환부를 감지 중입니다...</div>}
+        {/* 모델이 사람을 잡는 문제에 대한 안내 추가 */}
+        {isDetecting && <div style={{...styles.guideText, color: '#FFC107'}}>AI가 환부를 감지 중입니다 (1초 간격)</div>}
 
         <div style={styles.topBar}>
           <button style={styles.iconButton} onClick={handleBack}><FiArrowLeft size={24} /></button>
@@ -371,7 +371,7 @@ const CapturePage: React.FC = () => {
           <input type="file" accept="image/*" ref={galleryInputRef} style={styles.hiddenInput} onChange={handleGalleryChange} />
           <button style={styles.captureButton} onClick={handleCapture} />
 
-          {/* 💡 [수정] 감지 토글 버튼: isDetecting 상태에 따라 텍스트 및 스타일 변경 */}
+          {/* 💡 감지 토글 버튼: isDetecting 상태에 따라 텍스트 및 스타일 변경 */}
           <button
             style={{
               ...styles.textButton,
@@ -381,7 +381,7 @@ const CapturePage: React.FC = () => {
             onClick={handleToggleDetection}
             aria-pressed={isDetecting}
           >
-            {isDetecting ? '감지 중지' : 'AI 감지'}
+            {isDetecting ? '감지 중지' : 'AI 감지 시작'}
           </button>
         </div>
       </div>
