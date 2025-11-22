@@ -85,14 +85,26 @@ class UserSimpleSerializer(serializers.ModelSerializer):
         fields = ['name', 'calculated_age', 'family_history'] # 'age' 필드는 제거 또는 유지 가능
 
     def get_calculated_age(self, obj):
-        """Users 객체에서 생년월일(date_of_birth)을 기반으로 만 나이를 계산합니다."""
-        if hasattr(obj, 'age') and obj.age:
-            today = date.today()
-            # 만 나이 계산 공식: (오늘 연도 - 생일 연도) - (생일이 지나지 않았으면 1)
-            age = today.year - obj.age.year - (
-                (today.month, today.day) < (obj.age.month, obj.age.day)
-            )
-            return age
+        """Users 객체에서 생년월일(birth_date)을 기반으로 만 나이를 계산합니다."""
+        # birth_date가 있으면 만 나이 계산
+        if hasattr(obj, 'birth_date') and obj.birth_date:
+            try:
+                today = date.today()
+                # 만 나이 계산 공식: (오늘 연도 - 생일 연도) - (생일이 지나지 않았으면 1)
+                age = today.year - obj.birth_date.year - (
+                    (today.month, today.day) < (obj.birth_date.month, obj.birth_date.day)
+                )
+                return age
+            except (AttributeError, TypeError) as e:
+                # birth_date가 날짜 객체가 아닌 경우 (예: 정수로 저장된 경우)
+                print(f"[UserSimpleSerializer] birth_date 처리 오류: {type(obj.birth_date)} - {str(e)}")
+                # age 필드가 있으면 그대로 사용
+                if hasattr(obj, 'age') and obj.age:
+                    return obj.age
+                return None
+        # birth_date가 없으면 age 필드 사용
+        elif hasattr(obj, 'age') and obj.age:
+            return obj.age
         return None # 생년월일 정보가 없으면 None 반환
 
 # 🔴 신규: 의사 화면에 필요한 증상 정보 (Photos 모델 사용)
@@ -104,6 +116,29 @@ class PhotoSymptomsSerializer(serializers.ModelSerializer):
         # 상처로 인한 감염, 통증, 가려움 태그를 위한 필드
         fields = ['body_part', 'folder_name', 'capture_date', 'onset_date', 'symptoms_itch', 'symptoms_pain',
                   'symptoms_infection']
+    
+    def to_representation(self, instance):
+        """날짜 필드를 안전하게 처리"""
+        data = super().to_representation(instance)
+        # capture_date가 datetime 객체인 경우 ISO 형식으로 변환
+        if instance.capture_date:
+            try:
+                if hasattr(instance.capture_date, 'isoformat'):
+                    data['capture_date'] = instance.capture_date.isoformat()
+                elif isinstance(instance.capture_date, str):
+                    data['capture_date'] = instance.capture_date
+                else:
+                    data['capture_date'] = str(instance.capture_date)
+            except (AttributeError, TypeError) as e:
+                print(f"[PhotoSymptomsSerializer] capture_date 처리 오류: {type(instance.capture_date)} - {str(e)}")
+                data['capture_date'] = str(instance.capture_date) if instance.capture_date else None
+        else:
+            data['capture_date'] = None
+        
+        # onset_date는 CharField이므로 그대로 사용
+        data['onset_date'] = instance.onset_date if hasattr(instance, 'onset_date') else None
+        
+        return data
 
 
 # 🔴 신규: 상세 페이지용 Photo 시리얼라이저 (모든 증상 필드 포함)

@@ -5,6 +5,28 @@ import { useNavigate } from 'react-router-dom';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000';
 
+// ✅ 이미지 URL 처리 함수
+const normalizeHost = (url: string) =>
+  url.replace(/^http:\/\/(?:django|project_django)(?::\d+)?/i, API_BASE_URL);
+
+const resolveMediaUrl = (rawPath?: string) => {
+  if (!rawPath) return '';
+  let path = rawPath.replace(/\\/g, '/');
+
+  if (/^https?:\/\//i.test(path)) return normalizeHost(path);
+  if (path.startsWith('/')) return `${API_BASE_URL}${path}`;
+  if (path.startsWith('media/')) return `${API_BASE_URL}/${path}`;
+
+  if (path.includes('/media/')) {
+    const parts = path.split('/media/');
+    if (parts.length > 1) {
+      return `${API_BASE_URL}/media/${parts[parts.length - 1]}`;
+    }
+  }
+
+  return `${API_BASE_URL}/media/${path}`;
+};
+
 interface Folder {
   folder_name: string;
   body_part: string;
@@ -282,9 +304,9 @@ const HistoryPage: React.FC = () => {
                   navigate(`/dashboard/history/${folder.folder_name}`);
                 }
               }}
-              className={`flex items-center bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition gap-3 ${
+              className={`flex items-center bg-white border rounded-lg shadow-sm p-4 hover:shadow-md transition gap-3 ${
                 isEditMode ? 'cursor-default' : 'cursor-pointer'
-              } ${selectedFolders.has(folder.folder_name) ? 'ring-2 ring-blue-500' : ''}`}
+              } ${selectedFolders.has(folder.folder_name) ? 'ring-2 ring-blue-500 border-blue-300' : 'border-gray-200'}`}
             >
               {/* 체크박스 (수정 모드일 때만) */}
               {isEditMode && (
@@ -296,6 +318,30 @@ const HistoryPage: React.FC = () => {
                   className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
                 />
               )}
+              
+              {/* 이미지 표시 (메인화면 스타일) */}
+              <div className="w-16 h-16 rounded mr-3 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {folder.upload_storage_path ? (
+                  <img
+                    src={resolveMediaUrl(folder.upload_storage_path)}
+                    alt={`${folder.folder_name} 이미지`}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent) {
+                        parent.innerHTML = '<div class="w-full h-full bg-blue-500 flex items-center justify-center text-xs font-bold text-white">이미지 없음</div>';
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full bg-blue-500 flex items-center justify-center text-xs font-bold text-white">
+                    이미지 없음
+                  </div>
+                )}
+              </div>
+
               <div className="flex-1 text-left leading-tight">
                 {/* 폴더명 (수정 모드에서는 클릭 가능) */}
                 {isEditMode && editingFolder === folder.folder_name ? (
@@ -308,7 +354,7 @@ const HistoryPage: React.FC = () => {
                         try {
                           const token = localStorage.getItem('accessToken');
                           await axios.patch(
-                            `/api/dashboard/folders/${encodeURIComponent(folder.folder_name)}/update/`,
+                            `${API_BASE_URL}/api/dashboard/folders/${encodeURIComponent(folder.folder_name)}/update/`,
                             { folder_name: editFolderName },
                             {
                               headers: {
@@ -317,10 +363,11 @@ const HistoryPage: React.FC = () => {
                             }
                           );
                           // 목록 새로고침
-                          const response = await axios.get<Folder[]>('/api/dashboard/folders/', {
+                          const response = await axios.get<Folder[]>(`${API_BASE_URL}/api/dashboard/folders/`, {
                             headers: { Authorization: `Bearer ${token}` },
                           });
-                          setFolders(response.data);
+                          setAllFolders(response.data);
+                          applyFiltersAndSort(response.data);
                         } catch (err) {
                           console.error('Update error:', err);
                           alert('수정 중 오류가 발생했습니다.');
@@ -342,7 +389,7 @@ const HistoryPage: React.FC = () => {
                   />
                 ) : (
                   <h3
-                    className={`text-base font-semibold text-gray-900 mb-1 ${
+                    className={`text-lg font-bold text-gray-900 mb-1 ${
                       isEditMode ? 'cursor-pointer hover:text-blue-600 underline' : ''
                     }`}
                     onClick={(e) => {
@@ -357,15 +404,19 @@ const HistoryPage: React.FC = () => {
                     {folder.folder_name}
                   </h3>
                 )}
-                <p className="text-xs text-gray-500">
-                  최근 수정 날짜:{' '}
-                  {folder.capture_date
-                    ? folder.capture_date.split('T')[0]
-                    : '날짜 정보 없음'}
-                </p>
-                <p className="text-xs text-gray-500">
-                  신체 부위: {folder.body_part || '정보 없음'}
-                </p>
+                
+                {/* 폴더 정보 (메인화면 스타일) */}
+                <div className="text-sm text-gray-700 space-y-1 mt-2 border-t pt-2 border-gray-100">
+                  <p className="text-left">
+                    <span className="font-bold text-gray-900">위치:</span> {folder.body_part || '정보 없음'}
+                  </p>
+                  <p className="text-left">
+                    <span className="font-bold text-gray-900">최근 수정:</span>{' '}
+                    {folder.capture_date
+                      ? folder.capture_date.split('T')[0]
+                      : '날짜 정보 없음'}
+                  </p>
+                </div>
               </div>
               <div className="text-gray-400 text-sm">{'>'}</div>
             </div>

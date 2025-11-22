@@ -21,6 +21,10 @@ urlpatterns = [
     path('records/<int:pk>/update/', views.RecordUpdateView.as_view(), name='record_update'),
     # 기록 삭제 (DELETE: /api/dashboard/records/<int:pk>/delete/)
     path('records/<int:pk>/delete/', views.RecordDeleteView.as_view(), name='record_delete'),
+    # 전문의 소견 신청 (POST: /api/dashboard/records/<int:pk>/request-followup/)
+    path('records/<int:pk>/request-followup/', views.RequestFollowUpView.as_view(), name='request_followup'),
+    # 전문의 소견 작성/수정 (PATCH: /api/dashboard/records/<int:pk>/followup/update/)
+    path('records/<int:pk>/followup/update/', views.FollowUpUpdateView.as_view(), name='followup_update'),
     # 일괄 삭제 (DELETE: /api/dashboard/records/bulk/delete/)
     path('records/bulk/delete/', views.BulkDeleteRecordsView.as_view(), name='bulk_delete_records'),
     # 메인화면 - 환자용
