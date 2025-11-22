@@ -633,7 +633,7 @@ class UserDashboardMainView(APIView):
         # 🔴 ResultMainSerializer 사용 시 photo, disease, followup_check 데이터가 없으면 오류 발생 가능성 있음
         #    -> 이 부분은 서버 실행 후 500 에러가 발생하면 디버깅해야 합니다.
         try:
-            history_data = ResultMainSerializer(recent_history, many=True).data
+            history_data = ResultMainSerializer(recent_history, many=True, context={'request': request}).data
         except Exception as e:
             print(f"Serializer Error: {e}")
             return Response(
@@ -697,7 +697,7 @@ class DoctorDashboardMainView(APIView):
 
         # 🔴 DoctorCardSerializer를 사용하여 환자 정보 및 증상을 포함하여 직렬화합니다.
         try:
-            history_data = DoctorCardSerializer(doctor_assigned_results, many=True).data
+            history_data = DoctorCardSerializer(doctor_assigned_results, many=True, context={'request': request}).data
         except Exception as e:
             print(f"Serializer Error: {e}")
             return Response(

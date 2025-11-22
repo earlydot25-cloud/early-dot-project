@@ -68,7 +68,7 @@ class DiseaseInfoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DiseaseInfo
-        fields = ['name_ko']
+        fields = ['name_ko', 'name_en']
 
 # 🔴 신규: 의사 화면에 필요한 환자 정보 (Users 모델 사용)
 # 🔴 신규: 의사 화면에 필요한 환자 정보 (Users 모델 사용)
@@ -98,12 +98,27 @@ class UserSimpleSerializer(serializers.ModelSerializer):
 # 🔴 신규: 의사 화면에 필요한 증상 정보 (Photos 모델 사용)
 class PhotoSymptomsSerializer(serializers.ModelSerializer):
     """의사 대시보드 카드 하단에 표시될 증상 정보 시리얼라이저"""
+    
+    upload_storage_path = serializers.SerializerMethodField()
 
     class Meta:
         model = Photos
-        # 상처로 인한 감염, 통증, 가려움 태그를 위한 필드
-        fields = ['body_part', 'folder_name', 'capture_date', 'onset_date', 'symptoms_itch', 'symptoms_pain',
-                  'symptoms_infection']
+        # 상처로 인한 감염, 통증, 가려움 태그를 위한 필드 + 이미지 경로
+        fields = ['id', 'body_part', 'folder_name', 'file_name', 'capture_date', 'onset_date', 
+                  'symptoms_itch', 'symptoms_pain', 'symptoms_infection', 'upload_storage_path']
+    
+    def get_upload_storage_path(self, obj):
+        """이미지 URL을 절대 경로로 변환"""
+        if obj.upload_storage_path:
+            url = obj.upload_storage_path.url
+            if url.startswith('http'):
+                return url
+            # 상대 경로를 절대 경로로 변환
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(url)
+            return f"http://127.0.0.1:8000{url}"
+        return ''
 
 
 # 🔴 신규: 상세 페이지용 Photo 시리얼라이저 (모든 증상 필드 포함)
