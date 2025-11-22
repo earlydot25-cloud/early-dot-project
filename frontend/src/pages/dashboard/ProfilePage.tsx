@@ -204,31 +204,33 @@ const handleAccountDelete = async () => {
   const assignedDoctor = profile.assigned_doctor;
   const isDoctorApproved = doctorProfile && doctorProfile.status === '승인';
 
-  // 폼 필드 헬퍼 컴포넌트
+  // 폼 필드 헬퍼 컴포넌트 (메인화면 스타일)
   const FormField: React.FC<{ label: string; name: string; value: string | number; isEditable: boolean; type?: string }> =
     ({ label, name, value, isEditable, type = 'text' }) => (
-    <div className="flex items-center py-3 border-b border-gray-100 space-x-4">
-      <label className="text-gray-500 font-medium min-w-[80px] flex-shrink-0 text-left">{label}</label>
-      {isEditable && isEditing ? (
-        <input
-          type={type}
-          name={name}
-          value={value}
-          onChange={handleInputChange}
-          className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-150 flex-grow text-left"
-        />
-      ) : (
-        <p className="w-full text-gray-800 p-2 text-left">{String(value)}</p>
-      )}
+    <div className="text-sm text-gray-700 py-2 border-t border-gray-100 first:border-t-0 first:pt-0">
+      <div className="flex items-center justify-between">
+        <span className="font-bold text-gray-900">{label}:</span>
+        {isEditable && isEditing ? (
+          <input
+            type={type}
+            name={name}
+            value={value}
+            onChange={handleInputChange}
+            className="flex-1 ml-2 p-1.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-left"
+          />
+        ) : (
+          <span className="text-gray-700 text-left ml-2">{String(value)}</span>
+        )}
+      </div>
     </div>
   );
 
 const PatientSpecificFields: React.FC = () => {
     if (!assignedDoctorExists) {
         return (
-             <div className="mt-6 border-t pt-6">
-                 <h3 className="text-xl font-bold text-gray-700 mb-4 text-left">담당의사 정보</h3>
-                 <p className="text-gray-500 text-left mb-4">현재 담당의사가 지정되지 않았습니다.</p>
+             <div className="mt-3 pt-3 border-t border-gray-100">
+                 <h3 className="text-sm font-bold text-gray-900 mb-2 text-left">담당의사 정보</h3>
+                 <p className="text-xs text-gray-500 text-left mb-2">현재 담당의사가 지정되지 않았습니다.</p>
                  <FormField
                     label="담당의사 실명"
                     name="assigned_doctor_name"
@@ -242,8 +244,8 @@ const PatientSpecificFields: React.FC = () => {
     const doctor = assignedDoctor!;
 
     return (
-      <div className="mt-6 border-t pt-6">
-        <h3 className="text-xl font-bold text-gray-700 mb-4 text-left">담당의사 정보</h3>
+      <div className="mt-3 pt-3 border-t border-gray-100">
+        <h3 className="text-sm font-bold text-gray-900 mb-2 text-left">담당의사 정보</h3>
 
         <FormField
             label="담당의사 실명"
@@ -270,13 +272,14 @@ const PatientSpecificFields: React.FC = () => {
 
 
   const DoctorSpecificFields: React.FC = () => (
-    <div className="mt-6 border-t pt-6">
-      <h3 className="text-xl font-bold text-gray-700 mb-4 text-left">전문의 정보</h3>
+    <div className="mt-3 pt-3 border-t border-gray-100">
+      <h3 className="text-sm font-bold text-gray-900 mb-2 text-left">전문의 정보</h3>
 
-      <div className="flex items-center py-3 border-b border-gray-100 space-x-4">
-          <p className="text-gray-500 font-medium min-w-[80px] flex-shrink-0 text-left">의사 승인 여부</p>
+      <div className="text-sm text-gray-700 py-2 border-t border-gray-100 first:border-t-0 first:pt-0">
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-gray-900">의사 승인 여부:</span>
           <span
-              className={`font-bold p-2 rounded text-left ${
+              className={`text-xs font-bold px-2 py-1 rounded text-left ${
                   doctorProfile?.status === '승인' ? 'bg-green-100 text-green-700' :
                   doctorProfile?.status === '승인 중' ? 'bg-yellow-100 text-yellow-700' :
                   'bg-red-100 text-red-700'
@@ -284,6 +287,7 @@ const PatientSpecificFields: React.FC = () => {
           >
               {doctorProfile?.status || '미등록'}
           </span>
+        </div>
       </div>
 
       <FormField
@@ -302,8 +306,8 @@ const PatientSpecificFields: React.FC = () => {
   );
 
   const DoctorPatientList: React.FC = () => (
-    <div className="p-6 bg-white rounded-lg shadow-md border-t-4 border-blue-500 mt-8">
-      <h3 className="text-2xl font-bold mb-4 text-blue-700 text-left">담당 환자 리스트</h3>
+    <div className="bg-white border rounded-lg shadow-sm p-4">
+      <h3 className="text-lg font-bold mb-3 text-gray-900 text-left">담당 환자 리스트</h3>
       {isDoctorApproved ? (
         <ul className="space-y-3 text-left">
           {/* profile.patients는 PatientListItem[] | undefined | null 타입입니다. */}
@@ -320,9 +324,9 @@ const PatientSpecificFields: React.FC = () => {
               const isDoctorRisk = riskDisplay && ['즉시 주의', '경과 관찰', '정상', '소견 대기'].includes(riskDisplay);
               
               return (
-                <li key={patient.id} className="flex justify-between items-center p-3 border rounded-lg bg-gray-50 hover:bg-gray-100 transition duration-150">
+                <li key={patient.id} className="flex justify-between items-center p-3 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition duration-150 mb-2">
                   <div className="flex flex-col text-left flex-1">
-                    <span className="font-semibold text-gray-800">{patient.name}</span>
+                    <span className="text-base font-bold text-gray-900">{patient.name}</span>
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                       <span className="text-[10px] text-gray-600 whitespace-nowrap">{sexDisplay}</span>
                       <span className="text-[10px] text-gray-400">|</span>
@@ -337,19 +341,7 @@ const PatientSpecificFields: React.FC = () => {
                   </div>
                   <button
                     onClick={() => handleRemovePatient(patient.id)}
-                    className="bg-red-500 text-white text-sm rounded-md hover:bg-red-600 transition duration-150 flex-shrink-0 ml-3"
-                    style={{ 
-                      writingMode: 'horizontal-tb',
-                      minWidth: '60px',
-                      minHeight: '38px',
-                      padding: '8px 16px',
-                      whiteSpace: 'nowrap',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      lineHeight: 'normal',
-                      textOrientation: 'mixed'
-                    }}
+                    className="px-3 py-1.5 bg-red-500 text-white text-xs rounded-md hover:bg-red-600 transition duration-150 flex-shrink-0 ml-3"
                   >
                     삭제
                   </button>
@@ -368,14 +360,16 @@ const PatientSpecificFields: React.FC = () => {
 
 
   return (
-    <div className="mx-auto p-4 sm:p-8 bg-gray-50 max-w-xl min-w-[320px]">
-      <h1 className="text-3xl font-bold text-gray-800 mb-8 border-b pb-4 text-left">마이 페이지</h1>
+    <div className="p-1 space-y-3">
+      {/* 상단 요약 섹션 (메인화면 스타일) */}
+      <div className="flex justify-between items-center mb-3 p-2 bg-gray-50 rounded-md shadow-inner">
+        <h1 className="text-lg font-bold text-gray-800">마이 페이지</h1>
+      </div>
 
-      <div className="space-y-8">
-
-        {/* 회원 정보 수정 폼 */}
-        <div className="bg-white p-8 rounded-xl shadow-lg">
-          <h2 className="text-2xl font-bold text-gray-700 mb-6 text-left">회원 정보 {isEditing ? '수정' : '확인'}</h2>
+      <div className="space-y-3">
+        {/* 회원 정보 수정 폼 (메인화면 카드 스타일) */}
+        <div className="bg-white border rounded-lg shadow-sm p-4">
+          <h2 className="text-lg font-bold text-gray-900 mb-4 text-left">회원 정보 {isEditing ? '수정' : '확인'}</h2>
 
           <form onSubmit={handleUpdate}>
             {/* 공통 정보 필드 */}
@@ -392,7 +386,7 @@ const PatientSpecificFields: React.FC = () => {
             {/* 역할별 추가 정보 */}
             {isDoctor ? <DoctorSpecificFields /> : <PatientSpecificFields />}
 
-            <div className="mt-8 pt-6 border-t flex justify-end space-x-4">
+            <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end space-x-2">
               {isEditing ? (
                 <>
                   <button
@@ -409,12 +403,14 @@ const PatientSpecificFields: React.FC = () => {
                             assigned_doctor: profile?.assigned_doctor || {},
                         });
                     }}
-                    className="px-4 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-100 transition duration-150"                  >
+                    className="px-3 py-1.5 border border-gray-300 text-gray-700 text-xs rounded-md hover:bg-gray-100 transition duration-150"
+                  >
                     수정 취소
                   </button>
                   <button
                     type="submit" // 수정 완료 버튼 (form submit)
-                    className="px-4 py-1.5 bg-green-600 text-white rounded-lg font-semibold text-sm hover:bg-green-700 transition duration-150"                  >
+                    className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-md hover:bg-blue-700 transition duration-150"
+                  >
                     수정 완료
                   </button>
                 </>
@@ -427,7 +423,7 @@ const PatientSpecificFields: React.FC = () => {
                       e.stopPropagation();
                       setShowDeleteModal(true);
                     }}
-                    className="px-6 py-2 border border-red-500 text-red-500 rounded-lg hover:bg-red-50 transition duration-150 text-sm whitespace-nowrap"
+                    className="px-3 py-1.5 border border-red-500 text-red-500 text-xs rounded-md hover:bg-red-50 transition duration-150"
                   >
                     회원 탈퇴
                   </button>
@@ -438,11 +434,10 @@ const PatientSpecificFields: React.FC = () => {
                       e.stopPropagation();
                       setIsEditing(true);
                     }}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition duration-150 text-sm whitespace-nowrap"
+                    className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-md hover:bg-blue-700 transition duration-150"
                   >
                     정보 수정
                   </button>
-
                 </>
               )}
             </div>
@@ -452,16 +447,15 @@ const PatientSpecificFields: React.FC = () => {
         <div className="space-y-8">
             {isDoctor && <DoctorPatientList />}
 
-            {/* 환자 전용 섹션 */}
+            {/* 환자 전용 섹션 (메인화면 카드 스타일) */}
             {!isDoctor && (
-                <div className="p-6 bg-white rounded-lg shadow-md border-t-4 border-purple-500">
-                    <h3 className="text-2xl font-bold mb-4 text-purple-700 text-left">나의 진단 기록</h3>
-                    <p className="text-gray-600 text-left">최근 진단 결과를 확인하고 후속 조치를 요청할 수 있습니다.</p>
+                <div className="bg-white border rounded-lg shadow-sm p-4">
+                    <h3 className="text-lg font-bold mb-2 text-gray-900 text-left">나의 진단 기록</h3>
+                    <p className="text-sm text-gray-700 text-left mb-3">최근 진단 결과를 확인하고 후속 조치를 요청할 수 있습니다.</p>
                     <button 
                       onClick={() => navigate('/dashboard/history')}
-                      className="mt-4 px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600"
+                      className="w-full py-2 px-3 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition duration-150"
                     >
-
                       기록 보러가기
                     </button>
                 </div>
