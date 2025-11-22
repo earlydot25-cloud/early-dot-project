@@ -734,7 +734,7 @@ class DoctorDashboardMainView(APIView):
 
             # 🔴 DoctorCardSerializer를 사용하여 환자 정보 및 증상을 포함하여 직렬화합니다.
             try:
-                history_data = DoctorCardSerializer(doctor_assigned_results, many=True).data
+                history_data = DoctorCardSerializer(doctor_assigned_results, many=True, context={'request': request}).data                
                 print(f"[DoctorDashboardMainView] 시리얼라이즈 완료: {len(history_data)}개 항목")
             except Exception as e:
                 print(f"[DoctorDashboardMainView] Serializer Error: {type(e).__name__}: {str(e)}")

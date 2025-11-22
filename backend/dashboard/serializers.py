@@ -117,7 +117,7 @@ class PhotoSymptomsSerializer(serializers.ModelSerializer):
         model = Photos
         # 상처로 인한 감염, 통증, 가려움 태그를 위한 필드
         fields = ['body_part', 'folder_name', 'capture_date', 'onset_date', 'symptoms_itch', 'symptoms_pain',
-                  'symptoms_infection']
+                  'symptoms_infection', 'upload_storage_path', 'meta_sex']
     
     def to_representation(self, instance):
         """날짜 필드를 안전하게 처리"""
@@ -141,6 +141,18 @@ class PhotoSymptomsSerializer(serializers.ModelSerializer):
         data['onset_date'] = instance.onset_date if hasattr(instance, 'onset_date') else None
         
         return data
+    
+    def get_upload_storage_path(self, obj):
+        """이미지 URL을 절대 경로로 변환"""
+        if obj.upload_storage_path:
+            url = obj.upload_storage_path.url
+            if url.startswith('http'):
+                return url
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(url)
+            return f"http://127.0.0.1:8000{url}"
+        return ''
 
 
 # 🔴 신규: 상세 페이지용 Photo 시리얼라이저 (모든 증상 필드 포함)
