@@ -48,28 +48,36 @@ const BottomNav: React.FC = () => {
         left: 0,
         right: 0,
         bottom: 0,
-        background: '#fff',
-        borderTop: '1px solid #ddd',
+        background: 'linear-gradient(to top, #f8fafc, #ffffff)',
+        borderTop: '2px solid #e2e8f0',
         display: 'flex',
         justifyContent: 'space-around',
         alignItems: 'center',
         padding: '8px 0',
         zIndex: 1000,
+        boxShadow: '0 -1px 3px rgba(0, 0, 0, 0.05)',
       }}
     >
       {items.map(({ key, to, label, Icon }) => (
         <NavLink
           key={key}
           to={to}
-          style={{
-            textDecoration: 'none',
-            color: '#334155',
-            fontSize: 12,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 4,
-            minWidth: 64,
+          className="bottom-nav-item"
+          style={({ isActive }) => {
+            // 로그인하지 않은 상태에서는 활성 상태 표시 안 함
+            const shouldShowActive = loggedIn && isActive;
+            return {
+              textDecoration: 'none',
+              color: shouldShowActive ? '#2563eb' : '#64748b',
+              fontSize: 12,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 4,
+              minWidth: 64,
+              fontWeight: shouldShowActive ? 600 : 400,
+              transition: 'color 0.2s ease',
+            };
           }}
         >
           <Icon size={20} />

@@ -66,7 +66,42 @@ const resolveMediaUrl = (rawPath?: string) => {
   if (!rawPath) return '';
   let path = rawPath.replace(/\\/g, '/');
 
-  if (/^https?:\/\//i.test(path)) return normalizeHost(path);
+  // 절대 URL인 경우
+  if (/^https?:\/\//i.test(path)) {
+    const currentOrigin = window.location.origin;
+    
+    // 백엔드가 프론트엔드 ngrok URL로 이미지 URL을 생성한 경우
+    // (백엔드가 request.build_absolute_uri()를 사용할 때 발생)
+    // 프록시 설정이 있으면 그대로 사용, 없으면 백엔드 URL로 변환 필요
+    if (path.startsWith(currentOrigin) && path.includes('/media/')) {
+      // 프록시 설정이 있으면 그대로 사용
+      // package.json에 "proxy": "http://django:8000" 설정이 있으므로
+      // 같은 호스트로 요청하면 프록시가 백엔드로 전달
+      return path;
+    }
+    
+    // localhost나 127.0.0.1인 경우
+    if (path.includes('127.0.0.1:8000') || path.includes('localhost:8000')) {
+      // 프록시 설정이 있으면 현재 호스트로 변환
+      // 프록시가 백엔드로 요청을 전달하므로
+      if (currentOrigin.includes('ngrok') || currentOrigin.includes('localhost')) {
+        // ngrok을 통해 접속 중이면 현재 호스트 사용 (프록시가 처리)
+        const mediaPath = path.replace(/^https?:\/\/[^\/]+/i, '');
+        return `${currentOrigin}${mediaPath}`;
+      }
+      // 로컬 개발 환경에서는 그대로 사용 (프록시가 처리)
+      return path;
+    }
+    
+    // ngrok URL이 포함되어 있으면 그대로 사용
+    if (path.includes('ngrok')) {
+      return path;
+    }
+    
+    return normalizeHost(path);
+  }
+  
+  // 상대 경로인 경우
   if (path.startsWith('/')) return `${API_BASE_URL}${path}`;
   if (path.startsWith('media/')) return `${API_BASE_URL}/${path}`;
 

@@ -160,8 +160,8 @@ class RecordListView(APIView):
                     if photo.upload_storage_path.url.startswith('http'):
                         image_url = photo.upload_storage_path.url
                     else:
-                        # 상대 경로를 절대 경로로 변환
-                        image_url = f"http://127.0.0.1:8000{photo.upload_storage_path.url}"
+                        # 상대 경로를 절대 경로로 변환 (request를 사용)
+                        image_url = request.build_absolute_uri(photo.upload_storage_path.url)
                 
                 records_data.append({
                     'id': photo.id,
@@ -226,14 +226,8 @@ class RecordDetailView(APIView):
                     )
                 
                 # Photos만 있을 때의 응답 구조 (Results 형태와 호환)
-                from django.conf import settings
-                image_url = ''
-                if photo.upload_storage_path:
-                    url = photo.upload_storage_path.url
-                    if url.startswith('http'):
-                        image_url = url
-                    else:
-                        image_url = f"http://127.0.0.1:8000{url}"
+                # PhotoDetailSerializer가 이미 context를 받아서 절대 URL을 생성하므로
+                # 여기서는 별도로 image_url을 만들 필요 없음
                 
                 return Response({
                     'id': photo.id,

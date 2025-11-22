@@ -8,15 +8,8 @@ const MAX_STAGE_WIDTH = 430;
 // 💡 [수정] 카메라 스테이지의 상하 수직 여백을 80px에서 100px로 늘려 화면을 더 축소
 const STAGE_VERTICAL_PADDING = 100;
 
-// 💡 YOLO API 호출 주소 (FastAPI 컨테이너 호스트 포트 8001)
-const DETECTION_API_URL = 'http://localhost:8001/api/detect/stream';
-
-// 💡 탐지 결과 타입 정의
-interface DetectionResult {
-  box: [number, number, number, number]; // [x1, y1, x2, y2] (0~1000 스케일)
-  label: string;
-  confidence: number;
-}
+// 모바일 디바이스 감지
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
 // 상/하단 네비 실제 높이를 측정하는 훅
 function useNavInsets() {
@@ -130,15 +123,10 @@ const CapturePage: React.FC = () => {
   const [torchOn, setTorchOn] = useState(false);
 
   const webcamRef = useRef<Webcam>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const { top, bottom } = useNavInsets();
 
-  // 💡 AI 탐지 상태 및 결과
-  const [isDetecting, setIsDetecting] = useState(false);
-  // NOTE: 탐지된 결과가 환부가 아닌 '사람' 전체를 잡는 문제가 발생하고 있음 (백엔드 AI 모델 문제)
-  const [detections, setDetections] = useState<DetectionResult[]>([]);
-
-
-  // 바디 스크롤 잠금
+  // 바디 스크롤 잠금 (모든 경우에 적용)
   useEffect(() => {
     const prevHtml = document.documentElement.style.overflowY;
     const prevBody = document.body.style.overflowY;
@@ -149,6 +137,36 @@ const CapturePage: React.FC = () => {
       document.body.style.overflowY = prevBody;
     };
   }, []);
+
+  // 모바일이면 네이티브 카메라를 바로 열고 저장 페이지로 이동
+  useEffect(() => {
+    if (isMobile) {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.capture = 'environment'; // 후면 카메라 사용
+      
+      input.onchange = (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (file) {
+          // 바로 저장 페이지로 이동
+          navigate('/diagnosis/save', {
+            state: {
+              file,
+              previewUrl: URL.createObjectURL(file),
+              bodyPart: selectedBodyPart,
+            },
+          });
+        } else {
+          // 취소하면 이전 페이지로
+          navigate(-1);
+        }
+      };
+      
+      // 컴포넌트 마운트 시 바로 카메라 열기
+      input.click();
+    }
+  }, [navigate, selectedBodyPart]);
 
   const handleBack = () => navigate(-1);
 
@@ -163,11 +181,7 @@ const CapturePage: React.FC = () => {
 
   // ✅ 촬영 → 업로드하지 말고 저장 페이지로 이동
   const handleCapture = useCallback(() => {
-    // 💡 AI 감지 중에도 캡처 허용
-    if (isDetecting) {
-        console.warn("AI 감지 중 촬영이 완료되었습니다.");
-    }
-
+    // 데스크톱에서는 웹 카메라 사용
     const shot = webcamRef.current?.getScreenshot();
     if (!shot) return;
     const file = base64toFile(shot, `capture_${Date.now()}.jpg`);
@@ -178,10 +192,9 @@ const CapturePage: React.FC = () => {
         bodyPart: selectedBodyPart,  // 선택한 신체부위 유지
       },
     });
-  }, [navigate, selectedBodyPart, isDetecting]);
+  }, [navigate, selectedBodyPart]);
 
   // 갤러리에서 선택 → 저장 페이지로 이동
-  const galleryInputRef = useRef<HTMLInputElement>(null);
   const handleGalleryOpen = () => galleryInputRef.current?.click();
   const handleGalleryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -194,15 +207,6 @@ const CapturePage: React.FC = () => {
       },
     });
   };
-
-  // 💡 감지 토글 함수
-  const handleToggleDetection = useCallback(() => {
-    setIsDetecting(v => {
-      const newState = !v;
-      console.log(`[AI Detection Toggle] State changed from ${v} to ${newState}.`);
-      return newState;
-    });
-  }, []);
 
   const videoConstraints: MediaStreamConstraints['video'] = {
     width: { ideal: 720 },
@@ -233,65 +237,17 @@ const CapturePage: React.FC = () => {
       console.error('토치 적용 실패:', err);
     }
   };
-  useEffect(() => { applyTorch(torchOn); }, [torchOn]);
-
-  // 💡 실시간 탐지 로직: 1초(1000ms) 간격으로 유지
-  useEffect(() => {
-    const DELAY_MS = 1000;
-
-    if (!isDetecting) {
-      // isDetecting이 false일 때: 탐지 중지 및 바운딩 박스 제거
-      setDetections([]);
-      console.log("AI 감지 모드 중지 완료: 박스 초기화 및 타이머 시작 방지.");
-      return;
+  
+  useEffect(() => { 
+    if (!isMobile) {
+      applyTorch(torchOn);
     }
+  }, [torchOn]);
 
-    // isDetecting이 true인 경우: 타이머 시작
-    console.log(`AI 감지 모드 시작: ${DELAY_MS}ms 간격으로 API 호출`);
-    const intervalId = window.setInterval(async () => {
-        const shot = webcamRef.current?.getScreenshot();
-        if (!shot || shot.startsWith('data:,') || !shot.includes('base64')) {
-          return;
-        }
-
-        try {
-            // Base64 Data URL에서 데이터 부분만 추출
-            const base64Data = shot.split(',')[1];
-
-            // NOTE: fetch 호출 시 API 키나 인증은 이 환경에서 생략
-            const response = await fetch(DETECTION_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image_base64: `data:image/jpeg;base64,${base64Data}` }),
-            });
-
-            if (!response.ok) {
-                console.error(`Detection API failed: ${response.status} ${response.statusText}`);
-                return;
-            }
-
-            const data: DetectionResult[] = await response.json();
-
-            if (data.length > 0) {
-               // [NOTE] 모델이 환부가 아닌 사람/배경을 잡는 경우, 여기로 잘못된 결과가 들어옴
-               setDetections(data);
-            } else {
-               setDetections([]);
-            }
-
-        } catch (error) {
-            console.error("탐지 요청 실패:", error);
-            setDetections([]);
-        }
-
-    }, DELAY_MS);
-
-    // 💡 클린업 함수: isDetecting이 false로 바뀌거나 컴포넌트가 언마운트될 때 호출되어 타이머를 중지합니다.
-    return () => {
-        console.log(`[Cleanup] 타이머 ${intervalId}를 해제합니다.`);
-        window.clearInterval(intervalId);
-    };
-  }, [isDetecting]); // isDetecting 상태에만 의존
+  // 모바일이면 아무것도 렌더링하지 않음
+  if (isMobile) {
+    return null;
+  }
 
   // 네비 사이만 정확히 차도록 (수직 여백 추가)
   const stageDynamicStyle: React.CSSProperties = {
@@ -301,88 +257,79 @@ const CapturePage: React.FC = () => {
     height: `calc(100dvh - ${top + bottom + 2 * STAGE_VERTICAL_PADDING}px)`,
   };
 
-  // 💡 탐지된 단일 박스
-  const detection = detections.length > 0 ? detections[0] : null;
-
   return (
     <div style={styles.outerWrapper}>
       {/* 스테이지에 수정된 동적 스타일 적용 */}
       <div style={{ ...styles.stage, ...stageDynamicStyle }}>
-        <div style={styles.webcamWrapper}>
-          <Webcam
-            ref={webcamRef}
-            audio={false}
-            screenshotFormat="image/jpeg"
-            videoConstraints={videoConstraints}
-            style={styles.webcam}
-            mirrored={false}
-            onUserMediaError={(err) => console.error('카메라 접근 실패:', err)}
-          />
-        </div>
-
-        {/* 오버레이(격자 + 가이드) */}
-        <div style={styles.overlay}>
-          <div style={{ ...styles.gridLineV, left: '33.3%' }} />
-          <div style={{ ...styles.gridLineV, left: '66.6%' }} />
-          <div style={{ ...styles.gridLineH, top: '33.3%' }} />
-          <div style={{ ...styles.gridLineH, top: '66.6%' }} />
-
-          {/* 💡 가이드 박스: AI 감지 중이 아닐 때(!isDetecting)만 표시 */}
-          {!isDetecting && <div style={styles.guideBox} />}
-
-          {/* 💡 탐지된 단일 바운딩 박스 렌더링 */}
-          {detection && (
-            <div
-              style={{
-                position: 'absolute',
-                // YOLO 결과는 0-1000 스케일이므로, 10으로 나누어 %로 변환
-                left: `${detection.box[0] / 10}%`,
-                top: `${detection.box[1] / 10}%`,
-                width: `${(detection.box[2] - detection.box[0]) / 10}%`,
-                height: `${(detection.box[3] - detection.box[1]) / 10}%`,
-                // 테두리 두께 2px 유지 (시각적 부담 최소화)
-                border: '2px solid #FFC107',
-                borderRadius: 4,
-                boxSizing: 'border-box',
-              }}
-            >
-              {/* 신뢰도 텍스트 제거됨 */}
+        {/* 데스크톱에서만 웹 카메라 표시 */}
+        {!isMobile && (
+          <>
+            <div style={styles.webcamWrapper}>
+              <Webcam
+                ref={webcamRef}
+                audio={false}
+                screenshotFormat="image/jpeg"
+                videoConstraints={videoConstraints}
+                style={styles.webcam}
+                mirrored={false}
+                onUserMediaError={(err) => console.error('카메라 접근 실패:', err)}
+              />
             </div>
-          )}
-        </div>
 
-        {/* 💡 가이드 텍스트: isDetecting 상태에 따라 표시 */}
-        {!isDetecting && <div style={styles.guideText}>환부를 초록 박스에 맞춰 촬영해주세요</div>}
-        {/* 모델이 사람을 잡는 문제에 대한 안내 추가 */}
-        {isDetecting && <div style={{...styles.guideText, color: '#FFC107'}}>AI가 환부를 감지 중입니다 (1초 간격)</div>}
+            {/* 오버레이(격자 + 가이드) */}
+            <div style={styles.overlay}>
+              <div style={{ ...styles.gridLineV, left: '33.3%' }} />
+              <div style={{ ...styles.gridLineV, left: '66.6%' }} />
+              <div style={{ ...styles.gridLineH, top: '33.3%' }} />
+              <div style={{ ...styles.gridLineH, top: '66.6%' }} />
+
+              {/* 가이드 박스 */}
+              <div style={styles.guideBox} />
+            </div>
+
+            {/* 가이드 텍스트 */}
+            <div style={styles.guideText}>환부를 초록 박스에 맞춰 촬영해주세요</div>
+          </>
+        )}
+
+        {/* 모바일에서는 안내 메시지만 표시 */}
+        {isMobile && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%',
+            padding: '40px',
+            textAlign: 'center',
+            color: 'white',
+          }}>
+            <div style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>
+              카메라 버튼을 눌러 촬영하세요
+            </div>
+            <div style={{ fontSize: 14, opacity: 0.8 }}>
+              네이티브 카메라 앱이 열립니다
+            </div>
+          </div>
+        )}
 
         <div style={styles.topBar}>
           <button style={styles.iconButton} onClick={handleBack}><FiArrowLeft size={24} /></button>
         </div>
 
-        <div style={styles.sideBar}>
-          <button style={styles.iconButton} onClick={() => setTorchOn(v => !v)}>
-            {torchOn ? <FiZapOff size={22} /> : <FiZap size={22} />}
-          </button>
-        </div>
+        {/* 데스크톱에서만 플래시 버튼 표시 */}
+        {!isMobile && (
+          <div style={styles.sideBar}>
+            <button style={styles.iconButton} onClick={() => setTorchOn(v => !v)}>
+              {torchOn ? <FiZapOff size={22} /> : <FiZap size={22} />}
+            </button>
+          </div>
+        )}
 
         <div style={styles.bottomBar}>
           <button style={styles.iconButton} onClick={handleGalleryOpen}><FiImage size={24} /></button>
           <input type="file" accept="image/*" ref={galleryInputRef} style={styles.hiddenInput} onChange={handleGalleryChange} />
           <button style={styles.captureButton} onClick={handleCapture} />
-
-          {/* 💡 감지 토글 버튼: isDetecting 상태에 따라 텍스트 및 스타일 변경 */}
-          <button
-            style={{
-              ...styles.textButton,
-              color: isDetecting ? '#FFC107' : 'white', // 감지 중일 때 노란색
-              fontWeight: isDetecting ? 'bold' : 'normal'
-            }}
-            onClick={handleToggleDetection}
-            aria-pressed={isDetecting}
-          >
-            {isDetecting ? '감지 중지' : 'AI 감지 시작'}
-          </button>
         </div>
       </div>
     </div>

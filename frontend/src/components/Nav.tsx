@@ -65,8 +65,9 @@ const Nav: React.FC = () => {
         left: 0,
         right: 0,
         zIndex: 100,
-        background: '#fff',
-        borderBottom: '1px solid #eee',
+        background: 'linear-gradient(to bottom, #f8fafc, #ffffff)',
+        borderBottom: '2px solid #e2e8f0',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
       }}
     >
       {/* 375px 프레임 가운데 정렬 + 좌우 패딩 제거로 "왼쪽 끝" 붙이기 */}
@@ -74,7 +75,7 @@ const Nav: React.FC = () => {
         style={{
           width: 'min(100%, 375px)',
           margin: '0 auto',
-          padding: '10px 0', // 좌우 0
+          padding: '10px 16px', // 좌우 패딩 추가
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -90,7 +91,7 @@ const Nav: React.FC = () => {
         </Link>
 
         {/* 오른쪽: 로그인 후에만 "실명님" + "로그아웃" */}
-        <div style={{ minWidth: 16, textAlign: 'right', lineHeight: 1.15 }}>
+        <div style={{ minWidth: 16, textAlign: 'right', lineHeight: 1.15, paddingRight: 0 }}>
           {loggedIn && (
             <>
               <div style={{ fontWeight: 700, color: '#111' }}>
