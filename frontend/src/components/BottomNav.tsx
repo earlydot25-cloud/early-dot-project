@@ -42,14 +42,12 @@ const BottomNav: React.FC = () => {
 
   return (
     <nav
-      id="app-tabbar"                // ← 추가
+      id="app-tabbar"
       style={{
-        position: 'fixed',
+        position: 'absolute',
         left: 0,
         right: 0,
         bottom: 0,
-        width: 'min(100%, 375px)', // 프레임 폭에 고정
-        margin: '0 auto',          // 가운데 정렬
         background: '#fff',
         borderTop: '1px solid #ddd',
         display: 'flex',

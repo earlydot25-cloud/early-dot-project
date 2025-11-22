@@ -58,15 +58,17 @@ const Nav: React.FC = () => {
 
   return (
     <header
-    id="app-topbar"                // ← 추가
-    style={{
-      position: 'sticky',
-      top: 0,
-      zIndex: 100,
-      background: '#fff',
-      borderBottom: '1px solid #eee',
-    }}
-  >
+      id="app-topbar"
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 100,
+        background: '#fff',
+        borderBottom: '1px solid #eee',
+      }}
+    >
       {/* 375px 프레임 가운데 정렬 + 좌우 패딩 제거로 "왼쪽 끝" 붙이기 */}
       <div
         style={{
