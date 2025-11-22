@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaChevronRight, FaExclamationTriangle, FaCheckCircle, FaUserMd, FaMars, FaVenus } from 'react-icons/fa';
+import { FaChevronRight, FaChevronLeft, FaExclamationTriangle, FaCheckCircle, FaUserMd, FaMars, FaVenus } from 'react-icons/fa';
 import type { IconBaseProps } from 'react-icons';
 import axios from 'axios';
 
@@ -90,6 +90,7 @@ interface DoctorDashboardData {
 type IconCmp = React.FC<IconBaseProps>;
 const UserMdIcon: IconCmp = (props) => <FaUserMd {...props} />;
 const ChevronRightIcon: IconCmp = (props) => <FaChevronRight {...props} />;
+const ChevronLeftIcon: IconCmp = (props) => <FaChevronLeft {...props} />;
 const ExclamationTriangleIcon: IconCmp = (props) => <FaExclamationTriangle {...props} />;
 const CheckCircleIcon: IconCmp = (props) => <FaCheckCircle {...props} />;
 const MarsIcon: IconCmp = (props: IconBaseProps) => <FaMars {...props} />;
@@ -237,7 +238,7 @@ const PatientCard: React.FC<PatientCardProps> = ({ data }) => {
 
       {/* 날짜 정보 (선 위) */}
       <div className="mt-3 mb-3">
-        <div className="text-xs text-gray-600 space-y-1">
+        <div className="text-xs text-gray-600 space-y-1 pl-8">
           <p>최초 생성 일자: {formatDate(data.photo.capture_date)}</p>
           <p>마지막 수정 일자: {formatDate(data.analysis_date)}</p>
         </div>
@@ -287,6 +288,7 @@ const DoctorMainPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'attention' | 'needOpinion'>('attention');
+  const [currentPage, setCurrentPage] = useState(0);
 
   // 🔴 API 호출 로직
   useEffect(() => {
@@ -338,6 +340,11 @@ const DoctorMainPage: React.FC = () => {
     fetchDoctorData();
   }, [navigate]);
 
+  // 탭 변경 시 페이지 초기화 (early return 이전에 호출되어야 함)
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [activeTab]);
+
   // 로딩 및 에러 처리 UI
   if (isLoading) {
     return <div className="p-4 text-center text-lg">의사 대시보드 데이터를 불러오는 중...</div>;
@@ -377,6 +384,27 @@ const DoctorMainPage: React.FC = () => {
   };
 
   const displayedPatients = activeTab === 'attention' ? attentionPatients : needOpinionPatients;
+
+  // 페이지네이션 적용 여부 (3개 이상일 때만)
+  const shouldUsePagination = displayedPatients.length >= 3;
+  
+  // currentPage가 범위를 벗어나지 않도록 보정
+  const safeCurrentPage = Math.min(currentPage, Math.max(0, displayedPatients.length - 1));
+  const currentPatient = shouldUsePagination && displayedPatients.length > 0 
+    ? displayedPatients[safeCurrentPage] 
+    : null;
+  
+  const handlePrevPage = () => {
+    if (safeCurrentPage > 0) {
+      setCurrentPage(safeCurrentPage - 1);
+    }
+  };
+  
+  const handleNextPage = () => {
+    if (safeCurrentPage < displayedPatients.length - 1) {
+      setCurrentPage(safeCurrentPage + 1);
+    }
+  };
 
   return (
     <div className="p-4 space-y-4 bg-gradient-to-b from-gray-50 to-white min-h-screen">
@@ -428,9 +456,69 @@ const DoctorMainPage: React.FC = () => {
         {/* 3. 환자 카드 리스트 */}
         <div className="space-y-0">
           {displayedPatients.length > 0 ? (
-            displayedPatients.map((item: DiagnosisResult) => (
-              <PatientCard key={item.id} data={item} />
-            ))
+            <>
+              {shouldUsePagination ? (
+                // 페이지네이션 모드 (3개 이상일 때)
+                <div className="relative">
+                  {currentPatient && (
+                    <>
+                      {/* 환자 카드 */}
+                      <PatientCard key={currentPatient.id} data={currentPatient} />
+                      
+                      {/* 오버레이 네비게이션 버튼 */}
+                      <div className="absolute inset-0 pointer-events-none flex items-center justify-between px-1">
+                        {/* 왼쪽 이전 버튼 */}
+                        <button
+                          onClick={handlePrevPage}
+                          disabled={safeCurrentPage === 0}
+                          className={`pointer-events-auto p-1.5 rounded-full bg-white/80 hover:bg-white shadow-md transition-all ${
+                            safeCurrentPage === 0
+                              ? 'opacity-30 cursor-not-allowed'
+                              : 'opacity-100 hover:scale-110'
+                          }`}
+                        >
+                          <ChevronLeftIcon size={18} className="text-gray-700" />
+                        </button>
+                        
+                        {/* 오른쪽 다음 버튼 */}
+                        <button
+                          onClick={handleNextPage}
+                          disabled={safeCurrentPage === displayedPatients.length - 1}
+                          className={`pointer-events-auto p-1.5 rounded-full bg-white/80 hover:bg-white shadow-md transition-all ${
+                            safeCurrentPage === displayedPatients.length - 1
+                              ? 'opacity-30 cursor-not-allowed'
+                              : 'opacity-100 hover:scale-110'
+                          }`}
+                        >
+                          <ChevronRightIcon size={18} className="text-gray-700" />
+                        </button>
+                      </div>
+                      
+                      {/* 페이지 인디케이터 (카드 아래 중앙) */}
+                      <div className="flex items-center justify-center gap-2 mt-4">
+                        {displayedPatients.map((_, index) => (
+                          <button
+                            key={index}
+                            onClick={() => setCurrentPage(index)}
+                            className={`transition-all ${
+                              index === safeCurrentPage
+                                ? 'w-2.5 h-2.5 bg-blue-600'
+                                : 'w-2 h-2 bg-gray-300 hover:bg-gray-400'
+                            } rounded-full`}
+                            aria-label={`페이지 ${index + 1}로 이동`}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                // 일반 모드 (3개 미만일 때)
+                displayedPatients.map((item: DiagnosisResult) => (
+                  <PatientCard key={item.id} data={item} />
+                ))
+              )}
+            </>
           ) : (
             <div className="p-8 bg-white rounded-lg shadow-sm border border-gray-200 text-center text-gray-500">
               {activeTab === 'attention'
