@@ -64,6 +64,7 @@ const Nav: React.FC = () => {
         top: 0,
         left: 0,
         right: 0,
+        height: '60px',
         zIndex: 100,
         background: 'linear-gradient(to bottom, #f8fafc, #ffffff)',
         borderBottom: '2px solid #e2e8f0',

@@ -48,6 +48,7 @@ const BottomNav: React.FC = () => {
         left: 0,
         right: 0,
         bottom: 0,
+        height: '60px',
         background: 'linear-gradient(to top, #f8fafc, #ffffff)',
         borderTop: '2px solid #e2e8f0',
         display: 'flex',
