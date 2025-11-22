@@ -6,7 +6,8 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from diagnosis.models import Results, Photos
 from users.models import Users, Doctors
-from .serializers import ResultMainSerializer, DoctorCardSerializer
+from .models import FollowUpCheck
+from .serializers import ResultMainSerializer, DoctorCardSerializer, FollowUpCheckSerializer
 from django.db.models import Q, Max  # 복잡한 쿼리를 위해 필요
 from django.utils import timezone
 
@@ -79,13 +80,13 @@ class FoldersListView(APIView):
                 }
                 
                 max_priority = -2
-                for result in folder_results:
+                for folder_result in folder_results:
                     # 의사 소견 우선, 없으면 AI 위험도
-                    risk = result.followup_check.doctor_risk_level if (
-                        result.followup_check and 
-                        result.followup_check.doctor_risk_level and 
-                        result.followup_check.doctor_risk_level != '소견 대기'
-                    ) else result.risk_level
+                    risk = folder_result.followup_check.doctor_risk_level if (
+                        folder_result.followup_check and 
+                        folder_result.followup_check.doctor_risk_level and 
+                        folder_result.followup_check.doctor_risk_level != '소견 대기'
+                    ) else folder_result.risk_level
                     
                     priority = risk_levels_priority.get(risk, 0)
                     if priority > max_priority:
@@ -601,6 +602,12 @@ class PatientsListView(APIView):
                 if current_followup is None or (current_followup.doctor_risk_level == '소견 대기' if current_followup else True):
                     patients_dict[patient_id]['needs_review'] = True
         
+        # 최종 정리: 소견 필요 여부를 의사 판정 기준으로 다시 계산
+        for patient_data in patients_dict.values():
+            doctor_risk = patient_data.get('doctor_risk_level')
+            # 전문의 판정이 없거나 '소견 대기'이면 항상 소견 필요 상태로 표시
+            patient_data['needs_review'] = doctor_risk is None or doctor_risk == '소견 대기'
+        
         patients_list = list(patients_dict.values())
         
         return Response(patients_list, status=status.HTTP_200_OK)
@@ -660,60 +667,246 @@ class DoctorDashboardMainView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # 1. 💡 request.user는 이미 인증된 Users 객체입니다.
-        user = request.user
-
-        # 1. 의사 여부 확인
-        if not user.is_doctor:
-            return Response({'error': '접근 권한이 없습니다. 의사 계정으로 로그인해야 합니다.'}, status=status.HTTP_403_FORBIDDEN)
-
-        # 2. 🚨 로그인한 Users와 연결된 Doctors 레코드의 ID 가져오기
         try:
-            # related_name='doctor_profile'을 통해 Doctors 인스턴스를 가져옵니다.
-            doctor_record = user.doctor_profile
+            # 1. 💡 request.user는 이미 인증된 Users 객체입니다.
+            user = request.user
+            print(f"[DoctorDashboardMainView] 요청 사용자: {user.email} (ID: {user.id}, is_doctor: {user.is_doctor})")
 
-            # Doctors 테이블의 PK (uid)가 Users의 ID를 참조하므로, user.id가 곧 doctor_id 입니다.
-            # 하지만 쿼리 필터링 시에는 doctor_record.uid.id 또는 doctor_record.pk를 사용하거나,
-            # 아니면 Doctors의 PK인 user.id를 사용해도 됩니다.
-            doctor_id = doctor_record.uid.id  # Users의 ID와 동일
+            # 1. 의사 여부 확인
+            if not user.is_doctor:
+                print(f"[DoctorDashboardMainView] 접근 거부: {user.email}은 의사 계정이 아닙니다.")
+                return Response({'error': '접근 권한이 없습니다. 의사 계정으로 로그인해야 합니다.'}, status=status.HTTP_403_FORBIDDEN)
 
-        except Doctors.DoesNotExist:
-            print(f"ERROR: {user.email} 사용자는 is_doctor=True 이지만 Doctors 테이블에 레코드가 없습니다.")
-            return Response(
-                {'error': 'Doctors 테이블에 의사 정보가 누락되었습니다.'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            # 2. 🚨 로그인한 Users와 연결된 Doctors 레코드의 ID 가져오기
+            doctor_id = None
+            try:
+                # related_name='doctor_profile'을 통해 Doctors 인스턴스를 가져옵니다.
+                # Doctors.DoesNotExist 또는 AttributeError를 모두 처리합니다.
+                doctor_record = Doctors.objects.get(uid=user)
+                doctor_id = doctor_record.uid.id  # Users의 ID와 동일
+                print(f"[DoctorDashboardMainView] Doctors 레코드 발견: doctor_id={doctor_id}")
 
-        # 3. 쿼리 로직 수정: doctor_id 사용 (이 부분은 유지)
-        doctor_assigned_results = Results.objects.filter(
-            followup_check__doctor_id=doctor_id  # 💡 doctor_id는 Doctors 테이블의 PK (user.id)
-        ).order_by('-analysis_date')[:5]
+            except (Doctors.DoesNotExist, AttributeError) as e:
+                print(f"[DoctorDashboardMainView] WARNING: {user.email} (ID: {user.id}) 사용자는 is_doctor=True 이지만 Doctors 테이블에 레코드가 없습니다.")
+                print(f"[DoctorDashboardMainView] Exception type: {type(e).__name__}, Message: {str(e)}")
+                # Doctors 레코드가 없으면 자동으로 생성
+                try:
+                    doctor_record = Doctors.objects.create(
+                        uid=user,
+                        name=user.name if hasattr(user, 'name') else user.email.split('@')[0],
+                        specialty='피부과',  # 기본값
+                        hospital='',  # 기본값
+                        status='승인'  # 기본값
+                    )
+                    doctor_id = doctor_record.uid.id
+                    print(f"[DoctorDashboardMainView] SUCCESS: Doctors 레코드를 자동으로 생성했습니다. (ID: {doctor_id})")
+                except Exception as create_error:
+                    print(f"[DoctorDashboardMainView] ERROR: Doctors 레코드 자동 생성 실패: {type(create_error).__name__}: {str(create_error)}")
+                    import traceback
+                    print(f"[DoctorDashboardMainView] Traceback: {traceback.format_exc()}")
+                    return Response(
+                        {'error': 'Doctors 테이블에 의사 정보가 누락되었고, 자동 생성에도 실패했습니다. 관리자에게 문의하세요.'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+            except Exception as e:
+                print(f"[DoctorDashboardMainView] ERROR: 의사 정보 조회 중 예상치 못한 오류 발생: {type(e).__name__}: {str(e)}")
+                import traceback
+                print(f"[DoctorDashboardMainView] Traceback: {traceback.format_exc()}")
+                return Response(
+                    {'error': f'의사 정보 조회 중 오류가 발생했습니다: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
-        # 🔴 DoctorCardSerializer를 사용하여 환자 정보 및 증상을 포함하여 직렬화합니다.
-        try:
-            history_data = DoctorCardSerializer(doctor_assigned_results, many=True, context={'request': request}).data
+            if doctor_id is None:
+                print(f"[DoctorDashboardMainView] ERROR: doctor_id가 None입니다.")
+                return Response(
+                    {'error': '의사 ID를 확인할 수 없습니다.'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
+            # 3. 쿼리 로직 수정: 의사에게 할당된 환자들의 모든 진단 결과 조회
+            print(f"[DoctorDashboardMainView] 쿼리 시작: doctor_id={doctor_id}")
+            # 의사에게 할당된 환자들의 모든 진단 결과 조회 (FollowUpCheck 유무와 관계없이)
+            doctor_assigned_results = Results.objects.filter(
+                photo__user__doctor=doctor_record  # 의사에게 할당된 환자들의 진단 결과
+            ).select_related('photo__user', 'disease', 'followup_check').order_by('-analysis_date')[:5]
+            print(f"[DoctorDashboardMainView] 쿼리 결과 개수: {doctor_assigned_results.count()}")
+
+            # 🔴 DoctorCardSerializer를 사용하여 환자 정보 및 증상을 포함하여 직렬화합니다.
+            try:
+                history_data = DoctorCardSerializer(doctor_assigned_results, many=True).data
+                print(f"[DoctorDashboardMainView] 시리얼라이즈 완료: {len(history_data)}개 항목")
+            except Exception as e:
+                print(f"[DoctorDashboardMainView] Serializer Error: {type(e).__name__}: {str(e)}")
+                import traceback
+                print(f"[DoctorDashboardMainView] Traceback: {traceback.format_exc()}")
+                return Response(
+                    {'error': f'시리얼라이즈 과정 오류 발생: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
+            # 2. 요약 정보 (즉시 주의 건수 계산)
+            #    - 의사 소견(doctor_risk_level)이 '즉시 주의'인 경우만 계산
+            immediate_attention_count = Results.objects.filter(
+                photo__user__doctor=doctor_record,
+                followup_check__doctor_risk_level='즉시 주의'
+            ).count()
+            total_assigned_count = Results.objects.filter(
+                photo__user__doctor=doctor_record
+            ).count()
+            print(f"[DoctorDashboardMainView] 요약 정보: total={total_assigned_count}, immediate_attention={immediate_attention_count}")
+
+            summary_data = {
+                'total_assigned_count': total_assigned_count,
+                'immediate_attention_count': immediate_attention_count,
+            }
+
+            # 3. 최종 응답 (DoctorDashboardSerializer 구조 사용)
+            print(f"[DoctorDashboardMainView] 응답 생성 완료")
+            return Response({
+                'summary': summary_data,
+                'history': history_data
+            })
         except Exception as e:
-            print(f"Serializer Error: {e}")
+            print(f"[DoctorDashboardMainView] FATAL ERROR: {type(e).__name__}: {str(e)}")
+            import traceback
+            print(f"[DoctorDashboardMainView] Full Traceback:\n{traceback.format_exc()}")
             return Response(
-                {'error': f'시리얼라이즈 과정 오류 발생: {e}'},
+                {'error': f'의사 대시보드 데이터를 불러오는 중 오류가 발생했습니다: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-        # 2. 요약 정보 (즉시 주의 건수 계산)
-        #    - 의사 소견(doctor_risk_level)이 '즉시 주의'인 경우만 계산
-        immediate_attention_count = Results.objects.filter(
-            followup_check__doctor_id=doctor_id,
-            followup_check__doctor_risk_level='즉시 주의'
-        ).count()
-        total_assigned_count = doctor_assigned_results.count()
 
-        summary_data = {
-            'total_assigned_count': total_assigned_count,
-            'immediate_attention_count': immediate_attention_count,
-        }
+# --------------------------------------------------------
+# 전문의 소견 신청 뷰
+# --------------------------------------------------------
+class RequestFollowUpView(APIView):
+    """
+    Results에 대해 전문의 소견을 신청하는 API
+    POST: /api/dashboard/records/<result_id>/request-followup/
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, pk):
+        try:
+            # pk는 Results.id
+            result = Results.objects.select_related('photo__user').get(pk=pk)
+            
+            # 권한 확인: 본인의 결과여야 함
+            if result.photo.user != request.user:
+                return Response(
+                    {'error': 'Permission denied'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # 이미 FollowUpCheck가 있는지 확인
+            if hasattr(result, 'followup_check'):
+                return Response(
+                    {'message': '이미 전문의 소견이 신청되었습니다.', 'followup_check_id': result.followup_check.id},
+                    status=status.HTTP_200_OK
+                )
+            
+            # FollowUpCheck 생성
+            patient_user = result.photo.user
+            # 담당 의사 찾기 (환자에게 할당된 의사가 있으면 사용)
+            assigned_doctor = None
+            if hasattr(patient_user, 'doctor'):
+                assigned_doctor = patient_user.doctor
+            
+            followup_check = FollowUpCheck.objects.create(
+                result=result,
+                user=patient_user,
+                doctor=assigned_doctor,
+                current_status='요청중',
+                doctor_risk_level=None,
+                doctor_note=None,
+            )
+            
+            return Response(
+                {
+                    'message': '전문의 소견 신청이 완료되었습니다.',
+                    'followup_check_id': followup_check.id
+                },
+                status=status.HTTP_201_CREATED
+            )
+            
+        except Results.DoesNotExist:
+            return Response(
+                {'error': 'Result not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        # 3. 최종 응답 (DoctorDashboardSerializer 구조 사용)
-        return Response({
-            'summary': summary_data,
-            'history': history_data
-        })
+
+# --------------------------------------------------------
+# 전문의 소견 작성/수정 뷰
+# --------------------------------------------------------
+class FollowUpUpdateView(APIView):
+    """
+    전문의가 FollowUpCheck에 소견과 위험도를 입력/수정하는 API
+    PATCH: /api/dashboard/records/<result_id>/followup/update/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        # 의사만 작성 가능
+        if not request.user.is_doctor:
+            return Response(
+                {'error': 'Permission denied. Doctor access only.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            result = Results.objects.select_related('photo__user').get(pk=pk)
+        except Results.DoesNotExist:
+            return Response(
+                {'error': 'Result not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        followup = getattr(result, 'followup_check', None)
+        doctor_profile = getattr(request.user, 'doctor_profile', None)
+
+        if not followup:
+            followup = FollowUpCheck.objects.create(
+                result=result,
+                user=result.photo.user,
+                doctor=doctor_profile,
+                current_status='요청중',
+                doctor_risk_level='소견 대기',
+                doctor_note=''
+            )
+        elif doctor_profile and followup.doctor is None:
+            followup.doctor = doctor_profile
+
+        doctor_risk_level = request.data.get('doctor_risk_level')
+        doctor_note = request.data.get('doctor_note')
+        current_status = request.data.get('current_status')
+
+        risk_choices = [choice[0] for choice in FollowUpCheck._meta.get_field('doctor_risk_level').choices]
+        status_choices = [choice[0] for choice in FollowUpCheck._meta.get_field('current_status').choices]
+
+        if doctor_risk_level:
+            if doctor_risk_level not in risk_choices:
+                return Response(
+                    {'error': f'Invalid doctor_risk_level. Allowed: {risk_choices}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            followup.doctor_risk_level = doctor_risk_level
+
+        if doctor_note is not None:
+            followup.doctor_note = doctor_note
+
+        if current_status:
+            if current_status not in status_choices:
+                return Response(
+                    {'error': f'Invalid current_status. Allowed: {status_choices}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            followup.current_status = current_status
+        elif doctor_risk_level or doctor_note is not None:
+            followup.current_status = '확인 완료'
+
+        followup.save()
+
+        serializer = FollowUpCheckSerializer(followup)
+        return Response(serializer.data, status=status.HTTP_200_OK)

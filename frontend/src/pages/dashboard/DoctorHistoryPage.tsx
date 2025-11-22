@@ -46,7 +46,7 @@ const DoctorHistoryPage: React.FC = () => {
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [riskFilter, setRiskFilter] = useState<string>('전체 보기');
-  const [sortOption, setSortOption] = useState<'소견 필요순' | '의사 위험도순' | '이름순'>('소견 필요순');
+  const [sortOption, setSortOption] = useState<'소견 필요순' | '위험도순' | '이름순'>('소견 필요순');
   const [viewMode, setViewMode] = useState<'patients' | 'folders' | 'records'>('patients');
   const [isLoading, setIsLoading] = useState(true);
 
@@ -127,12 +127,22 @@ const DoctorHistoryPage: React.FC = () => {
     }
   };
 
-  // ✅ 환자 정렬 (소견 필요순, 의사 위험도순, 이름순)
+  // ✅ 환자 정렬 (소견 필요순, 위험도순, 이름순)
+  const normalizedPatients = useMemo(
+    () =>
+      patients.map((patient) => ({
+        ...patient,
+        needs_review:
+          typeof patient.needs_review === 'boolean' ? patient.needs_review : true,
+      })),
+    [patients]
+  );
+
   const sortedPatients = useMemo(() => {
-    let sorted = [...patients];
+    let sorted = [...normalizedPatients];
 
     if (sortOption === '소견 필요순') {
-      // 소견 미작성 환자 우선, 그 다음 의사 위험도순
+      // 소견 미작성 환자 우선, 그 다음 위험도순
       const needsReview = sorted.filter(p => p.needs_review);
       const reviewed = sorted.filter(p => !p.needs_review);
       
@@ -152,7 +162,7 @@ const DoctorHistoryPage: React.FC = () => {
         return a.name.localeCompare(b.name);
       });
       
-      // 소견 작성 완료 환자: 의사 위험도순
+      // 소견 작성 완료 환자: 위험도순
       const sortedReviewed = reviewed.sort((a, b) => {
         const priorityA = riskPriority[a.doctor_risk_level || ''] || 0;
         const priorityB = riskPriority[b.doctor_risk_level || ''] || 0;
@@ -161,7 +171,7 @@ const DoctorHistoryPage: React.FC = () => {
       });
       
       sorted = [...sortedNeedsReview, ...sortedReviewed];
-    } else if (sortOption === '의사 위험도순') {
+    } else if (sortOption === '위험도순') {
       // 의사가 선정한 위험도 기준으로 정렬 (소견 미작성은 하단)
       const riskPriority: Record<string, number> = {
         '즉시 주의': 3,
@@ -185,7 +195,7 @@ const DoctorHistoryPage: React.FC = () => {
     }
 
     return sorted;
-  }, [patients, sortOption]);
+  }, [normalizedPatients, sortOption]);
 
   // ✅ 검색 및 필터 적용
   const filteredPatients = useMemo(() => {
@@ -202,10 +212,15 @@ const DoctorHistoryPage: React.FC = () => {
     if (riskFilter !== '전체 보기') {
       filtered = filtered.filter(p => {
         if (riskFilter === '주의 환자') {
-          return p.has_attention || 
-            (p.latest_note && (p.latest_note.includes('즉시 주의') || p.latest_note.includes('주의')));
+          return (
+            p.has_attention ||
+            (p.latest_note && (p.latest_note.includes('즉시 주의') || p.latest_note.includes('주의')))
+          );
         }
-        return p.latest_note?.includes(riskFilter);
+        if (riskFilter === '소견 필요') {
+          return !!p.needs_review;
+        }
+        return (p.doctor_risk_level || '') === riskFilter;
       });
     }
 
@@ -274,7 +289,7 @@ const DoctorHistoryPage: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="환자 이름 검색..."
-              className="w-full pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+              className="w-full pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
           
@@ -283,22 +298,22 @@ const DoctorHistoryPage: React.FC = () => {
             <select
               value={riskFilter}
               onChange={(e) => setRiskFilter(e.target.value)}
-              className="flex-1 text-xs border border-gray-300 rounded-md px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-400"
+              className="flex-1 text-xs border border-gray-300 rounded-md px-2 py-1.5 bg-white focus:ring-2 focus:ring-blue-500"
             >
               <option value="전체 보기">전체 보기</option>
               <option value="주의 환자">주의 환자</option>
-              <option value="즉시 주의">즉시 주의</option>
               <option value="경과 관찰">경과 관찰</option>
-              <option value="추가검사 필요">추가검사 필요</option>
-              <option value="치료 완료">치료 완료</option>
+              <option value="소견 필요">소견 필요</option>
+              <option value="소견 대기">소견 대기</option>
+              <option value="정상">정상</option>
             </select>
             <select
               value={sortOption}
-              onChange={(e) => setSortOption(e.target.value as '소견 필요순' | '의사 위험도순' | '이름순')}
-              className="flex-1 text-xs border border-gray-300 rounded-md px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-400"
+              onChange={(e) => setSortOption(e.target.value as '소견 필요순' | '위험도순' | '이름순')}
+              className="flex-1 text-xs border border-gray-300 rounded-md px-2 py-1.5 bg-white focus:ring-2 focus:ring-blue-500"
             >
               <option value="소견 필요순">소견 필요순</option>
-              <option value="의사 위험도순">의사 위험도순</option>
+              <option value="위험도순">위험도순</option>
               <option value="이름순">이름순</option>
             </select>
           </div>
@@ -313,28 +328,21 @@ const DoctorHistoryPage: React.FC = () => {
               <div
                 key={patient.id}
                 onClick={() => setSelectedPatientId(patient.id)}
-                className={`flex items-center rounded-xl p-4 shadow-sm hover:shadow-md cursor-pointer transition ${
-                  patient.needs_review
-                    ? 'bg-yellow-50 border-2 border-yellow-300'
-                    : patient.has_attention || 
-                      (patient.latest_note && (patient.latest_note.includes('즉시 주의') || patient.latest_note.includes('주의')))
-                    ? 'bg-red-50 border-2 border-red-200'
-                    : 'bg-white'
-                }`}
+                className="flex items-center bg-white border rounded-lg shadow-sm p-4 hover:shadow-md cursor-pointer transition border-gray-200"
               >
                 <div className="flex-1 text-left leading-tight">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-base font-semibold text-gray-900">
+                    <h3 className="text-lg font-bold text-gray-900">
                       {patient.name}
                     </h3>
                     {patient.needs_review && (
-                      <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
+                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
                         소견 필요
                       </span>
                     )}
                     {(patient.has_attention || 
                       (patient.latest_note && (patient.latest_note.includes('즉시 주의') || patient.latest_note.includes('주의')))) && (
-                      <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
+                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
                         주의
                       </span>
                     )}
@@ -345,7 +353,7 @@ const DoctorHistoryPage: React.FC = () => {
                     )}
                   </div>
                   {patient.latest_note && (
-                    <p className="text-xs text-gray-500 mt-1 line-clamp-1">
+                    <p className="text-sm text-gray-700 mt-2 border-t pt-2 border-gray-100 line-clamp-1">
                       {patient.latest_note}
                     </p>
                   )}
@@ -369,21 +377,23 @@ const DoctorHistoryPage: React.FC = () => {
               <div
                 key={index}
                 onClick={() => handleFolderClick(folder.folder_name)}
-                className="flex items-center bg-white rounded-xl p-4 shadow-sm hover:shadow-md cursor-pointer transition"
+                className="flex items-center bg-white border rounded-lg shadow-sm p-4 hover:shadow-md cursor-pointer transition border-gray-200"
               >
                 <div className="flex-1 text-left leading-tight">
-                  <h3 className="text-base font-semibold text-gray-900 mb-1">
+                  <h3 className="text-lg font-bold text-gray-900 mb-1">
                     {folder.folder_name}
                   </h3>
-                  <p className="text-xs text-gray-500">
-                    최근 수정 날짜:{' '}
-                    {folder.capture_date
-                      ? folder.capture_date.split('T')[0]
-                      : '날짜 정보 없음'}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    신체 부위: {folder.body_part || '정보 없음'}
-                  </p>
+                  <div className="text-sm text-gray-700 space-y-1 mt-2 border-t pt-2 border-gray-100">
+                    <p className="text-left">
+                      <span className="font-bold text-gray-900">위치:</span> {folder.body_part || '정보 없음'}
+                    </p>
+                    <p className="text-left">
+                      <span className="font-bold text-gray-900">최근 수정:</span>{' '}
+                      {folder.capture_date
+                        ? folder.capture_date.split('T')[0]
+                        : '날짜 정보 없음'}
+                    </p>
+                  </div>
                 </div>
                 <div className="text-gray-400 text-sm">{'>'}</div>
               </div>
@@ -423,30 +433,30 @@ const DoctorHistoryPage: React.FC = () => {
                       }
                     )
                   }
-                  className="flex items-center bg-white rounded-xl p-4 shadow-sm hover:shadow-md cursor-pointer transition"
+                  className="flex items-center bg-white border rounded-lg shadow-sm p-4 hover:shadow-md cursor-pointer transition border-gray-200"
                 >
                   <div className="flex items-center gap-3 flex-1">
                     <RiskLevelIcon riskLevel={riskLevel} source={riskSource as 'AI' | '의사'} size={24} />
                     <div className="flex-1 text-left leading-tight">
-                      <h3 className="text-sm font-semibold text-gray-900 mb-1">
+                      <h3 className="text-lg font-bold text-gray-900 mb-1">
                         {record.disease?.name_ko || '진단명 없음'}
                       </h3>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs text-gray-500">
-                          {riskSource} 위험도: {riskLevel}
-                        </span>
+                      <div className="text-sm text-gray-700 space-y-1 mt-2 border-t pt-2 border-gray-100">
+                        <p className="text-left">
+                          <span className="font-bold text-gray-900">{riskSource} 위험도:</span> {riskLevel}
+                        </p>
+                        <p className="text-left">
+                          <span className="font-bold text-gray-900">위치:</span> {record.photo.body_part || '정보 없음'}
+                        </p>
+                        <p className="text-left">
+                          <span className="font-bold text-gray-900">저장 날짜:</span>{' '}
+                          {record.photo.capture_date
+                            ? record.photo.capture_date.split('T')[0]
+                            : record.analysis_date
+                            ? record.analysis_date.split('T')[0]
+                            : '정보 없음'}
+                        </p>
                       </div>
-                      <p className="text-xs text-gray-500">
-                        신체 부위: {record.photo.body_part || '정보 없음'}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        저장 날짜:{' '}
-                        {record.photo.capture_date
-                          ? record.photo.capture_date.split('T')[0]
-                          : record.analysis_date
-                          ? record.analysis_date.split('T')[0]
-                          : '정보 없음'}
-                      </p>
                     </div>
                   </div>
                   <div className="text-gray-400 text-sm">{'>'}</div>
