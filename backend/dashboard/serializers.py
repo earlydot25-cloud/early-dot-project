@@ -68,7 +68,7 @@ class DiseaseInfoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DiseaseInfo
-        fields = ['name_ko']
+        fields = ['name_ko', 'name_en']
 
 # 🔴 신규: 의사 화면에 필요한 환자 정보 (Users 모델 사용)
 # 🔴 신규: 의사 화면에 필요한 환자 정보 (Users 모델 사용)
@@ -110,6 +110,8 @@ class UserSimpleSerializer(serializers.ModelSerializer):
 # 🔴 신규: 의사 화면에 필요한 증상 정보 (Photos 모델 사용)
 class PhotoSymptomsSerializer(serializers.ModelSerializer):
     """의사 대시보드 카드 하단에 표시될 증상 정보 시리얼라이저"""
+    
+    upload_storage_path = serializers.SerializerMethodField()
 
     class Meta:
         model = Photos

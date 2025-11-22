@@ -12,11 +12,16 @@ const Layout: React.FC<React.PropsWithChildren> = ({ children }) => {
   const hideChrome = HIDE_CHROME_PATHS.has(pathname);
 
   return (
-    <div className="app-container min-h-screen bg-white">
+    <div className="app-container bg-white">
       {!hideChrome && <Nav />}
       <main 
-        className={`main-content ${hideChrome ? '' : 'pb-20'}`}
-        style={hideChrome ? { padding: 0 } : { paddingLeft: 0, paddingRight: 0 }}
+        className={`main-content ${hideChrome ? 'main-content-full' : ''}`}
+        style={hideChrome ? { 
+          padding: 0
+        } : { 
+          paddingLeft: 0, 
+          paddingRight: 0 
+        }}
       >
         <div className={`${hideChrome ? '' : 'w-full'}`}>
           {children}

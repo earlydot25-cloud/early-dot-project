@@ -4,6 +4,42 @@ import axios from 'axios';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import RiskLevelIcon from '../../components/RiskLevelIcon';
 
+// API BASE URL (환경 변수 또는 기본값)
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
+
+// 경로 보정 함수
+const resolveMediaUrl = (rawPath?: string) => {
+  if (!rawPath) return '';
+  let path = rawPath.replace(/\\/g, '/');
+
+  // 이미 절대 URL이면 그대로 사용
+  if (/^https?:\/\//i.test(path)) {
+    // ngrok URL이나 다른 호스트를 API_BASE_URL로 정규화 (필요시)
+    if (API_BASE_URL && !path.includes(API_BASE_URL)) {
+      // 절대 URL이지만 다른 호스트인 경우는 그대로 사용
+      return path;
+    }
+    return path;
+  }
+  
+  // 상대 경로 처리
+  if (path.startsWith('/')) {
+    return API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+  }
+  if (path.startsWith('media/')) {
+    return API_BASE_URL ? `${API_BASE_URL}/${path}` : `/${path}`;
+  }
+
+  if (path.includes('/media/')) {
+    const parts = path.split('/media/');
+    if (parts.length > 1) {
+      return API_BASE_URL ? `${API_BASE_URL}/media/${parts[parts.length - 1]}` : `/media/${parts[parts.length - 1]}`;
+    }
+  }
+
+  return API_BASE_URL ? `${API_BASE_URL}/media/${path}` : `/media/${path}`;
+};
+
 interface RecordItem {
   id: number;
   risk_level: string;
@@ -328,7 +364,7 @@ const HistoryDetailPage: React.FC = () => {
                 {/* 왼쪽: 사진 썸네일 */}
                 <div className="flex-shrink-0 w-20 h-20">
                   <PhotoThumbnail
-                    src={r.photo.upload_storage_path || ''}
+                    src={resolveMediaUrl(r.photo.upload_storage_path)}
                     alt={r.photo.file_name || '사진'}
                     riskLevel={riskLevel}
                     riskSource={riskSource as 'AI' | '의사' | '대기'}

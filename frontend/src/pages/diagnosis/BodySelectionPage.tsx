@@ -5,6 +5,9 @@ type Part = '머리/목' | '앞 몸통' | '뒤 몸통' | '옆구리' | '팔' | '
 
 const ALL_PARTS: Part[] = ['머리/목','앞 몸통','뒤 몸통','옆구리','팔','다리','손바닥/발바닥','구강/성기'];
 
+// 모바일 디바이스 감지
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
 const BodySelectionPage: React.FC = () => {
   const nav = useNavigate();
   const [selected, setSelected] = useState<Part | null>(null);
@@ -36,8 +39,40 @@ const BodySelectionPage: React.FC = () => {
     setShowGenitalModal(false);
   };
 
+  // 모바일에서 네이티브 카메라 열기
+  const openNativeCamera = (bodyPart: Part) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'environment'; // 후면 카메라 사용
+    
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        // 바로 저장 페이지로 이동
+        nav('/diagnosis/save', {
+          state: {
+            file,
+            previewUrl: URL.createObjectURL(file),
+            bodyPart,
+          },
+        });
+      }
+    };
+    
+    input.click();
+  };
+
   const goNext = () => {
     const bodyPart = selected ?? '머리/목';
+    
+    // 모바일이면 네이티브 카메라 바로 열기
+    if (isMobile) {
+      openNativeCamera(bodyPart);
+      return;
+    }
+    
+    // 데스크톱이면 기존처럼 촬영 페이지로 이동
     nav('/diagnosis/capture', { state: { bodyPart } });
   };
 

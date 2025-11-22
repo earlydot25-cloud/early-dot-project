@@ -247,14 +247,34 @@ const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data, isDoctorView = fals
 };
 
 // -----------------------------------
-// 보조 컴포넌트: ABCDE 설명 아이템
+// 보조 컴포넌트: ABCDE 설명 아이템 (개선 버전)
 // -----------------------------------
-const renderABCDEItem = (key: string, title: string, description: string) => (
-  <div key={key} className="p-3 bg-white border rounded-lg shadow-sm">
-    <p className="text-md font-semibold text-gray-800 mb-1">{title}</p>
-    <p className="text-sm text-gray-600">{description}</p>
-  </div>
-);
+const ABCDEItem: React.FC<{
+  letter: string;
+  title: string;
+  description: string;
+}> = ({ letter, title, description }) => {
+  return (
+    <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow hover:border-blue-300">
+      <div className="flex items-start gap-3">
+        {/* 왼쪽: 알파벳 배지 */}
+        <div className="flex-shrink-0 w-10 h-10 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-center">
+          <span className="text-lg font-bold text-blue-700">{letter}</span>
+        </div>
+        
+        {/* 오른쪽: 제목과 설명 */}
+        <div className="flex-1 min-w-0">
+          <h4 className="text-base font-semibold text-gray-800 mb-1.5 leading-tight">
+            {title}
+          </h4>
+          <p className="text-sm text-gray-600 leading-relaxed">
+            {description}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // -----------------------------------
 // 메인 컴포넌트
@@ -325,24 +345,24 @@ const MainPage: React.FC = () => {
   }
 
   // -----------------------------------
-  // 🔎 "내 것만" 필터링 + 요약 계산 (=> 이 숫자만 UI에 사용)
+  // 백엔드에서 이미 필터링된 데이터 사용
   // -----------------------------------
+  // 백엔드에서 이미 해당 사용자의 진단 내역만 필터링해서 보내주므로
+  // 프론트엔드에서 추가 필터링 불필요
   const history = data.history ?? [];
 
-  // 로그인한 사용자 정보 (localStorage에 로그인 시 저장되어 있어야 함)
-  const currentUserId = Number(localStorage.getItem('userId'));          // Users.id
-  const currentDoctorUid = Number(localStorage.getItem('doctorUid'));    // Doctors.uid
-  const isDoctor = localStorage.getItem('isDoctor') === '1';
+  // 로그인한 사용자 정보 (의사 여부 확인용)
+  const userStr = localStorage.getItem('user');
+  let isDoctor = false;
 
-  // 내 소유만 남기기
-  const filteredHistory: DiagnosisResult[] = history.filter((item) => {
-    if (!isDoctor) {
-      // 환자: 내 Users.id와 일치하는 기록만
-      return item.user_id === currentUserId;
+  if (userStr) {
+    try {
+      const user = JSON.parse(userStr);
+      isDoctor = user.is_doctor === true || localStorage.getItem('isDoctor') === '1';
+    } catch (e) {
+      console.error('Failed to parse user data from localStorage:', e);
     }
-    // 의사: 내 Doctors.uid와 연결된 기록만
-    return item.doctor_uid === currentDoctorUid;
-  });
+  }
 
   // 최종 위험도 타입(의사/AI 통합 관점)
   type FinalRisk = '즉시 주의' | '높음' | '경과 관찰' | '보통' | '낮음' | '정상';
@@ -356,9 +376,9 @@ const MainPage: React.FC = () => {
     return item.risk_level as FinalRisk;
   };
 
-  // 요약 수치(반드시 filtered 기준)
-  const visibleTotal = filteredHistory.length;
-  const visibleAttention = filteredHistory.filter((i) => {
+  // 요약 수치 (백엔드에서 받은 데이터 기준)
+  const visibleTotal = history.length;
+  const visibleAttention = history.filter((i) => {
     const r = getFinalRisk(i);
     return r === '즉시 주의' || r === '높음';
   }).length;
@@ -368,10 +388,10 @@ const MainPage: React.FC = () => {
   const handleViewAllHistory = () => navigate('/dashboard');
 
   return (
-    <div className="p-1 space-y-3">
+    <div className="p-1 space-y-3 bg-gradient-to-b from-gray-50 to-white min-h-screen">
       {/* 1. AI 진단 사용 안내 */}
-      <section className="p-4 bg-blue-50 border-l-4 border-blue-600 rounded-lg shadow-sm">
-        <h2 className="text-lg font-bold text-blue-800 mb-2">AI 진단 사용 안내</h2>
+      <section className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+        <h2 className="text-lg font-bold text-gray-800 mb-2">AI 진단 보조 사용 안내</h2>
         <p className="text-sm text-gray-700 mb-4">
           'EARLY-DOT' AI는 <strong>"AI 예측 병변 및 임상 데이터"</strong>를 기반으로 훈련되었으며,
           병변의 형태, 크기, 색상 등의 정보를 종합적으로 분석하여 위험도를 예측합니다.
@@ -385,7 +405,7 @@ const MainPage: React.FC = () => {
       </section>
 
       {/* 2. AI 진단 내역 (상단 요약/헤더는 "내 것"이 0건이면 숨김) */}
-      <section>
+      <section className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
         {visibleTotal > 0 && (
           <div className="flex justify-between items-center mb-3 p-2 bg-gray-50 rounded-md shadow-inner">
             <div className="text-sm font-medium text-gray-700 flex items-center space-x-4">
@@ -412,7 +432,7 @@ const MainPage: React.FC = () => {
         <div className="flex space-x-4 overflow-x-scroll pb-3 scrollbar-hide">
           {visibleTotal > 0 ? (
             // 최근 진단 내역 최대 3개만 표시 (최신순 정렬)
-            filteredHistory
+            history
               .sort((a, b) => {
                 // analysis_date 기준으로 최신순 정렬
                 const dateA = new Date(a.analysis_date || a.photo.capture_date).getTime();
@@ -426,25 +446,63 @@ const MainPage: React.FC = () => {
           ) : (
             // 🔻 요구한 문구: 0건일 때만 노출
             <p className="text-gray-700 font-medium">
-              조회 가능한 진단내역이 존재하지 않습니다! {visibleTotal}지금 바로 새로운 진단을 시작해보세요!
+              조회 가능한 진단내역이 존재하지 않습니다. <br /> 위의 촬영 버튼을 눌러 새로운 진단을 시작해보세요!
             </p>
           )}
         </div>
       </section>
 
       {/* 3. ABCDE 기법 설명 */}
-      <section className="pt-4 border-t border-gray-200">
-        <h3 className="text-lg font-bold mb-3">거울 앞 5분, 내 피부 직접 확인해보세요</h3>
-        <p className="text-sm text-gray-700 mb-4">
-          ABCDE 기법이란? 내 피부를 스스로 점검할 수 있는 5가지 기준입니다.
-        </p>
+      <section className="pt-4 border-t border-gray-200 bg-gradient-to-b from-blue-50/30 to-white rounded-lg p-4">
+        <div className="mb-4">
+          <div className="flex flex-col gap-4 mb-3">
+            {/* 텍스트 영역 - 위쪽 */}
+            <div className="text-center">
+              <h3 className="text-lg font-bold text-gray-800 mb-2">
+                거울 앞 5분,<br /> 내 피부를 직접 확인해보세요!
+              </h3>
+              <p className="text-sm text-gray-600">
+                ABCDE 기법이란?<br />피부를 스스로 점검하는 5가지 기준입니다.
+              </p>
+            </div>
+            {/* 이미지 영역 - 아래쪽 */}
+            <div className="w-full max-w-xs mx-auto rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
+              <img 
+                src="/check_mirror.jpg" 
+                alt="거울 앞에서 피부 확인하는 이미지"
+                className="w-full h-48 object-cover"
+              />
+            </div>
+          </div>
+        </div>
 
+        {/* 1열 레이아웃 */}
         <div className="space-y-3">
-          {renderABCDEItem('A', 'A. 비대칭 (Asymmetry)', '환부 모양을 반으로 접었을 때 대칭인지 확인합니다. 비대칭일수록 악성일 가능성이 높습니다.')}
-          {renderABCDEItem('B', 'B. 경계 (Border)', '경계선이 울퉁불퉁하거나 불규칙한지 확인합니다. 불규칙할수록 위험합니다.')}
-          {renderABCDEItem('C', 'C. 색상 (Color)', '한 병변 내에 2가지 이상의 색상이 섞여 있는지 확인합니다. 색상 변화가 클수록 위험합니다.')}
-          {renderABCDEItem('D', 'D. 크기 (Diameter)', '해당 환부 부위가 6mm가 넘는지 직접 확인하세요. 6mm 이상일 경우 변화 속도를 기록하며 주의 깊은 관찰이 필요합니다.')}
-          {renderABCDEItem('E', 'E. 변화 (Evolving)', '해당 환부 부위가 최근 경계가 넓어지거나, 가려움/통증/출혈이 있는지 스스로 관찰하여 변화를 기록하세요.')}
+          <ABCDEItem
+            letter="A"
+            title="A. 비대칭 (Asymmetry)"
+            description="환부 모양을 반으로 접었을 때 대칭인지 확인합니다. 비대칭일수록 악성일 가능성이 높습니다."
+          />
+          <ABCDEItem
+            letter="B"
+            title="B. 경계 (Border)"
+            description="경계선이 울퉁불퉁하거나 불규칙한지 확인합니다. 불규칙할수록 위험합니다."
+          />
+          <ABCDEItem
+            letter="C"
+            title="C. 색상 (Color)"
+            description="한 병변 내에 2가지 이상의 색상이 섞여 있는지 확인합니다. 색상 변화가 클수록 위험합니다."
+          />
+          <ABCDEItem
+            letter="D"
+            title="D. 크기 (Diameter)"
+            description="해당 환부 부위가 6mm가 넘는지 직접 확인하세요. 6mm 이상일 경우 변화 속도를 기록하며 주의 깊은 관찰이 필요합니다."
+          />
+          <ABCDEItem
+            letter="E"
+            title="E. 변화 (Evolving)"
+            description="해당 환부 부위가 최근 경계가 넓어지거나, 가려움/통증/출혈이 있는지 스스로 관찰하여 변화를 기록하세요."
+          />
         </div>
       </section>
 

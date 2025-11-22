@@ -57,19 +57,28 @@
 
 /* 메인 콘텐츠 영역 (Layout.tsx의 main) 스타일 */
 .main-content {
-    /* 💡 Nav와 BottomNav 높이를 뺀 정확한 높이를 계산하여 고정합니다. */
-    height: calc(100% - 120px); /* 812px (100%) - 60px (Nav) - 60px (BottomNav) */
+    /* 💡 Nav와 BottomNav 사이에 absolute로 배치 */
+    position: absolute;
+    top: 60px; /* Nav 높이만큼 아래로 */
+    bottom: 60px; /* BottomNav 높이만큼 위로 */
+    left: 0;
+    right: 0;
 
     /* 💡 스크롤 가능하게 처리 */
     overflow-y: auto;
-
-    /* 💡 Nav에 가려지지 않도록 상단 여백만 추가합니다. (BottomNav 영역은 height 계산에 포함됨) */
-    padding-top: 60px;
+    overflow-x: hidden;
 
     /* Tailwind 클래스로 패딩을 제어할 수 있도록 기본값 제거 */
     padding-left: 0;
     padding-right: 0;
+    padding-top: 0;
     padding-bottom: 0;
+}
+
+/* Nav와 BottomNav가 숨겨진 경우 (카메라 촬영 화면 등) */
+.main-content-full {
+    top: 0;
+    bottom: 0;
 }
 
 /* frontend/src/App.css */
@@ -90,3 +99,8 @@
 /* 💡 마우스 호버 및 포커스 시 색상을 파란색으로 변경 */
 .bottom-nav a { color: #475569; }        /* 기본 (slate-600) */
 .bottom-nav a.active { color: #60A5FA; } /* 활성 (연한 파랑) */
+
+/* BottomNav 아이템 hover 효과 - 색상만 변경 */
+.bottom-nav-item:hover {
+  color: #3b82f6 !important;
+}

@@ -3,8 +3,9 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { fetchUserProfile } from '../../services/userServices';
 
 // 백엔드 업로드 엔드포인트
-const API_URL = 'http://127.0.0.1:8000/api/diagnosis/upload/';
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000';
+// 환경 변수가 있으면 사용, 없으면 상대 경로 사용 (프록시 또는 같은 도메인)
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
+const API_URL = `${API_BASE_URL}/api/diagnosis/upload/`;
 
 // 드롭다운 공통 옵션
 const SEVERITY = ['없음', '약간~보통', '심각'] as const;
