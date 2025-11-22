@@ -245,30 +245,49 @@ class PatientListItemSerializer(serializers.ModelSerializer):
         return None
 
     def get_needs_review(self, obj: User):
-        """소견 필요 여부 확인"""
+        """소견 필요 여부 확인 - PatientsListView와 동일한 로직 사용"""
         try:
             from dashboard.models import FollowUpCheck
-            # 최신 Results의 FollowUpCheck 확인
-            last_result = Results.objects.filter(photo__user=obj).order_by('-analysis_date').first()
-            if last_result:
-                followup = getattr(last_result, 'followup_check', None)
+            # 모든 Results의 FollowUpCheck 확인 (최신 결과 우선)
+            all_results = Results.objects.filter(photo__user=obj).select_related('followup_check').order_by('-analysis_date')
+            
+            if not all_results.exists():
+                return False  # 진단 결과가 없으면 소견 필요 없음
+            
+            # 모든 결과를 확인하여 doctor_risk_level이 None이거나 '소견 대기'인 경우가 있는지 확인
+            for result in all_results:
+                followup = getattr(result, 'followup_check', None)
                 if followup is None:
                     return True  # FollowUpCheck가 없으면 소견 필요
-                if followup.doctor_risk_level == '소견 대기':
-                    return True  # 소견 대기 상태면 소견 필요
+                # doctor_risk_level이 None이거나 '소견 대기'이면 소견 필요
+                if followup.doctor_risk_level is None or followup.doctor_risk_level == '소견 대기':
+                    return True
+            
+            # 모든 결과에 대해 소견이 작성되었으면 False
             return False
         except Exception as e:
             print(f"Error in get_needs_review: {e}")
+            import traceback
+            print(traceback.format_exc())
         return False
 
     def get_ai_risk_level(self, obj: User):
-        """AI 진단 심각도 (최신 Results의 risk_level)"""
+        """위험도 표시 (의사 위험도 우선, 없으면 AI 위험도)"""
         try:
-            last_result = Results.objects.filter(photo__user=obj).order_by('-analysis_date').first()
+            from dashboard.models import FollowUpCheck
+            # 최신 Results 확인
+            last_result = Results.objects.filter(photo__user=obj).select_related('followup_check').order_by('-analysis_date').first()
             if last_result:
+                # 의사 위험도가 있으면 우선 표시
+                followup = getattr(last_result, 'followup_check', None)
+                if followup and followup.doctor_risk_level and followup.doctor_risk_level != '소견 대기':
+                    return followup.doctor_risk_level  # '즉시 주의', '경과 관찰', '정상' 등
+                # 의사 위험도가 없으면 AI 위험도 표시
                 return last_result.risk_level  # '높음', '보통', '낮음' 등
         except Exception as e:
             print(f"Error in get_ai_risk_level: {e}")
+            import traceback
+            print(traceback.format_exc())
         return None
 
 

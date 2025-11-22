@@ -6,6 +6,30 @@ import { FaChevronRight, FaExclamationTriangle, FaCheckCircle, FaUserMd } from '
 import type { IconBaseProps } from 'react-icons';
 import axios from 'axios';
 
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000';
+
+// ✅ 이미지 URL 처리 함수
+const normalizeHost = (url: string) =>
+  url.replace(/^http:\/\/(?:django|project_django)(?::\d+)?/i, API_BASE_URL);
+
+const resolveMediaUrl = (rawPath?: string) => {
+  if (!rawPath) return '';
+  let path = rawPath.replace(/\\/g, '/');
+
+  if (/^https?:\/\//i.test(path)) return normalizeHost(path);
+  if (path.startsWith('/')) return `${API_BASE_URL}${path}`;
+  if (path.startsWith('media/')) return `${API_BASE_URL}/${path}`;
+
+  if (path.includes('/media/')) {
+    const parts = path.split('/media/');
+    if (parts.length > 1) {
+      return `${API_BASE_URL}/media/${parts[parts.length - 1]}`;
+    }
+  }
+
+  return `${API_BASE_URL}/media/${path}`;
+};
+
 // -----------------------------------
 // 🔴 데이터 타입 정의 🔴
 // -----------------------------------
@@ -126,13 +150,21 @@ if (isDoctorView) {
                 {/* 1. 좌측 핵심 정보 블록 (이미지, 환자명/병변명) */}
                 <div className="flex flex-col flex-grow">
                     <div className="flex items-start mb-3">
-                        {/* 환부 이미지 Placeholder: 실제 이미지 경로 사용 */}
+                        {/* 환부 이미지: 실제 이미지 경로 사용 */}
                          <div className="w-16 h-16 rounded mr-3 flex items-center justify-center overflow-hidden flex-shrink-0">
                             {data.photo && data.photo.upload_storage_path ? (
                                 <img
-                                    src={data.photo.upload_storage_path}
+                                    src={resolveMediaUrl(data.photo.upload_storage_path)}
                                     alt={`${data.disease.name_ko} 이미지`}
                                     className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.style.display = 'none';
+                                        const parent = target.parentElement;
+                                        if (parent) {
+                                            parent.innerHTML = '<div class="w-full h-full bg-blue-500 flex items-center justify-center text-xs font-bold text-white">이미지 없음</div>';
+                                        }
+                                    }}
                                 />
                             ) : (
                                 <div className="w-full h-full bg-blue-500 flex items-center justify-center text-xs font-bold text-white">
