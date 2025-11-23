@@ -223,11 +223,30 @@ const HistoryResultPage: React.FC = () => {
     );
   }
 
+  // URL에서 userId와 folderName 추출 (데이터 로드 전에도 사용 가능)
+  const searchParams = new URLSearchParams(location.search);
+  const userId = searchParams.get('user');
+  const pathParts = location.pathname.split('/');
+  const folderNameFromPath = pathParts[pathParts.length - 2]; // /dashboard/doctor/history/{folderName}/{resultId}
+
+  // 뒤로가기 핸들러: 폴더 목록으로 이동
+  const handleBack = () => {
+    const isDoctorPath = location.pathname.includes('/doctor/');
+    if (isDoctorPath && folderNameFromPath && folderNameFromPath !== 'history') {
+      // 의사용: 폴더 목록으로 이동
+      const folderPath = `/dashboard/doctor/history/${folderNameFromPath}${userId ? `?user=${userId}` : ''}`;
+      navigate(folderPath);
+    } else {
+      // 일반 사용자용 또는 폴더명이 없으면 이전 페이지로
+      navigate(-1);
+    }
+  };
+
   if (!data) {
     return (
       <div className="w-full bg-white px-4 py-5">
         <button
-          onClick={() => navigate(-1)}
+          onClick={handleBack}
           className="text-sm text-gray-600 mb-3 flex items-center gap-1 hover:text-black"
         >
           ← 뒤로가기
@@ -280,7 +299,7 @@ const HistoryResultPage: React.FC = () => {
     <div className="w-full bg-white px-4 py-5">
       {/* 뒤로가기 */}
       <button
-        onClick={() => navigate(-1)}
+        onClick={handleBack}
         className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
       >
         ← 뒤로가기

@@ -2,7 +2,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import RiskLevelIcon from '../../components/RiskLevelIcon';
 import { FaMars, FaVenus } from 'react-icons/fa';
 import type { IconBaseProps } from 'react-icons';
 
@@ -12,6 +11,69 @@ const MarsIcon: IconCmp = (props: IconBaseProps) => <FaMars {...props} />;
 const VenusIcon: IconCmp = (props: IconBaseProps) => <FaVenus {...props} />;
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000';
+
+// 경로 보정 함수
+const resolveMediaUrl = (rawPath?: string) => {
+  if (!rawPath) return '';
+  let path = rawPath.replace(/\\/g, '/');
+
+  // 이미 절대 URL이면 그대로 사용
+  if (/^https?:\/\//i.test(path)) {
+    if (API_BASE_URL && !path.includes(API_BASE_URL)) {
+      return path;
+    }
+    return path;
+  }
+  
+  // 상대 경로 처리
+  if (path.startsWith('/')) {
+    return API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+  }
+  if (path.startsWith('media/')) {
+    return API_BASE_URL ? `${API_BASE_URL}/${path}` : `/${path}`;
+  }
+
+  if (path.includes('/media/')) {
+    const parts = path.split('/media/');
+    if (parts.length > 1) {
+      return API_BASE_URL ? `${API_BASE_URL}/media/${parts[parts.length - 1]}` : `/media/${parts[parts.length - 1]}`;
+    }
+  }
+
+  return API_BASE_URL ? `${API_BASE_URL}/media/${path}` : `/media/${path}`;
+};
+
+// 이미지 로드 실패 시 대체 컴포넌트
+const PhotoThumbnail: React.FC<{ 
+  src: string; 
+  alt: string;
+}> = ({ src, alt }) => {
+  const [hasError, setHasError] = useState(false);
+
+  if (hasError || !src) {
+    return (
+      <div className="w-full h-full rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
+        <div className="text-gray-400 text-xs text-center">
+          <svg className="w-8 h-8 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <span>이미지 없음</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full h-full rounded-lg overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center relative">
+      <img
+        src={src}
+        alt={alt}
+        className="w-full h-full object-cover"
+        onError={() => setHasError(true)}
+      />
+    </div>
+  );
+};
 
 interface Patient {
   id: number;
@@ -42,6 +104,8 @@ interface RecordItem {
     folder_name: string;
     body_part: string;
     capture_date: string;
+    upload_storage_path?: string;
+    file_name?: string;
   };
   followup_check?: {
     doctor_risk_level: string;
@@ -435,8 +499,8 @@ const DoctorHistoryPage: React.FC = () => {
                             소견 대기
                           </span>
                         )}
-                        {/* 주의 태그 */}
-                        {(patient.has_attention || 
+                        {/* 주의 태그 (의사 위험도가 없을 때만 표시) */}
+                        {!patient.doctor_risk_level && (patient.has_attention || 
                           (patient.latest_note && (patient.latest_note.includes('즉시 주의') || patient.latest_note.includes('주의')))) && (
                           <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-medium">
                             주의
@@ -550,31 +614,38 @@ const DoctorHistoryPage: React.FC = () => {
                   }
                   className="flex items-center bg-white border rounded-lg shadow-sm p-4 hover:shadow-md hover:border-blue-300 cursor-pointer transition-all border-gray-200"
                 >
-                  <div className="flex items-center gap-3 flex-1">
-                    <RiskLevelIcon riskLevel={riskLevel} source={riskSource as 'AI' | '의사'} size={24} />
-                    <div className="flex-1 text-left">
-                      <h3 className="text-lg font-bold text-gray-900 mb-2">
-                        {record.disease?.name_ko || '진단명 없음'}
-                      </h3>
-                      <div className="text-sm text-gray-600 space-y-1 mt-2 pt-2 border-t border-gray-100">
-                        <p>
-                          <span className="font-semibold text-gray-900">{riskSource} 위험도:</span>{' '}
-                          <span className={getRiskColor(riskLevel)}>{riskLevel}</span>
-                        </p>
-                        <p>
-                          <span className="font-semibold text-gray-900">위치:</span> {record.photo.body_part || '정보 없음'}
-                        </p>
-                        <p>
-                          <span className="font-semibold text-gray-900">저장 날짜:</span>{' '}
-                          {record.photo.capture_date
-                            ? record.photo.capture_date.split('T')[0]
-                            : record.analysis_date
-                            ? record.analysis_date.split('T')[0]
-                            : '정보 없음'}
-                        </p>
-                      </div>
-                    </div>
+                  {/* 왼쪽: 사진 썸네일 */}
+                  <div className="flex-shrink-0 w-20 h-20">
+                    <PhotoThumbnail
+                      src={resolveMediaUrl(record.photo.upload_storage_path)}
+                      alt={record.photo.file_name || record.disease?.name_ko || '사진'}
+                    />
                   </div>
+
+                  {/* 가운데: 텍스트 정보 */}
+                  <div className="flex-1 text-left ml-3">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-1">
+                      {record.disease?.name_ko || '진단명 없음'}
+                    </h3>
+                    <p className="text-xs text-gray-500 mb-1">
+                      {riskSource} 위험도: <span className={getRiskColor(riskLevel)}>{riskLevel}</span>
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      저장 날짜:{' '}
+                      {record.photo.capture_date
+                        ? record.photo.capture_date.split('T')[0]
+                        : record.analysis_date
+                        ? record.analysis_date.split('T')[0]
+                        : '정보 없음'}
+                    </p>
+                    {record.photo.body_part && (
+                      <p className="text-xs text-gray-500">
+                        신체 부위: {record.photo.body_part}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* 오른쪽: 화살표 */}
                   <div className="text-gray-400 ml-3">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
