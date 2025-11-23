@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import RiskLevelIcon from '../../components/RiskLevelIcon';
 
 // ------------------- Interface -------------------
 interface Disease {
@@ -115,6 +114,20 @@ const resolveMediaUrl = (rawPath?: string) => {
   }
 
   return `${API_BASE_URL}/media/${path}`;
+};
+
+// 증상 심각도 순서 (심한 것부터)
+const SYMPTOM_SEVERITY_ORDER: Record<string, number> = {
+  '심각': 3,
+  '있음': 2,
+  '약간~보통': 1,
+  '약간': 1,
+  '보통': 1,
+  '없음': 0,
+};
+
+const getSymptomSeverity = (value: string): number => {
+  return SYMPTOM_SEVERITY_ORDER[value] ?? 1;
 };
 
 // ------------------- Component -------------------
@@ -312,13 +325,16 @@ const HistoryResultPage: React.FC = () => {
 
       {/* 경고 문구 */}
       {data.followup_check?.doctor_risk_level === '즉시 주의' && (
-        <div className="bg-red-100 border border-red-400 text-red-600 rounded-md p-3 text-sm mb-4 font-semibold">
-          ⚠️ 주의: 전문의의 소견 **[즉시 주의]** 상태입니다.
+        <div className="bg-red-100 border border-red-400 text-red-600 rounded-md p-3 text-sm mb-4 font-semibold flex items-center gap-2">
+          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <span>주의: 전문의의 소견이 '즉시 주의' 상태입니다.</span>
         </div>
       )}
 
       {/* 이미지 섹션 */}
-      <div className="bg-white p-4 rounded-xl shadow-sm mb-4">
+      <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-gray-200">
         <h3 className="text-sm font-semibold mb-3 text-gray-900">
           {data.disease ? 'AI 예측 진단 및 이미지 분석' : '업로드된 이미지'}
         </h3>
@@ -364,40 +380,29 @@ const HistoryResultPage: React.FC = () => {
 
       {/* 질환명 및 위험도 */}
       {data.disease && (
-        <div className="bg-white p-4 rounded-xl shadow-sm mb-4">
-          <p className="text-xs text-blue-600 font-semibold mb-1">AI 예측 진단명</p>
-          <p className="font-bold text-lg mb-2">
-            {data.disease.name_en} ({data.disease.name_ko})
+        <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-gray-200">
+          <p className="text-sm font-semibold text-gray-900 mb-2">
+            {data.disease.name_ko || data.disease.name_en}
           </p>
-          <div className="flex items-center gap-2">
-            <RiskLevelIcon
-              riskLevel={finalRiskLevel}
-              source={riskSource as 'AI' | '의사' | '대기'}
-              size={20}
-            />
-            <p className={`text-xs px-2 py-1 rounded border ${riskColor}`}>
-              {riskSource} 위험도: {finalRiskLevel}
-            </p>
-          </div>
+          <p className={`text-xs px-2 py-1 rounded border inline-block ${riskColor}`}>
+            {riskSource} 위험도: {finalRiskLevel}
+          </p>
         </div>
       )}
 
       {/* 분석 대기 상태 (Results가 없을 때) */}
       {!data.disease && (
-        <div className="bg-white p-4 rounded-xl shadow-sm mb-4">
-          <p className="text-xs text-gray-600 font-semibold mb-1">진단 상태</p>
-          <div className="flex items-center gap-2">
-            <RiskLevelIcon riskLevel="분석 대기" source="대기" size={20} />
-            <p className="text-sm text-gray-700">
-              AI 분석이 진행 중입니다. 잠시 후 다시 확인해주세요.
-            </p>
-          </div>
+        <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-gray-200">
+          <p className="text-sm font-semibold text-gray-900 mb-1">진단 상태</p>
+          <p className="text-xs text-gray-600">
+            AI 분석이 진행 중입니다. 잠시 후 다시 확인해주세요.
+          </p>
         </div>
       )}
 
       {/* 전문의 최종 소견 */}
       {data.disease && (
-        <div className="bg-red-50 border border-red-300 rounded-xl p-4 shadow-sm mb-4">
+        <div className="bg-red-50 border border-red-300 rounded-lg p-4 shadow-sm mb-4">
           <p className="text-sm font-bold text-red-600 mb-2">전문의 최종 소견</p>
           <p className="text-xs text-gray-700 mb-2 whitespace-pre-wrap">
             {doctorNoteDisplay}
@@ -496,57 +501,122 @@ const HistoryResultPage: React.FC = () => {
         </div>
       )}
 
-      {/* VLM 모델 분석 (Results가 있을 때만) */}
-      {data.vlm_analysis_text && (
-        <div className="bg-white p-4 rounded-xl shadow-sm mb-4">
-          <p className="text-sm font-semibold mb-2 text-gray-900">VLM 모델 분석 소견</p>
-          <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
-            {data.vlm_analysis_text}
-          </p>
-        </div>
-      )}
-
       {/* 환자 기본 정보 */}
-      <div className="bg-white p-4 rounded-xl shadow-sm mb-4">
-        <p className="text-sm font-semibold mb-2 text-gray-900">환자 기본 정보</p>
-        <div className="space-y-1">
-          <p className="text-xs text-gray-700">
-            나이 / 성별: {data.user.age ? `${data.user.age}세` : '정보 없음'} / {data.user.sex || '모름'}
-          </p>
-          <p className="text-xs text-gray-700">환부 위치: {data.photo.body_part || '정보 없음'}</p>
-          <p className="text-xs text-gray-700">가족력 유무: {data.user.family_history || '없음'}</p>
+      <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-gray-200">
+        <div className="flex items-center gap-2 mb-3">
+          <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          <p className="text-sm font-semibold text-gray-900">환자 기본 정보</p>
+        </div>
+        <div className="space-y-0">
+          <div className="flex justify-between py-2 border-b border-gray-100">
+            <span className="text-xs text-gray-600">이름</span>
+            <span className="text-xs text-gray-900 font-medium">{data.user.name}</span>
+          </div>
+          <div className="flex justify-between py-2 border-b border-gray-100">
+            <span className="text-xs text-gray-600">나이 / 성별</span>
+            <span className="text-xs text-gray-900 font-medium">
+              {data.user.age ? `만 ${data.user.age}세` : '정보 없음'} / {data.user.sex || '모름'}
+            </span>
+          </div>
+          <div className="flex justify-between py-2 border-b border-gray-100">
+            <span className="text-xs text-gray-600">환부 위치</span>
+            <span className="text-xs text-gray-900 font-medium">
+              {data.photo.body_part || '정보 없음'}
+            </span>
+          </div>
+          <div className="flex justify-between py-2">
+            <span className="text-xs text-gray-600">가족력 유무</span>
+            <span className="text-xs text-gray-900 font-medium">{data.user.family_history || '없음'}</span>
+          </div>
         </div>
       </div>
 
       {/* 주요 증상 및 특이사항 */}
-      <div className="bg-white p-4 rounded-xl shadow-sm mb-4">
-        <p className="text-sm font-semibold mb-2 text-gray-900">주요 증상 및 특이사항</p>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-left">
-          <p className="text-xs text-gray-700">
-            <span className="font-bold">발병 시점:</span> {data.photo.onset_date || '정보 없음'}
+      <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-gray-200">
+        <div className="flex items-center gap-2 mb-3">
+          <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <p className="text-sm font-semibold text-gray-900">주요 증상 및 특이사항</p>
+        </div>
+        
+        {/* 발병 시점 텍스트 */}
+        {data.photo.onset_date && (
+          <p className="text-xs text-gray-700 mb-3">
+            최근 발병 시점: {data.photo.onset_date}
           </p>
-          <p className="text-xs text-gray-700">
-            <span className="font-bold">가려움:</span> {data.photo.symptoms_itch || '없음'}
-          </p>
-          <p className="text-xs text-gray-700">
-            <span className="font-bold">통증:</span> {data.photo.symptoms_pain || '없음'}
-          </p>
-          <p className="text-xs text-gray-700">
-            <span className="font-bold">색 변화:</span> {data.photo.symptoms_color || '없음'}
-          </p>
-          <p className="text-xs text-gray-700">
-            <span className="font-bold">감염:</span> {data.photo.symptoms_infection || '없음'}
-          </p>
-          <p className="text-xs text-gray-700">
-            <span className="font-bold">출혈:</span> {data.photo.symptoms_blood || '없음'}
-          </p>
+        )}
+        
+        {/* 증상 태그들 */}
+        <div className="flex flex-wrap gap-2">
+          {data.photo.symptoms_blood && (
+            <span className={`px-3 py-1 text-xs rounded-full font-medium ${
+              data.photo.symptoms_blood === '예' || data.photo.symptoms_blood === '있음' || data.photo.symptoms_blood === '심함'
+                ? 'bg-red-100 text-red-700'
+                : 'bg-gray-200 text-gray-700'
+            }`}>
+              출혈({data.photo.symptoms_blood === '예' || data.photo.symptoms_blood === '있음' ? '예' : data.photo.symptoms_blood})
+            </span>
+          )}
+          {data.photo.symptoms_color && (
+            <span className={`px-3 py-1 text-xs rounded-full font-medium ${
+              getSymptomSeverity(data.photo.symptoms_color) >= 2
+                ? 'bg-red-100 text-red-700'
+                : getSymptomSeverity(data.photo.symptoms_color) === 1
+                ? 'bg-orange-100 text-orange-700'
+                : 'bg-gray-200 text-gray-700'
+            }`}>
+              크기 변화({data.photo.symptoms_color === '심함' ? '심함' : data.photo.symptoms_color})
+            </span>
+          )}
+          {data.photo.symptoms_pain && (
+            <span className={`px-3 py-1 text-xs rounded-full font-medium ${
+              getSymptomSeverity(data.photo.symptoms_pain) >= 2
+                ? 'bg-red-100 text-red-700'
+                : getSymptomSeverity(data.photo.symptoms_pain) === 1
+                ? 'bg-orange-100 text-orange-700'
+                : 'bg-gray-200 text-gray-700'
+            }`}>
+              통증 ({data.photo.symptoms_pain === '심함' ? '심함' : data.photo.symptoms_pain === '보통' ? '보통' : data.photo.symptoms_pain})
+            </span>
+          )}
+          {data.photo.symptoms_itch && (
+            <span className={`px-3 py-1 text-xs rounded-full font-medium ${
+              getSymptomSeverity(data.photo.symptoms_itch) >= 2
+                ? 'bg-red-100 text-red-700'
+                : getSymptomSeverity(data.photo.symptoms_itch) === 1
+                ? 'bg-orange-100 text-orange-700'
+                : 'bg-gray-200 text-gray-700'
+            }`}>
+              가려움({data.photo.symptoms_itch})
+            </span>
+          )}
+          {data.photo.symptoms_infection && (
+            <span className={`px-3 py-1 text-xs rounded-full font-medium ${
+              data.photo.symptoms_infection === '예' || data.photo.symptoms_infection === '있음'
+                ? 'bg-red-100 text-red-700'
+                : 'bg-gray-200 text-gray-700'
+            }`}>
+              감염({data.photo.symptoms_infection === '예' || data.photo.symptoms_infection === '있음' ? '예' : data.photo.symptoms_infection})
+            </span>
+          )}
         </div>
       </div>
 
       {/* 질환 상세 정보 (Results가 있을 때만) */}
       {data.disease && data.disease.description && (
-        <div className="bg-white p-4 rounded-xl shadow-sm mb-4">
-          <p className="text-sm font-semibold mb-2 text-gray-900">질환 상세 정보</p>
+        <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-gray-200">
+          <div className="flex items-center gap-2 mb-3">
+            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <p className="text-sm font-semibold text-gray-900">질환 상세 정보</p>
+          </div>
+          <p className="text-sm font-semibold text-gray-900 mb-2">
+            {data.disease.name_ko || data.disease.name_en}
+          </p>
           <p className="text-xs text-gray-700 mb-2 whitespace-pre-wrap leading-relaxed">
             {data.disease.description}
           </p>
