@@ -1,7 +1,9 @@
 // frontend/src/pages/diagnosis/ResultDetailPage.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 // ------------------- Interface -------------------
 interface Disease {
@@ -110,6 +112,7 @@ const ResultDetailPage: React.FC = () => {
   const [doctorRiskLevel, setDoctorRiskLevel] = useState<RiskOption>('소견 대기');
   const [isSavingFollowup, setIsSavingFollowup] = useState(false);
   const [followupMessage, setFollowupMessage] = useState<string | null>(null);
+  const pdfRef = useRef<HTMLDivElement>(null);
 
   // 메인 페이지로 이동하는 함수 (의사 여부에 따라)
   const navigateToMain = () => {
@@ -206,9 +209,60 @@ const ResultDetailPage: React.FC = () => {
     }
   };
 
+  const handleDownloadPDF = async () => {
+    if (!pdfRef.current || !data) return;
+    
+    try {
+      // A4 용지 크기: 210mm x 297mm
+      // 96 DPI 기준: 약 794px x 1123px
+      // 여백을 고려하여 실제 콘텐츠 너비는 약 190mm (약 718px)
+      const pdfWidthPx = 718; // 픽셀
+      
+      const canvas = await html2canvas(pdfRef.current, {
+        scale: 2, // 고해상도를 위해 scale 증가
+        useCORS: true,
+        logging: false,
+        width: pdfWidthPx,
+        windowWidth: pdfWidthPx,
+        backgroundColor: '#ffffff',
+      });
+      
+      const imgData = canvas.toDataURL('image/png', 0.95);
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      
+      const pageWidth = 210; // A4 width in mm
+      const pageHeight = 297; // A4 height in mm
+      const margin = 10; // 좌우 여백 10mm
+      const contentWidth = pageWidth - (margin * 2); // 190mm
+      
+      // 이미지 높이 계산
+      const imgHeight = (canvas.height * contentWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = margin; // 상단 여백
+
+      // 첫 페이지 추가
+      pdf.addImage(imgData, 'PNG', margin, position, contentWidth, imgHeight);
+      heightLeft -= (pageHeight - margin - 10); // 하단 여백 10mm 고려
+
+      // 여러 페이지로 나누기
+      while (heightLeft > 0) {
+        position = -((imgHeight - heightLeft) - margin);
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', margin, position, contentWidth, imgHeight);
+        heightLeft -= (pageHeight - 10); // 하단 여백 고려
+      }
+
+      const fileName = `${data.user.name}_${data.disease?.name_ko || '진단결과'}_${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(fileName);
+    } catch (error) {
+      console.error('PDF 생성 실패:', error);
+      alert('PDF 다운로드에 실패했습니다.');
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="w-full max-w-md mx-auto bg-gray-50 min-h-screen px-4 py-5">
+      <div className="w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto bg-gray-50 min-h-screen px-4 py-5">
         <div className="text-center text-gray-500 mt-10">데이터 불러오는 중...</div>
       </div>
     );
@@ -216,7 +270,7 @@ const ResultDetailPage: React.FC = () => {
 
   if (!data) {
     return (
-      <div className="w-full max-w-md mx-auto bg-gray-50 min-h-screen px-4 py-5">
+      <div className="w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto bg-gray-50 min-h-screen px-4 py-5">
         <button
           onClick={() => navigate(-1)}
           className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
@@ -276,19 +330,32 @@ const ResultDetailPage: React.FC = () => {
     .sort((a, b) => getSymptomSeverity(b.value) - getSymptomSeverity(a.value));
 
   return (
-    <div className="w-full max-w-md mx-auto bg-gray-50 min-h-screen px-4 py-5 pb-24">
+    <div className="w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto bg-gray-50 min-h-screen px-4 py-5 pb-24">
       {/* 헤더: 폴더명 - 파일명 */}
-      <div className="mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <button
           onClick={navigateToMain}
-          className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
+          className="text-sm font-bold text-gray-700 flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
         >
           ← 뒤로가기
         </button>
-        <h1 className="text-lg font-bold text-gray-900">
-          {data.photo.folder_name} - {data.photo.file_name}
-        </h1>
+        {data && (
+          <button
+            onClick={handleDownloadPDF}
+            className="text-sm font-bold text-blue-700 flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-300 rounded-lg hover:bg-blue-100 hover:border-blue-400 transition-colors shadow-sm"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            PDF 다운로드
+          </button>
+        )}
       </div>
+      
+      {/* 실제 화면 컨텐츠 */}
+      <h1 className="text-lg font-bold text-gray-900 mb-4">
+        {data.photo.folder_name} - {data.photo.file_name}
+      </h1>
 
       {/* 주의 요망 배너 (위험한 경우만) */}
       {isRiskHigh && (
@@ -658,6 +725,268 @@ const ResultDetailPage: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* PDF 생성용 컨테이너 - A4 크기에 최적화 (화면 밖에 위치) */}
+      <div 
+        ref={pdfRef} 
+        className="bg-white" 
+        style={{ 
+          width: '718px', // A4 콘텐츠 너비 (190mm = 약 718px)
+          padding: '20px',
+          fontSize: '14px',
+          lineHeight: '1.6',
+          position: 'absolute',
+          left: '-9999px',
+          top: '0',
+        }}
+      >
+        {/* PDF용 헤더 */}
+        <div className="mb-3">
+          <h1 className="text-xl font-bold text-gray-900 mb-1">진단 결과 보고서</h1>
+          <p className="text-sm text-gray-600 mb-1">
+            {data.photo.folder_name} - {data.photo.file_name}
+          </p>
+          <p className="text-xs text-gray-500">
+            생성일: {new Date().toLocaleDateString('ko-KR')}
+          </p>
+        </div>
+
+        {/* 주의 요망 배너 */}
+        {isRiskHigh && (
+          <div className="bg-red-100 border-2 border-red-400 text-red-700 rounded-lg p-2.5 text-sm mb-3">
+            <p className="font-bold mb-1">주의 요망</p>
+            <p className="text-sm">
+              {hasDoctorNote 
+                ? `전문의 최종 판정: ${doctorRiskLevelFromData}`
+                : `AI 위험도: ${aiRiskLevel} 이상`}
+            </p>
+          </div>
+        )}
+
+        {/* 이미지 섹션 - 원본과 GradCAM 나란히 배치 */}
+        <div className="bg-white p-3 rounded-lg shadow-sm mb-3 border border-gray-200">
+          <h3 className="text-base font-semibold mb-2 text-gray-900">AI 예측 진단 이미지 분석</h3>
+
+          {/* 이미지들을 가로로 나란히 배치 */}
+          <div className="flex gap-3">
+            {/* 원본 이미지 */}
+            {originalUrl && (
+              <div className="flex-1">
+                <h4 className="text-sm font-semibold text-gray-700 mb-1.5 text-center">병변 사진</h4>
+                <div className="w-full bg-gray-100 rounded-lg overflow-hidden text-center">
+                  <img
+                    src={originalUrl}
+                    alt="원본 이미지"
+                    className="w-full h-auto max-h-[240px] object-contain mx-auto"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em"%3E이미지 없음%3C/text%3E%3C/svg%3E';
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* GradCAM 이미지 */}
+            {data.disease && gradcamUrl && (
+              <div className="flex-1">
+                <h4 className="text-sm font-semibold text-gray-700 mb-1.5 text-center">그라드 캠</h4>
+                <div className="w-full bg-gray-100 rounded-lg overflow-hidden text-center">
+                  <img
+                    src={gradcamUrl}
+                    alt="GradCAM 분석"
+                    className="w-full h-auto max-h-[240px] object-contain mx-auto"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em"%3E이미지 없음%3C/text%3E%3C/svg%3E';
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* AI 예측 진단명과 AI 위험도를 나란히 배치 */}
+        {data.disease && (
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            {/* AI 예측 진단명 */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-sm text-blue-600 font-semibold mb-1">AI 예측 진단명</p>
+              <p className="font-bold text-lg text-gray-900 mb-1">
+                {data.disease.name_en}
+              </p>
+              <p className="text-base text-gray-900">
+                ({data.disease.name_ko})
+              </p>
+            </div>
+
+            {/* AI 위험도 */}
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <p className="text-sm text-red-600 font-semibold mb-1">AI 위험도: {aiRiskLevel}</p>
+              {modelConfidence !== null && (
+                <p className="text-base text-gray-900">
+                  모델 확신도: {modelConfidence.toFixed(1)}%
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 전문의 최종 소견 */}
+        {data.disease && (
+          <div className="bg-red-50 border border-red-300 rounded-lg p-3 shadow-sm mb-3">
+            <p className="text-base font-bold text-red-600 mb-1.5">전문의 최종 소견</p>
+            {data.followup_check ? (
+              <>
+                <p className="text-sm text-gray-700 mb-1.5 whitespace-pre-wrap">
+                  {data.followup_check.doctor_note || '소견이 등록되지 않았습니다.'}
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm text-gray-600">
+                    최종 판정: <span className="font-semibold">{data.followup_check.doctor_risk_level}</span>
+                  </span>
+                  {data.followup_check.last_updated_at && (
+                    <span className="text-sm text-gray-500">
+                      업데이트일: {data.followup_check.last_updated_at.split('T')[0]}
+                    </span>
+                  )}
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-gray-700 mb-1">
+                전문의 소견이 아직 입력되지 않았습니다.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* 환자 기본 정보와 주요 증상 및 특이사항을 나란히 배치 */}
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          {/* 환자 기본 정보 */}
+          <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200">
+            <div className="mb-2">
+              <p className="text-base font-semibold text-gray-900">환자 기본 정보</p>
+            </div>
+            <div className="space-y-0">
+              <div className="flex justify-between py-1.5 border-b border-gray-100">
+                <span className="text-sm text-gray-600">이름</span>
+                <span className="text-sm text-gray-900 font-medium">{data.user.name}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-gray-100">
+                <span className="text-sm text-gray-600">나이 / 성별</span>
+                <span className="text-sm text-gray-900 font-medium">
+                  {data.user.age ? `만 ${data.user.age}세` : '정보 없음'} / {data.user.sex || '모름'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-gray-100">
+                <span className="text-sm text-gray-600">환부 위치</span>
+                <span className="text-sm text-gray-900 font-medium">
+                  {data.photo.body_part || '정보 없음'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5">
+                <span className="text-sm text-gray-600">가족력 유무</span>
+                <span className="text-sm text-gray-900 font-medium">{data.user.family_history || '없음'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 주요 증상 및 특이사항 */}
+          <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200">
+            <div className="mb-2">
+              <p className="text-base font-semibold text-gray-900">주요 증상 및 특이사항</p>
+            </div>
+            
+            {data.photo.onset_date && (
+              <p className="text-sm text-gray-700 mb-2">
+                최근 발병 시점: {data.photo.onset_date}
+              </p>
+            )}
+            
+            <div className="flex flex-wrap gap-2">
+            {data.photo.symptoms_blood && (
+              <span className={`px-2.5 py-1 text-sm rounded-full font-medium ${
+                data.photo.symptoms_blood === '예' || data.photo.symptoms_blood === '있음' || data.photo.symptoms_blood === '심함'
+                  ? 'bg-red-100 text-red-700'
+                  : 'bg-gray-200 text-gray-700'
+              }`}>
+                출혈({data.photo.symptoms_blood === '예' || data.photo.symptoms_blood === '있음' ? '예' : data.photo.symptoms_blood})
+              </span>
+            )}
+            {data.photo.symptoms_color && (
+              <span className={`px-2.5 py-1 text-sm rounded-full font-medium ${
+                getSymptomSeverity(data.photo.symptoms_color) >= 2
+                  ? 'bg-red-100 text-red-700'
+                  : getSymptomSeverity(data.photo.symptoms_color) === 1
+                  ? 'bg-orange-100 text-orange-700'
+                  : 'bg-gray-200 text-gray-700'
+              }`}>
+                크기 변화({data.photo.symptoms_color === '심함' ? '심함' : data.photo.symptoms_color})
+              </span>
+            )}
+            {data.photo.symptoms_pain && (
+              <span className={`px-2.5 py-1 text-sm rounded-full font-medium ${
+                getSymptomSeverity(data.photo.symptoms_pain) >= 2
+                  ? 'bg-red-100 text-red-700'
+                  : getSymptomSeverity(data.photo.symptoms_pain) === 1
+                  ? 'bg-orange-100 text-orange-700'
+                  : 'bg-gray-200 text-gray-700'
+              }`}>
+                통증 ({data.photo.symptoms_pain === '심함' ? '심함' : data.photo.symptoms_pain === '보통' ? '보통' : data.photo.symptoms_pain})
+              </span>
+            )}
+            {data.photo.symptoms_itch && (
+              <span className={`px-2.5 py-1 text-sm rounded-full font-medium ${
+                getSymptomSeverity(data.photo.symptoms_itch) >= 2
+                  ? 'bg-red-100 text-red-700'
+                  : getSymptomSeverity(data.photo.symptoms_itch) === 1
+                  ? 'bg-orange-100 text-orange-700'
+                  : 'bg-gray-200 text-gray-700'
+              }`}>
+                가려움({data.photo.symptoms_itch})
+              </span>
+            )}
+            {data.photo.symptoms_infection && (
+              <span className={`px-2.5 py-1 text-sm rounded-full font-medium ${
+                data.photo.symptoms_infection === '예' || data.photo.symptoms_infection === '있음'
+                  ? 'bg-red-100 text-red-700'
+                  : 'bg-gray-200 text-gray-700'
+              }`}>
+                감염({data.photo.symptoms_infection === '예' || data.photo.symptoms_infection === '있음' ? '예' : data.photo.symptoms_infection})
+              </span>
+            )}
+          </div>
+          </div>
+        </div>
+
+        {/* 질환 상세 정보 - 질환 설명과 권장사항을 나란히 배치 */}
+        {data.disease && data.disease.description && (
+          <div className="bg-white p-3 rounded-lg shadow-sm mb-3 border border-gray-200">
+            <div className="mb-2">
+              <p className="text-base font-semibold text-gray-900">질환 상세 정보</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {/* 질환 설명 */}
+              <div>
+                <p className="text-base font-semibold text-gray-900 mb-1.5">
+                  {data.disease.name_ko || data.disease.name_en}
+                </p>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                  {data.disease.description}
+                </p>
+              </div>
+              {/* 권장사항 */}
+              {data.disease.recommendation && (
+                <div>
+                  <p className="text-base font-semibold text-gray-900 mb-1.5">권장사항</p>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                    {data.disease.recommendation}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
