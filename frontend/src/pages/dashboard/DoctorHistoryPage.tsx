@@ -4,6 +4,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { FaMars, FaVenus } from 'react-icons/fa';
 import type { IconBaseProps } from 'react-icons';
+import { removePatient } from '../../services/userServices';
 
 // 메인 페이지와 동일한 아이콘 컴포넌트
 type IconCmp = React.FC<IconBaseProps>;
@@ -123,6 +124,25 @@ const DoctorHistoryPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<'patients' | 'folders' | 'records'>('patients');
   const [activeTab, setActiveTab] = useState<'all' | 'immediate' | 'observation' | 'normal'>('all');
   const [isLoading, setIsLoading] = useState(true);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [selectedPatientIds, setSelectedPatientIds] = useState<Set<number>>(new Set());
+  const [isRemoving, setIsRemoving] = useState(false);
+
+  // 환자 선택 토글
+  const togglePatientSelection = (patientId: number, e?: React.MouseEvent | React.ChangeEvent<HTMLInputElement>) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    setSelectedPatientIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(patientId)) {
+        newSet.delete(patientId);
+      } else {
+        newSet.add(patientId);
+      }
+      return newSet;
+    });
+  };
 
   // ✅ 환자 목록 불러오기
   useEffect(() => {
@@ -307,6 +327,77 @@ const DoctorHistoryPage: React.FC = () => {
     return filtered;
   }, [tabFilteredPatients, searchQuery, activeTab]);
 
+  // 전체 선택/해제
+  const toggleSelectAll = () => {
+    if (selectedPatientIds.size === filteredPatients.length) {
+      setSelectedPatientIds(new Set());
+    } else {
+      setSelectedPatientIds(new Set(filteredPatients.map(p => p.id)));
+    }
+  };
+
+  // 선택된 환자들 삭제
+  const handleRemoveSelectedPatients = async () => {
+    if (selectedPatientIds.size === 0) {
+      alert('삭제할 환자를 선택해주세요.');
+      return;
+    }
+
+    // filteredPatients가 정의되어 있는지 확인
+    if (!filteredPatients || filteredPatients.length === 0) {
+      console.error('filteredPatients is not available');
+      return;
+    }
+
+    const selectedPatients = filteredPatients.filter(p => selectedPatientIds.has(p.id));
+    const patientNames = selectedPatients.map(p => p.name).join(', ');
+
+    if (!window.confirm(`선택한 환자(${patientNames})를 담당 환자 목록에서 제거하시겠습니까?`)) {
+      return;
+    }
+
+    try {
+      setIsRemoving(true);
+      
+      // 삭제할 환자 ID들을 배열로 변환
+      const patientIdsToRemove = Array.from(selectedPatientIds) as number[];
+      console.log('Removing patients:', patientIdsToRemove);
+      
+      // 각 환자 삭제 요청
+      const removePromises = patientIdsToRemove.map(async (patientId: number) => {
+        try {
+          await removePatient(patientId);
+          console.log(`Patient ${patientId} removed successfully`);
+        } catch (error) {
+          console.error(`Failed to remove patient ${patientId}:`, error);
+          throw error;
+        }
+      });
+      
+      await Promise.all(removePromises);
+      
+      // 환자 목록에서 제거
+      setPatients(prev => {
+        const updated = prev.filter(p => !selectedPatientIds.has(p.id));
+        console.log(`Patients list updated: ${prev.length} -> ${updated.length}`);
+        return updated;
+      });
+      
+      // 선택 초기화
+      setSelectedPatientIds(new Set());
+      console.log('환자들이 목록에서 제거되었습니다.');
+      
+      // 성공 메시지 (선택사항)
+      // alert('환자가 성공적으로 제거되었습니다.');
+    } catch (error: any) {
+      console.error('Remove patients failed:', error);
+      const errorMessage = error?.response?.data?.message || error?.message || '환자 제거에 실패했습니다.';
+      alert(`환자 제거에 실패했습니다: ${errorMessage}`);
+    } finally {
+      setIsRemoving(false);
+    }
+  };
+
   // ✅ 뒤로가기 핸들러
   const handleBack = () => {
     if (viewMode === 'records') {
@@ -429,6 +520,63 @@ const DoctorHistoryPage: React.FC = () => {
               </select>
             </div>
           </div>
+
+          {/* 조회/수정 삭제 탭 */}
+          <div className="flex items-center justify-end">
+            <div className="flex gap-2 border-b border-gray-200">
+              <button
+                onClick={() => {
+                  setIsEditMode(false);
+                  setSelectedPatientIds(new Set());
+                }}
+                className={`px-4 py-2 text-sm font-medium whitespace-nowrap ${
+                  !isEditMode
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                조회
+              </button>
+              <button
+                onClick={() => setIsEditMode(true)}
+                className={`px-4 py-2 text-sm font-medium whitespace-nowrap ${
+                  isEditMode
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                수정/삭제
+              </button>
+            </div>
+          </div>
+
+          {/* 환자 관리 버튼 (수정/삭제 모드일 때만 표시) */}
+          {isEditMode && filteredPatients.length > 0 && (
+            <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleSelectAll}
+                  className="text-xs px-2 py-1 text-blue-600 hover:text-blue-700"
+                >
+                  {selectedPatientIds.size === filteredPatients.length ? '전체 해제' : '전체 선택'}
+                </button>
+                {selectedPatientIds.size > 0 && (
+                  <span className="text-xs text-gray-600">
+                    ({selectedPatientIds.size}/{filteredPatients.length})
+                  </span>
+                )}
+              </div>
+              {selectedPatientIds.size > 0 && (
+                <button
+                  onClick={handleRemoveSelectedPatients}
+                  disabled={isRemoving}
+                  className="px-3 py-1.5 bg-red-500 text-white text-sm rounded-md hover:bg-red-600 transition duration-150 disabled:opacity-50"
+                >
+                  {isRemoving ? '삭제 중...' : `선택 삭제 (${selectedPatientIds.size})`}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -441,7 +589,8 @@ const DoctorHistoryPage: React.FC = () => {
               const getRiskTagColor = (riskLevel?: string) => {
                 if (!riskLevel) return 'bg-gray-200 text-gray-700';
                 if (riskLevel === '즉시 주의' || riskLevel === '높음' || riskLevel === '매우 높음') return 'bg-red-100 text-red-700';
-                if (riskLevel === '경과 관찰' || riskLevel === '보통') return 'bg-yellow-100 text-yellow-700';
+                if (riskLevel === '경과 관찰') return 'bg-orange-100 text-orange-700';
+                if (riskLevel === '보통') return 'bg-yellow-100 text-yellow-700';
                 if (riskLevel === '정상' || riskLevel === '낮음') return 'bg-gray-200 text-gray-700'; // 낮음은 회색
                 return 'bg-blue-100 text-blue-700';
               };
@@ -467,13 +616,27 @@ const DoctorHistoryPage: React.FC = () => {
                 return 'text-green-600';
               };
 
+              const isSelected = selectedPatientIds.has(patient.id);
+
               return (
                 <div
                   key={patient.id}
-                  onClick={() => setSelectedPatientId(patient.id)}
-                  className="flex items-center bg-white border rounded-lg shadow-sm p-4 hover:shadow-md hover:border-blue-300 cursor-pointer transition-all border-gray-200"
+                  className={`flex items-center bg-white border rounded-lg shadow-sm p-4 hover:shadow-md transition-all border-gray-200 ${isEditMode && isSelected ? 'border-blue-400 bg-blue-50' : 'hover:border-blue-300'}`}
                 >
-                  <div className="flex-1 text-left">
+                  {/* 체크박스 (수정/삭제 모드일 때만 표시) */}
+                  {isEditMode && (
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => togglePatientSelection(patient.id, e)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3 flex-shrink-0"
+                    />
+                  )}
+                  <div
+                    className="flex-1 text-left cursor-pointer"
+                    onClick={() => setSelectedPatientId(patient.id)}
+                  >
                     {/* 이름과 태그를 같은 줄에 배치 */}
                     <div className="flex items-start gap-2 mb-2">
                       {/* 성별 아이콘과 이름 그룹 */}
@@ -514,12 +677,14 @@ const DoctorHistoryPage: React.FC = () => {
                         )}
                       </div>
                     </div>
+                    {/* 의사 소견 표시: latest_note가 있을 때만 표시 */}
                     {patient.latest_note && (
                       <p className="text-sm text-gray-600 mt-2 pt-2 border-t border-gray-100 line-clamp-2">
                         {patient.latest_note}
                       </p>
                     )}
                   </div>
+                  {/* 화살표 아이콘 */}
                   <div className="text-gray-400 ml-3">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />

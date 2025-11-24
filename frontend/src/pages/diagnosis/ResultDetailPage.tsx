@@ -58,6 +58,8 @@ interface ResultDetail {
 }
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000';
+const RISK_OPTIONS = ['소견 대기', '즉시 주의', '경과 관찰', '정상'] as const;
+type RiskOption = typeof RISK_OPTIONS[number];
 
 const normalizeHost = (url: string) =>
   url.replace(/^http:\/\/(?:django|project_django)(?::\d+)?/i, API_BASE_URL);
@@ -103,6 +105,21 @@ const ResultDetailPage: React.FC = () => {
   const [data, setData] = useState<ResultDetail | null>(null);
   const [showGradCam, setShowGradCam] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDoctor, setIsDoctor] = useState(false);
+  const [doctorNote, setDoctorNote] = useState('');
+  const [doctorRiskLevel, setDoctorRiskLevel] = useState<RiskOption>('소견 대기');
+  const [isSavingFollowup, setIsSavingFollowup] = useState(false);
+  const [followupMessage, setFollowupMessage] = useState<string | null>(null);
+
+  // 메인 페이지로 이동하는 함수 (의사 여부에 따라)
+  const navigateToMain = () => {
+    const isDoc = localStorage.getItem('isDoctor') === '1';
+    if (isDoc) {
+      navigate('/dashboard/doctor/main');
+    } else {
+      navigate('/dashboard/main');
+    }
+  };
 
   useEffect(() => {
     if (!id) {
@@ -134,6 +151,60 @@ const ResultDetailPage: React.FC = () => {
 
     fetchData();
   }, [id]);
+
+  useEffect(() => {
+    const isDoc = typeof window !== 'undefined' && localStorage.getItem('isDoctor') === '1';
+    setIsDoctor(isDoc);
+  }, []);
+
+  useEffect(() => {
+    if (data?.followup_check) {
+      const risk = data.followup_check.doctor_risk_level;
+      if (risk && RISK_OPTIONS.includes(risk as RiskOption)) {
+        setDoctorRiskLevel(risk as RiskOption);
+      } else {
+        setDoctorRiskLevel('소견 대기');
+      }
+      setDoctorNote(data.followup_check.doctor_note || '');
+    } else {
+      setDoctorRiskLevel('소견 대기');
+      setDoctorNote('');
+    }
+  }, [data?.followup_check]);
+
+  const handleSaveFollowup = async () => {
+    if (!data) return;
+    try {
+      setIsSavingFollowup(true);
+      setFollowupMessage(null);
+      const token = localStorage.getItem('accessToken');
+      const response = await axios.patch(
+        `${API_BASE_URL}/api/dashboard/records/${data.id}/followup/update/`,
+        {
+          doctor_note: doctorNote,
+          doctor_risk_level: doctorRiskLevel,
+          current_status: '확인 완료',
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      const updatedFollowup = response.data as FollowUp;
+      setData((prev: ResultDetail | null) => (prev ? { ...prev, followup_check: updatedFollowup } : prev));
+      if (updatedFollowup.doctor_risk_level && RISK_OPTIONS.includes(updatedFollowup.doctor_risk_level as RiskOption)) {
+        setDoctorRiskLevel(updatedFollowup.doctor_risk_level as RiskOption);
+      }
+      setDoctorNote(updatedFollowup.doctor_note || '');
+      setFollowupMessage('전문의 소견이 저장되었습니다.');
+    } catch (err: any) {
+      console.error('Failed to save follow-up:', err);
+      alert(err.response?.data?.error || err.response?.data?.message || '소견 저장에 실패했습니다.');
+    } finally {
+      setIsSavingFollowup(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -167,12 +238,12 @@ const ResultDetailPage: React.FC = () => {
     data.followup_check.doctor_risk_level !== '소견 대기';
   
   const aiRiskLevel = data.risk_level || '분석 대기';
-  const doctorRiskLevel = data.followup_check?.doctor_risk_level || '';
+  const doctorRiskLevelFromData = data.followup_check?.doctor_risk_level || '';
   
   // 위험한 경우 판단: 보통 이상 (보통, 중간, 높음, 즉시 주의)
   const isRiskHigh = aiRiskLevel === '높음' || aiRiskLevel === '즉시 주의' || 
                      aiRiskLevel === '중간' || aiRiskLevel === '보통' ||
-                     doctorRiskLevel === '즉시 주의' || doctorRiskLevel === '경과 관찰';
+                     doctorRiskLevelFromData === '즉시 주의' || doctorRiskLevelFromData === '경과 관찰';
 
   const finalRiskLevel = hasDoctorNote && data.followup_check
     ? data.followup_check.doctor_risk_level
@@ -209,7 +280,7 @@ const ResultDetailPage: React.FC = () => {
       {/* 헤더: 폴더명 - 파일명 */}
       <div className="mb-4">
         <button
-          onClick={() => navigate('/dashboard/main')}
+          onClick={navigateToMain}
           className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
         >
           ← 뒤로가기
@@ -230,7 +301,7 @@ const ResultDetailPage: React.FC = () => {
           </div>
           <p className="text-sm">
             {hasDoctorNote 
-              ? `전문의 최종 판정: ${doctorRiskLevel}`
+              ? `전문의 최종 판정: ${doctorRiskLevelFromData}`
               : `AI 위험도: ${aiRiskLevel} 이상`}
           </p>
         </div>
@@ -354,23 +425,76 @@ const ResultDetailPage: React.FC = () => {
       )}
 
       {/* 전문의 최종 소견 */}
-      {data.followup_check && (
-        <div className="bg-red-50 border border-red-300 rounded-xl p-4 shadow-sm mb-4">
-          <p className="text-sm font-bold text-red-600 mb-2">
-            {data.user.name} 전문의 최종 소견
-          </p>
-          <div className="mb-2">
-            <p className="text-xs text-gray-600 mb-1">최종판정</p>
-            <p className={`text-xs px-2 py-1 rounded border inline-block ${riskColor}`}>
-              {data.followup_check.doctor_risk_level}
+      {data.disease && (
+        <div className="bg-red-50 border border-red-300 rounded-lg p-4 shadow-sm mb-4">
+          <p className="text-sm font-bold text-red-600 mb-2">전문의 최종 소견</p>
+          
+          {data.followup_check ? (
+            <>
+              <p className="text-xs text-gray-700 mb-2 whitespace-pre-wrap">
+                {data.followup_check.doctor_note || '소견이 등록되지 않았습니다.'}
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-gray-600">
+                  최종 판정: <span className="font-semibold">{data.followup_check.doctor_risk_level}</span>
+                </span>
+                {data.followup_check.last_updated_at && (
+                  <span className="text-xs text-gray-500">
+                    업데이트일: {data.followup_check.last_updated_at.split('T')[0]}
+                  </span>
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-gray-700 mb-2">
+              전문의 소견이 아직 입력되지 않았습니다.
             </p>
-          </div>
-          <div className="mt-2 pt-2 border-t border-red-200">
-            <p className="text-xs text-gray-600 mb-1">소견 내용</p>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-              {data.followup_check.doctor_note || '소견이 등록되지 않았습니다.'}
-            </p>
-          </div>
+          )}
+
+          {isDoctor && (
+            <div className="mt-4 bg-white rounded-lg border border-red-200 p-3 space-y-2">
+              <p className="text-xs font-semibold text-red-600">전문의 소견 작성</p>
+              {!data.followup_check && (
+                <p className="text-[11px] text-gray-500">
+                  아직 환자가 소견을 신청하지 않았습니다. 바로 아래에서 소견을 작성하고 저장할 수 있습니다.
+                </p>
+              )}
+              <div>
+                <label className="text-xs font-semibold text-gray-700">최종 판정</label>
+                <select
+                  value={doctorRiskLevel}
+                  onChange={(e) => setDoctorRiskLevel(e.target.value as RiskOption)}
+                  className="w-full mt-1 text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-red-300"
+                >
+                  {RISK_OPTIONS.map(option => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-700">소견 내용</label>
+                <textarea
+                  value={doctorNote}
+                  onChange={(e) => setDoctorNote(e.target.value)}
+                  rows={4}
+                  className="w-full mt-1 text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-red-300"
+                  placeholder="환부 상태, 권장 조치 등을 입력하세요."
+                />
+              </div>
+              <button
+                onClick={handleSaveFollowup}
+                disabled={isSavingFollowup}
+                className="w-full py-2 bg-red-600 text-white text-sm font-semibold rounded-md hover:bg-red-700 transition disabled:opacity-60"
+              >
+                {isSavingFollowup ? '저장 중...' : '전문의 소견 저장하기'}
+              </button>
+              {followupMessage && (
+                <p className="text-[11px] text-green-600 text-center">{followupMessage}</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

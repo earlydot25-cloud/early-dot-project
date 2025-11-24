@@ -214,7 +214,7 @@ const HistoryResultPage: React.FC = () => {
         }
       );
       const updatedFollowup = response.data as FollowUp;
-      setData(prev => (prev ? { ...prev, followup_check: updatedFollowup } : prev));
+      setData((prev: ResultDetail | null) => (prev ? { ...prev, followup_check: updatedFollowup } : null));
       if (updatedFollowup.doctor_risk_level && RISK_OPTIONS.includes(updatedFollowup.doctor_risk_level as RiskOption)) {
         setDoctorRiskLevel(updatedFollowup.doctor_risk_level as RiskOption);
       }
@@ -378,15 +378,28 @@ const HistoryResultPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 질환명 및 위험도 */}
+      {/* AI 예측 진단명 */}
       {data.disease && (
-        <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-gray-200">
-          <p className="text-sm font-semibold text-gray-900 mb-2">
-            {data.disease.name_ko || data.disease.name_en}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-3">
+          <p className="text-xs text-blue-600 font-semibold mb-1">AI 예측 진단명</p>
+          <p className="font-bold text-base text-gray-900 mb-1">
+            {data.disease.name_en}
           </p>
-          <p className={`text-xs px-2 py-1 rounded border inline-block ${riskColor}`}>
-            {riskSource} 위험도: {finalRiskLevel}
+          <p className="text-sm text-gray-900">
+            ({data.disease.name_ko})
           </p>
+        </div>
+      )}
+
+      {/* AI 위험도 */}
+      {data.disease && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+          <p className="text-xs text-red-600 font-semibold mb-1">AI 위험도: {data.risk_level || '분석 대기'}</p>
+          {data.class_probs && (
+            <p className="text-xs text-gray-900">
+              모델 확신도: {(Math.max(...Object.values(data.class_probs).map(v => Number(v))) * 100).toFixed(1)}%
+            </p>
+          )}
         </div>
       )}
 
@@ -395,8 +408,8 @@ const HistoryResultPage: React.FC = () => {
         <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-gray-200">
           <p className="text-sm font-semibold text-gray-900 mb-1">진단 상태</p>
           <p className="text-xs text-gray-600">
-            AI 분석이 진행 중입니다. 잠시 후 다시 확인해주세요.
-          </p>
+              AI 분석이 진행 중입니다. 잠시 후 다시 확인해주세요.
+            </p>
         </div>
       )}
 
@@ -451,8 +464,8 @@ const HistoryResultPage: React.FC = () => {
               >
                 전문의 소견 신청하기
               </button>
-            </div>
-          )}
+        </div>
+      )}
 
           {isDoctor && (
             <div className="mt-4 bg-white rounded-lg border border-red-200 p-3 space-y-2">

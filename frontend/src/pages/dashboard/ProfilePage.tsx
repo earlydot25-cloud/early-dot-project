@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { FaMars, FaVenus } from 'react-icons/fa';
+import type { IconBaseProps } from 'react-icons';
 import {
     UserProfile,
     PatientListItem,
@@ -8,6 +10,11 @@ import {
 } from '../../types/UserTypes';
 import { fetchUserProfile, updateProfile, deleteAccount, removePatient } from '../../services/userServices';
 import { clearAuth } from '../../services/authServices';
+
+// 성별 아이콘 컴포넌트
+type IconCmp = React.FC<IconBaseProps>;
+const MarsIcon: IconCmp = (props: IconBaseProps) => <FaMars {...props} />;
+const VenusIcon: IconCmp = (props: IconBaseProps) => <FaVenus {...props} />;
 
 interface MyPageProps {}
 
@@ -204,32 +211,35 @@ const handleAccountDelete = async () => {
   const assignedDoctor = profile.assigned_doctor;
   const isDoctorApproved = doctorProfile && doctorProfile.status === '승인';
 
-  // 폼 필드 헬퍼 컴포넌트 (메인화면 스타일)
+  // 폼 필드 헬퍼 컴포넌트
   const FormField: React.FC<{ label: string; name: string; value: string | number; isEditable: boolean; type?: string }> =
     ({ label, name, value, isEditable, type = 'text' }) => (
-    <div className="text-sm text-gray-700 py-2 border-t border-gray-100 first:border-t-0 first:pt-0">
-      <div className="flex items-center justify-between">
-        <span className="font-bold text-gray-900">{label}:</span>
-        {isEditable && isEditing ? (
-          <input
-            type={type}
-            name={name}
-            value={value}
-            onChange={handleInputChange}
-            className="flex-1 ml-2 p-1.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-left"
-          />
-        ) : (
-          <span className="text-gray-700 text-left ml-2">{String(value)}</span>
-        )}
-      </div>
+    <div className="flex justify-between py-2 border-b border-gray-100 last:border-b-0">
+      <span className="text-xs text-gray-600">{label}</span>
+      {isEditable && isEditing ? (
+        <input
+          type={type}
+          name={name}
+          value={value}
+          onChange={handleInputChange}
+          className="flex-1 ml-2 text-xs text-gray-900 font-medium p-1.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-right"
+        />
+      ) : (
+        <span className="text-xs text-gray-900 font-medium text-right">{String(value)}</span>
+      )}
     </div>
   );
 
-const PatientSpecificFields: React.FC = () => {
+  const PatientSpecificFields: React.FC = () => {
     if (!assignedDoctorExists) {
         return (
-             <div className="mt-3 pt-3 border-t border-gray-100">
-                 <h3 className="text-sm font-bold text-gray-900 mb-2 text-left">담당의사 정보</h3>
+             <div className="mt-3 pt-3 border-t border-gray-200">
+                 <div className="flex items-center gap-2 mb-3">
+                   <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                   </svg>
+                   <h3 className="text-sm font-semibold text-gray-900">담당의사 정보</h3>
+                 </div>
                  <p className="text-xs text-gray-500 text-left mb-2">현재 담당의사가 지정되지 않았습니다.</p>
                  <FormField
                     label="담당의사 실명"
@@ -244,8 +254,13 @@ const PatientSpecificFields: React.FC = () => {
     const doctor = assignedDoctor!;
 
     return (
-      <div className="mt-3 pt-3 border-t border-gray-100">
-        <h3 className="text-sm font-bold text-gray-900 mb-2 text-left">담당의사 정보</h3>
+      <div className="mt-3 pt-3 border-t border-gray-200">
+        <div className="flex items-center gap-2 mb-3">
+          <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          <h3 className="text-sm font-semibold text-gray-900">담당의사 정보</h3>
+        </div>
 
         <FormField
             label="담당의사 실명"
@@ -272,22 +287,25 @@ const PatientSpecificFields: React.FC = () => {
 
 
   const DoctorSpecificFields: React.FC = () => (
-    <div className="mt-3 pt-3 border-t border-gray-100">
-      <h3 className="text-sm font-bold text-gray-900 mb-2 text-left">전문의 정보</h3>
+    <div className="mt-3 pt-3 border-t border-gray-200">
+      <div className="flex items-center gap-2 mb-3">
+        <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        </svg>
+        <h3 className="text-sm font-semibold text-gray-900">전문의 정보</h3>
+      </div>
 
-      <div className="text-sm text-gray-700 py-2 border-t border-gray-100 first:border-t-0 first:pt-0">
-        <div className="flex items-center justify-between">
-          <span className="font-bold text-gray-900">의사 승인 여부:</span>
-          <span
-              className={`text-xs font-bold px-2 py-1 rounded text-left ${
-                  doctorProfile?.status === '승인' ? 'bg-green-100 text-green-700' :
-                  doctorProfile?.status === '승인 중' ? 'bg-yellow-100 text-yellow-700' :
-                  'bg-red-100 text-red-700'
-              }`}
-          >
-              {doctorProfile?.status || '미등록'}
-          </span>
-        </div>
+      <div className="flex justify-between py-2 border-b border-gray-100">
+        <span className="text-xs text-gray-600">의사 승인 여부</span>
+        <span
+            className={`text-xs font-medium px-2 py-1 rounded-full ${
+                doctorProfile?.status === '승인' ? 'bg-green-100 text-green-700' :
+                doctorProfile?.status === '승인 중' ? 'bg-yellow-100 text-yellow-700' :
+                'bg-red-100 text-red-700'
+            }`}
+        >
+            {doctorProfile?.status || '미등록'}
+        </span>
       </div>
 
       <FormField
@@ -305,71 +323,135 @@ const PatientSpecificFields: React.FC = () => {
     </div>
   );
 
-  const DoctorPatientList: React.FC = () => (
-    <div className="bg-white border rounded-lg shadow-sm p-4">
-      <h3 className="text-lg font-bold mb-3 text-gray-900 text-left">담당 환자 리스트</h3>
-      {isDoctorApproved ? (
-        <ul className="space-y-3 text-left">
-          {/* profile.patients는 PatientListItem[] | undefined | null 타입입니다. */}
-          {profile.patients && profile.patients.length > 0 ? (
-            profile.patients.map((patient: PatientListItem) => {
-              // 성별을 간단하게 표시 (남/여)
-              const sexDisplay = patient.sex === '남성' || patient.sex === 'M' ? '남' : 
-                                patient.sex === '여성' || patient.sex === 'F' ? '여' : 
-                                patient.sex || '-';
-              
-              // 위험도 표시 (의사 위험도 우선, 없으면 AI 위험도)
-              const riskDisplay = patient.ai_risk_level || '미진단';
-              // 의사 위험도인지 AI 위험도인지 구분 (의사 위험도: '즉시 주의', '경과 관찰', '정상', '소견 대기')
-              const isDoctorRisk = riskDisplay && ['즉시 주의', '경과 관찰', '정상', '소견 대기'].includes(riskDisplay);
-              
-              return (
-                <li key={patient.id} className="flex justify-between items-center p-3 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition duration-150 mb-2">
-                  <div className="flex flex-col text-left flex-1">
-                    <span className="text-base font-bold text-gray-900">{patient.name}</span>
-                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                      <span className="text-[10px] text-gray-600 whitespace-nowrap">{sexDisplay}</span>
-                      <span className="text-[10px] text-gray-400">|</span>
-                      <span className={`text-[10px] whitespace-nowrap ${patient.needs_review ? 'text-yellow-600 font-medium' : 'text-gray-600'}`}>
-                        {patient.needs_review ? '소견 필요' : '소견 완료'}
-                      </span>
-                      <span className="text-[10px] text-gray-400">|</span>
-                      <span className="text-[10px] text-gray-600 whitespace-nowrap" title={isDoctorRisk ? '의사 위험도' : 'AI 위험도'}>
-                        {riskDisplay}
-                      </span>
+  const DoctorPatientList: React.FC = () => {
+    const patients = profile.patients || [];
+    const totalPatients = patients.length;
+    const needsReviewCount = patients.filter((p: PatientListItem) => p.needs_review).length;
+
+    return (
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 mb-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            <h3 className="text-lg font-bold text-gray-900">담당 환자 리스트</h3>
+          </div>
+        </div>
+        {isDoctorApproved ? (
+          <>
+            {/* 요약 정보 */}
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">전체 환자</span>
+                <span className="font-bold text-gray-900">{totalPatients}명</span>
+              </div>
+              {needsReviewCount > 0 && (
+                <div className="flex items-center justify-between text-sm mt-2">
+                  <span className="text-gray-600">소견 필요</span>
+                  <span className="font-bold text-blue-600">{needsReviewCount}명</span>
+                </div>
+              )}
+            </div>
+
+            {/* 간단한 환자 목록 (최대 5명만 표시) */}
+            {patients.length > 0 ? (
+              <div className="space-y-2 mb-4">
+                {patients.slice(0, 5).map((patient: PatientListItem) => {
+                  // 성별 아이콘 (전체 환자 목록과 동일한 로직)
+                  const patientSex = patient.sex?.toLowerCase();
+                  const isFemale = patientSex && (
+                    patientSex === '여성' || 
+                    patientSex === 'f' || 
+                    patientSex === 'female' ||
+                    patientSex === '여' ||
+                    patientSex === '여자'
+                  );
+                  const genderIcon = isFemale 
+                    ? <VenusIcon className="text-pink-500" size={14} />
+                    : <MarsIcon className="text-blue-500" size={14} />;
+
+                  return (
+                    <div
+                      key={patient.id}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                    >
+                      <div className="flex items-center gap-2">
+                        {genderIcon}
+                        <span className="text-sm font-medium text-gray-900">{patient.name}</span>
+                        {patient.needs_review ? (
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                            소견 필요
+                          </span>
+                        ) : (
+                          <span className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full font-medium">
+                            소견 완료
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`${patient.name}님을 담당 환자 목록에서 제거하시겠습니까?`)) {
+                            handleRemovePatient(patient.id);
+                          }
+                        }}
+                        className="px-2 py-1 bg-red-500 text-white text-xs rounded-md hover:bg-red-600 transition duration-150 flex-shrink-0 ml-2"
+                      >
+                        삭제
+                      </button>
                     </div>
-                  </div>
-                  <button
-                    onClick={() => handleRemovePatient(patient.id)}
-                    className="px-3 py-1.5 bg-red-500 text-white text-xs rounded-md hover:bg-red-600 transition duration-150 flex-shrink-0 ml-3"
-                  >
-                    삭제
-                  </button>
-                </li>
-              );
-            })
-          ) : (
-            <p className="text-gray-500">현재 담당하고 있는 환자가 없습니다.</p>
-          )}
-        </ul>
-      ) : (
-        <p className="text-red-500 text-left">⚠️ **승인된 의사만** 환자 리스트를 관리할 수 있습니다.</p>
-      )}
-    </div>
-  );
+                  );
+                })}
+                {patients.length > 5 && (
+                  <p className="text-xs text-gray-500 text-center mt-2">
+                    외 {patients.length - 5}명의 환자가 더 있습니다
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 mb-4">현재 담당하고 있는 환자가 없습니다.</p>
+            )}
+
+            {/* 전체 목록 보기 버튼 */}
+            <button
+              onClick={() => navigate('/dashboard/doctor/history')}
+              className="w-full py-2.5 px-4 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 transition duration-150 flex items-center justify-center gap-2"
+            >
+              <span>전체 목록 보기</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </>
+        ) : (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-600 text-left">
+              승인된 의사만 환자 리스트를 관리할 수 있습니다.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
 
 
   return (
-    <div className="p-1 space-y-3">
-      {/* 상단 요약 섹션 (메인화면 스타일) */}
-      <div className="flex justify-between items-center mb-3 p-2 bg-gray-50 rounded-md shadow-inner">
-        <h1 className="text-lg font-bold text-gray-800">마이 페이지</h1>
+    <div className="w-full max-w-md mx-auto bg-gray-50 min-h-screen px-4 py-5 pb-24">
+      {/* 헤더 */}
+      <div className="mb-4">
+        <h1 className="text-xl font-bold text-gray-900 mb-2">마이 페이지</h1>
       </div>
 
-      <div className="space-y-3">
-        {/* 회원 정보 수정 폼 (메인화면 카드 스타일) */}
-        <div className="bg-white border rounded-lg shadow-sm p-4">
-          <h2 className="text-lg font-bold text-gray-900 mb-4 text-left">회원 정보 {isEditing ? '수정' : '확인'}</h2>
+      <div className="space-y-4">
+        {/* 회원 정보 수정 폼 */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            <h2 className="text-lg font-bold text-gray-900">회원 정보 {isEditing ? '수정' : '확인'}</h2>
+          </div>
 
           <form onSubmit={handleUpdate}>
             {/* 공통 정보 필드 */}
@@ -447,9 +529,9 @@ const PatientSpecificFields: React.FC = () => {
         <div className="space-y-8">
             {isDoctor && <DoctorPatientList />}
 
-            {/* 환자 전용 섹션 (메인화면 카드 스타일) */}
+            {/* 환자 전용 섹션 */}
             {!isDoctor && (
-                <div className="bg-white border rounded-lg shadow-sm p-4">
+                <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4">
                     <h3 className="text-lg font-bold mb-2 text-gray-900 text-left">나의 진단 기록</h3>
                     <p className="text-sm text-gray-700 text-left mb-3">최근 진단 결과를 확인하고 후속 조치를 요청할 수 있습니다.</p>
                     <button 
