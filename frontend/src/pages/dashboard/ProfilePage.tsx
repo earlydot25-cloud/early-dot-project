@@ -8,7 +8,7 @@ import {
     AssignedDoctorInfo,
     DoctorProfile as DoctorProfileType
 } from '../../types/UserTypes';
-import { fetchUserProfile, updateProfile, deleteAccount, removePatient } from '../../services/userServices';
+import { fetchUserProfile, updateProfile, deleteAccount } from '../../services/userServices';
 import { clearAuth } from '../../services/authServices';
 
 // 성별 아이콘 컴포넌트
@@ -174,23 +174,6 @@ const handleAccountDelete = async () => {
     }
   };
 
-  const handleRemovePatient = async (patientId: number) => {
-    // 💡 window.confirm 대신 커스텀 모달/UI 사용
-    if (!window.confirm('선택한 환자를 담당 목록에서 삭제하시겠습니까?')) return;
-    try {
-      await removePatient(patientId); // removePatient 함수를 호출
-      setProfile((prev: UserProfile | null) => prev ? ({
-        ...prev,
-        // 💡 타입은 UserProfile에서 가져왔으므로 안전하게 사용
-        patients: prev.patients?.filter((p: PatientListItem) => p.id !== patientId)
-      }) : null);
-      // alert('환자가 목록에서 제거되었습니다.');
-      console.log('환자가 목록에서 제거되었습니다.');
-    } catch (error) {
-      // alert(error instanceof Error ? error.message : '환자 제거에 실패했습니다.');
-      console.error('Remove patient failed:', error);
-    }
-  };
 
   const handleGoToDiagnosis = () => {
     // alert("진단 기록 페이지로 이동해야 합니다.");
@@ -292,7 +275,7 @@ const handleAccountDelete = async () => {
         <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
         </svg>
-        <h3 className="text-sm font-semibold text-gray-900">전문의 정보</h3>
+        <h3 className="text-base font-bold text-gray-900">전문의 정보</h3>
       </div>
 
       <div className="flex justify-between py-2 border-b border-gray-100">
@@ -335,7 +318,7 @@ const handleAccountDelete = async () => {
             <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
-            <h3 className="text-lg font-bold text-gray-900">담당 환자 리스트</h3>
+            <h3 className="text-base font-bold text-gray-900">담당 환자 리스트</h3>
           </div>
         </div>
         {isDoctorApproved ? (
@@ -354,10 +337,10 @@ const handleAccountDelete = async () => {
               )}
             </div>
 
-            {/* 간단한 환자 목록 (최대 5명만 표시) */}
+            {/* 간단한 환자 목록 (최대 3명만 표시) */}
             {patients.length > 0 ? (
               <div className="space-y-2 mb-4">
-                {patients.slice(0, 5).map((patient: PatientListItem) => {
+                {patients.slice(0, 3).map((patient: PatientListItem) => {
                   // 성별 아이콘 (전체 환자 목록과 동일한 로직)
                   const patientSex = patient.sex?.toLowerCase();
                   const isFemale = patientSex && (
@@ -374,7 +357,7 @@ const handleAccountDelete = async () => {
                   return (
                     <div
                       key={patient.id}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                      className="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-200"
                     >
                       <div className="flex items-center gap-2">
                         {genderIcon}
@@ -389,23 +372,12 @@ const handleAccountDelete = async () => {
                           </span>
                         )}
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (window.confirm(`${patient.name}님을 담당 환자 목록에서 제거하시겠습니까?`)) {
-                            handleRemovePatient(patient.id);
-                          }
-                        }}
-                        className="px-2 py-1 bg-red-500 text-white text-xs rounded-md hover:bg-red-600 transition duration-150 flex-shrink-0 ml-2"
-                      >
-                        삭제
-                      </button>
                     </div>
                   );
                 })}
-                {patients.length > 5 && (
+                {patients.length > 3 && (
                   <p className="text-xs text-gray-500 text-center mt-2">
-                    외 {patients.length - 5}명의 환자가 더 있습니다
+                    외 {patients.length - 3}명의 환자가 더 있습니다
                   </p>
                 )}
               </div>
@@ -450,7 +422,7 @@ const handleAccountDelete = async () => {
             <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
-            <h2 className="text-lg font-bold text-gray-900">회원 정보 {isEditing ? '수정' : '확인'}</h2>
+            <h2 className="text-base font-bold text-gray-900">회원 정보 {isEditing ? '수정' : '확인'}</h2>
           </div>
 
           <form onSubmit={handleUpdate}>
