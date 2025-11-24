@@ -76,8 +76,9 @@ export async function deleteAccount(): Promise<void> {
 export async function removePatient(patientId: number): Promise<void> {
   try {
     await API.post(`/doctors/patients/${patientId}/remove/`);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Remove patient failed:', error);
-    throw new Error("환자 제거에 실패했습니다.");
+    const errorMessage = error.response?.data?.error || error.response?.data?.detail || error.message || "환자 제거에 실패했습니다.";
+    throw new Error(errorMessage);
   }
 }

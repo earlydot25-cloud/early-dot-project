@@ -78,6 +78,7 @@ interface DoctorSummaryData {
   total_assigned_count: number;
   immediate_attention_count: number;
   completed_opinions_count: number;
+  need_opinion_count: number;  // 소견작성 필요 건수 (전체 기준)
 }
 
 interface DoctorDashboardData {
@@ -229,14 +230,14 @@ const PatientCard: React.FC<PatientCardProps> = ({ data, isPagination = false })
           <div className="text-center mb-3">
             <div className="text-xs mb-1">
               <span className="text-gray-500">- AI -</span>
-              <p className={`font-semibold ${data.risk_level === '높음' ? 'text-red-600' : data.risk_level === '보통' ? 'text-yellow-600' : 'text-green-600'}`}>
+              <p className={`font-semibold ${data.risk_level === '높음' ? 'text-red-600' : data.risk_level === '보통' ? 'text-orange-600' : 'text-green-600'}`}>
                 {data.risk_level}
               </p>
                     </div>
                     {hasDoctorNote && (
               <div className="text-xs mt-2">
                 <span className="text-gray-500">- 의사 -</span>
-                <p className={`font-semibold ${finalRiskLevel === '즉시 주의' ? 'text-red-600' : 'text-yellow-600'}`}>
+                <p className={`font-semibold ${finalRiskLevel === '즉시 주의' ? 'text-red-600' : 'text-orange-600'}`}>
                   {finalRiskLevel}
                 </p>
                         </div>
@@ -440,7 +441,7 @@ const DoctorMainPage: React.FC = () => {
                 : 'text-red-600 hover:text-red-700'
             }`}
           >
-            소견작성 필요 {needOpinionPatients.length > 0 && `+${needOpinionPatients.length}건`}
+            소견작성 필요 {summary.need_opinion_count > 0 && `+${summary.need_opinion_count}건`}
           </button>
           </div>
         <div className="mb-4 flex justify-end">

@@ -7,6 +7,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import get_user_model
 from .serializers import RegisterSerializer, UserSerializer, UserProfileSerializer, UserProfileUpdateSerializer
+from users.models import Doctors
 
 class UserSignupView(APIView):
     permission_classes = [AllowAny]
@@ -90,3 +91,62 @@ class UserProfileView(APIView):
         user.delete()
         # 성공 시 204 No Content 반환
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# --------------------------------------------------------
+# 3. 의사 전용: 담당 환자 제거 뷰 (POST: /api/doctors/patients/{patientId}/remove/)
+# --------------------------------------------------------
+class RemovePatientView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, patient_id):
+        """의사가 담당 환자를 목록에서 제거"""
+        # 의사만 접근 가능
+        if not request.user.is_doctor:
+            return Response(
+                {'error': 'Permission denied. Doctor access only.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        try:
+            # 의사 정보 가져오기
+            doctor_record = request.user.doctor_profile
+            if not doctor_record:
+                return Response(
+                    {'error': 'Doctor profile not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # 환자 정보 가져오기
+            try:
+                patient = User.objects.get(id=patient_id, is_doctor=False)
+            except User.DoesNotExist:
+                return Response(
+                    {'error': 'Patient not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # 환자가 해당 의사에게 할당되어 있는지 확인
+            if patient.doctor != doctor_record:
+                return Response(
+                    {'error': 'Patient is not assigned to this doctor'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # 환자의 doctor 필드를 None으로 설정하여 제거
+            patient.doctor = None
+            patient.save()
+            
+            return Response(
+                {'message': 'Patient removed successfully'},
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            import traceback
+            print(f"Error in RemovePatientView: {str(e)}")
+            print(traceback.format_exc())
+            return Response(
+                {'error': f'Failed to remove patient: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

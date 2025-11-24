@@ -127,6 +127,10 @@ const DoctorHistoryPage: React.FC = () => {
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedPatientIds, setSelectedPatientIds] = useState<Set<number>>(new Set());
   const [isRemoving, setIsRemoving] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [patientsToDelete, setPatientsToDelete] = useState<Patient[]>([]);
 
   // 환자 선택 토글
   const togglePatientSelection = (patientId: number, e?: React.MouseEvent | React.ChangeEvent<HTMLInputElement>) => {
@@ -155,6 +159,12 @@ const DoctorHistoryPage: React.FC = () => {
           },
         });
         console.log('[DoctorHistoryPage] 환자 목록 응답:', response.data);
+        // 디버깅: doctor_risk_level 값 확인
+        response.data.forEach((patient: Patient) => {
+          if (patient.doctor_risk_level) {
+            console.log(`[Debug] Patient ${patient.name}: doctor_risk_level = "${patient.doctor_risk_level}" (length: ${patient.doctor_risk_level.length})`);
+          }
+        });
         setPatients(response.data);
       } catch (err: any) {
         console.error('Failed to fetch patients:', err);
@@ -304,8 +314,14 @@ const DoctorHistoryPage: React.FC = () => {
       // 경과 관찰 환자
       return sortedPatients.filter(p => p.doctor_risk_level === '경과 관찰');
     } else if (activeTab === 'normal') {
-      // 정상 환자
-      return sortedPatients.filter(p => p.doctor_risk_level === '정상');
+      // 정상 환자: doctor_risk_level이 '정상'인 경우
+      const normalPatients = sortedPatients.filter(p => {
+        const riskLevel = p.doctor_risk_level;
+        console.log(`[Filter] Patient ${p.name}: doctor_risk_level = "${riskLevel}" (type: ${typeof riskLevel})`);
+        return riskLevel === '정상';
+      });
+      console.log(`[Filter] Normal tab: Found ${normalPatients.length} patients with '정상' risk level`);
+      return normalPatients;
     }
     // 전체 보기
     return sortedPatients;
@@ -336,8 +352,8 @@ const DoctorHistoryPage: React.FC = () => {
     }
   };
 
-  // 선택된 환자들 삭제
-  const handleRemoveSelectedPatients = async () => {
+  // 삭제 확인 모달 열기
+  const handleDeleteClick = () => {
     if (selectedPatientIds.size === 0) {
       alert('삭제할 환자를 선택해주세요.');
       return;
@@ -350,14 +366,19 @@ const DoctorHistoryPage: React.FC = () => {
     }
 
     const selectedPatients = filteredPatients.filter(p => selectedPatientIds.has(p.id));
-    const patientNames = selectedPatients.map(p => p.name).join(', ');
+    setPatientsToDelete(selectedPatients);
+    setShowDeleteModal(true);
+  };
 
-    if (!window.confirm(`선택한 환자(${patientNames})를 담당 환자 목록에서 제거하시겠습니까?`)) {
+  // 선택된 환자들 삭제 (확인 후 실행)
+  const handleRemoveSelectedPatients = async () => {
+    if (selectedPatientIds.size === 0) {
       return;
     }
 
     try {
       setIsRemoving(true);
+      setShowDeleteModal(false);
       
       // 삭제할 환자 ID들을 배열로 변환
       const patientIdsToRemove = Array.from(selectedPatientIds) as number[];
@@ -376,24 +397,32 @@ const DoctorHistoryPage: React.FC = () => {
       
       await Promise.all(removePromises);
       
-      // 환자 목록에서 제거
-      setPatients(prev => {
-        const updated = prev.filter(p => !selectedPatientIds.has(p.id));
-        console.log(`Patients list updated: ${prev.length} -> ${updated.length}`);
-        return updated;
+      // 환자 목록 다시 불러오기
+      const token = localStorage.getItem('accessToken');
+      const response = await axios.get<Patient[]>(`${API_BASE_URL}/api/dashboard/patients/`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
+      setPatients(response.data);
       
       // 선택 초기화
       setSelectedPatientIds(new Set());
-      console.log('환자들이 목록에서 제거되었습니다.');
+      setPatientsToDelete([]);
+      setIsRemoving(false);
       
-      // 성공 메시지 (선택사항)
-      // alert('환자가 성공적으로 제거되었습니다.');
+      // 성공 모달 표시
+      const removedCount = patientIdsToRemove.length;
+      setSuccessMessage(removedCount === 1 
+        ? '환자가 성공적으로 제거되었습니다.' 
+        : `${removedCount}명의 환자가 성공적으로 제거되었습니다.`);
+      setShowSuccessModal(true);
+      
+      console.log('환자들이 목록에서 제거되었습니다.');
     } catch (error: any) {
       console.error('Remove patients failed:', error);
-      const errorMessage = error?.response?.data?.message || error?.message || '환자 제거에 실패했습니다.';
+      const errorMessage = error?.response?.data?.error || error?.response?.data?.detail || error?.response?.data?.message || error?.message || '환자 제거에 실패했습니다.';
       alert(`환자 제거에 실패했습니다: ${errorMessage}`);
-    } finally {
       setIsRemoving(false);
     }
   };
@@ -568,7 +597,7 @@ const DoctorHistoryPage: React.FC = () => {
               </div>
               {selectedPatientIds.size > 0 && (
                 <button
-                  onClick={handleRemoveSelectedPatients}
+                  onClick={handleDeleteClick}
                   disabled={isRemoving}
                   className="px-3 py-1.5 bg-red-500 text-white text-sm rounded-md hover:bg-red-600 transition duration-150 disabled:opacity-50"
                 >
@@ -589,8 +618,7 @@ const DoctorHistoryPage: React.FC = () => {
               const getRiskTagColor = (riskLevel?: string) => {
                 if (!riskLevel) return 'bg-gray-200 text-gray-700';
                 if (riskLevel === '즉시 주의' || riskLevel === '높음' || riskLevel === '매우 높음') return 'bg-red-100 text-red-700';
-                if (riskLevel === '경과 관찰') return 'bg-orange-100 text-orange-700';
-                if (riskLevel === '보통') return 'bg-yellow-100 text-yellow-700';
+                if (riskLevel === '경과 관찰' || riskLevel === '보통' || riskLevel === '중간') return 'bg-orange-100 text-orange-700';
                 if (riskLevel === '정상' || riskLevel === '낮음') return 'bg-gray-200 text-gray-700'; // 낮음은 회색
                 return 'bg-blue-100 text-blue-700';
               };
@@ -612,30 +640,86 @@ const DoctorHistoryPage: React.FC = () => {
               const getAiRiskColor = (riskLevel?: string) => {
                 if (!riskLevel) return 'text-gray-600';
                 if (riskLevel === '높음') return 'text-red-600';
-                if (riskLevel === '보통') return 'text-yellow-600';
+                if (riskLevel === '보통' || riskLevel === '중간') return 'text-orange-600';
                 return 'text-green-600';
               };
 
               const isSelected = selectedPatientIds.has(patient.id);
 
+              const handleCardClick = (e?: React.MouseEvent) => {
+                if (e) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }
+                
+                if (isEditMode) {
+                  togglePatientSelection(patient.id);
+                } else {
+                  console.log('Card clicked, patient ID:', patient.id, 'needs_review:', patient.needs_review);
+                  setSelectedPatientId(patient.id);
+                }
+              };
+
               return (
                 <div
                   key={patient.id}
-                  className={`flex items-center bg-white border rounded-lg shadow-sm p-4 hover:shadow-md transition-all border-gray-200 ${isEditMode && isSelected ? 'border-blue-400 bg-blue-50' : 'hover:border-blue-300'}`}
+                  role="button"
+                  tabIndex={0}
+                  className={`flex items-center bg-white border rounded-lg shadow-sm p-4 transition-all border-gray-200 ${
+                    isEditMode 
+                      ? (isSelected ? 'border-blue-400 bg-blue-50' : 'hover:border-gray-300 cursor-pointer')
+                      : 'hover:shadow-md hover:border-blue-300 cursor-pointer active:bg-gray-50'
+                  }`}
+                  onClick={(e) => {
+                    // 체크박스를 클릭한 경우는 제외
+                    const target = e.target as HTMLElement;
+                    if (target.tagName === 'INPUT' || target.closest('input')) {
+                      return;
+                    }
+                    console.log('Card div clicked, patient:', patient.name, 'needs_review:', patient.needs_review);
+                    handleCardClick(e);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleCardClick();
+                    }
+                  }}
+                  onTouchStart={(e) => {
+                    if (!isEditMode) {
+                      const target = e.target as HTMLElement;
+                      if (target.tagName !== 'INPUT' && !target.closest('input')) {
+                        console.log('Card touched, patient:', patient.name, 'needs_review:', patient.needs_review);
+                        handleCardClick();
+                      }
+                    }
+                  }}
+                  style={{ 
+                    touchAction: 'manipulation', 
+                    WebkitTapHighlightColor: 'transparent',
+                    position: 'relative',
+                    userSelect: 'none',
+                    minHeight: '80px',
+                    width: '100%'
+                  }}
                 >
                   {/* 체크박스 (수정/삭제 모드일 때만 표시) */}
                   {isEditMode && (
                     <input
                       type="checkbox"
                       checked={isSelected}
-                      onChange={(e) => togglePatientSelection(patient.id, e)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        togglePatientSelection(patient.id, e);
+                      }}
                       onClick={(e) => e.stopPropagation()}
                       className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3 flex-shrink-0"
+                      style={{ pointerEvents: 'auto' }}
                     />
                   )}
                   <div
-                    className="flex-1 text-left cursor-pointer"
-                    onClick={() => setSelectedPatientId(patient.id)}
+                    className="flex-1 text-left"
+                    style={{ pointerEvents: 'none' }}
                   >
                     {/* 이름과 태그를 같은 줄에 배치 */}
                     <div className="flex items-start gap-2 mb-2">
@@ -684,12 +768,14 @@ const DoctorHistoryPage: React.FC = () => {
                       </p>
                     )}
                   </div>
-                  {/* 화살표 아이콘 */}
-                  <div className="text-gray-400 ml-3">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
+                  {/* 화살표 아이콘 (조회 모드일 때만 표시) */}
+                  {!isEditMode && (
+                    <div className="text-gray-400 ml-3 flex-shrink-0" style={{ pointerEvents: 'none' }}>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  )}
                 </div>
               );
             })
@@ -757,7 +843,7 @@ const DoctorHistoryPage: React.FC = () => {
               // 위험도에 따른 색상
               const getRiskColor = (level: string) => {
                 if (level === '높음' || level === '즉시 주의') return 'text-red-600';
-                if (level === '보통' || level === '경과 관찰') return 'text-yellow-600';
+                if (level === '보통' || level === '중간' || level === '경과 관찰') return 'text-orange-600';
                 if (level === '낮음' || level === '정상') return 'text-green-600';
                 return 'text-gray-600';
               };
@@ -824,6 +910,59 @@ const DoctorHistoryPage: React.FC = () => {
               진단 결과가 없습니다.
             </div>
           )}
+        </div>
+      )}
+
+      {/* 삭제 확인 모달 */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-5 max-w-[320px] w-full mx-4">
+            <h3 className="text-base font-bold text-gray-900 mb-3">환자 제거 확인</h3>
+            <p className="text-sm text-gray-600 mb-5">
+              선택한 환자({patientsToDelete.map(p => p.name).join(', ')})를 담당 환자 목록에서 제거하시겠습니까?
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setPatientsToDelete([]);
+                }}
+                className="px-3 py-2 bg-gray-200 text-gray-700 text-sm rounded-md hover:bg-gray-300 transition duration-150"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleRemoveSelectedPatients}
+                disabled={isRemoving}
+                className="px-3 py-2 bg-red-500 text-white text-sm rounded-md hover:bg-red-600 transition duration-150 disabled:opacity-50"
+              >
+                {isRemoving ? '삭제 중...' : '확인'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 성공 모달 */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-5 max-w-[320px] w-full mx-4">
+            <h3 className="text-base font-bold text-gray-900 mb-3">환자 제거 완료</h3>
+            <p className="text-sm text-gray-600 mb-5">
+              {successMessage}
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  setSuccessMessage('');
+                }}
+                className="px-3 py-2 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition duration-150"
+              >
+                확인
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

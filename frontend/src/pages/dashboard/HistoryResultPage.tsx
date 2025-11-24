@@ -287,7 +287,7 @@ const HistoryResultPage: React.FC = () => {
     finalRiskLevel === '높음' || finalRiskLevel === '즉시 주의'
       ? 'text-red-600 bg-red-100 border-red-300'
       : finalRiskLevel === '중간' || finalRiskLevel === '보통' || finalRiskLevel === '경과 관찰'
-      ? 'text-yellow-600 bg-yellow-100 border-yellow-300'
+      ? 'text-orange-600 bg-orange-100 border-orange-300'
       : finalRiskLevel === '분석 대기'
       ? 'text-gray-600 bg-gray-100 border-gray-300'
       : 'text-green-600 bg-green-100 border-green-300';

@@ -82,11 +82,18 @@ class FoldersListView(APIView):
                 max_priority = -2
                 for folder_result in folder_results:
                     # 의사 소견 우선, 없으면 AI 위험도
-                    risk = folder_result.followup_check.doctor_risk_level if (
-                        folder_result.followup_check and 
-                        folder_result.followup_check.doctor_risk_level and 
-                        folder_result.followup_check.doctor_risk_level != '소견 대기'
-                    ) else folder_result.risk_level
+                    risk = None
+                    try:
+                        if hasattr(folder_result, 'followup_check') and folder_result.followup_check:
+                            followup = folder_result.followup_check
+                            if followup.doctor_risk_level and followup.doctor_risk_level != '소견 대기':
+                                risk = followup.doctor_risk_level
+                    except Exception:
+                        pass  # followup_check가 없으면 무시
+                    
+                    # 의사 소견이 없으면 AI 위험도 사용
+                    if not risk:
+                        risk = folder_result.risk_level if hasattr(folder_result, 'risk_level') else '분석 대기'
                     
                     priority = risk_levels_priority.get(risk, 0)
                     if priority > max_priority:
@@ -566,23 +573,32 @@ class PatientsListView(APIView):
                 latest_result = patient_results.first()
                 
                 # doctor_risk_level이 있고 '소견 대기'가 아닌 최신 followup_check 찾기
-                # doctor_note가 있는 것을 우선적으로 선택
+                # 최신 업데이트 시간(last_updated_at)을 기준으로 가장 최근 소견 선택
                 latest_followup = None
                 latest_followup_with_note = None
+                latest_update_time = None
+                latest_update_time_with_note = None
                 
                 for result in patient_results:
                     # hasattr로 안전하게 확인
                     if hasattr(result, 'followup_check'):
                         try:
                             followup = result.followup_check
-                            # doctor_risk_level이 있고 '소견 대기'가 아닌 경우
-                            if followup and followup.doctor_risk_level and followup.doctor_risk_level != '소견 대기':
-                                if latest_followup is None:
-                                    latest_followup = followup
-                                # doctor_note가 있는 경우 우선 선택
-                                if followup.doctor_note and followup.doctor_note.strip():
-                                    latest_followup_with_note = followup
-                                    break
+                            if followup:
+                                # doctor_risk_level이 있고 '소견 대기'가 아닌 경우
+                                if followup.doctor_risk_level and followup.doctor_risk_level != '소견 대기':
+                                    update_time = followup.last_updated_at if hasattr(followup, 'last_updated_at') else None
+                                    
+                                    # doctor_note가 있는 경우 우선 선택 (가장 최신 것)
+                                    if followup.doctor_note and followup.doctor_note.strip():
+                                        if latest_update_time_with_note is None or (update_time and update_time > latest_update_time_with_note):
+                                            latest_followup_with_note = followup
+                                            latest_update_time_with_note = update_time
+                                    
+                                    # doctor_note가 없어도 최신 것 선택
+                                    if latest_update_time is None or (update_time and update_time > latest_update_time):
+                                        latest_followup = followup
+                                        latest_update_time = update_time
                         except Exception:
                             # followup_check가 없는 경우 무시
                             continue
@@ -635,32 +651,9 @@ class PatientsListView(APIView):
                     'needs_review': latest_followup is None or (latest_followup.doctor_risk_level == '소견 대기' if latest_followup else True),
                 }
             
-            # 환자별 최고 위험도 계산 (여러 Results가 있는 경우)
-            for result in patient_results:
-                current_followup = getattr(result, 'followup_check', None)
-                current_risk = current_followup.doctor_risk_level if current_followup and current_followup.doctor_risk_level and current_followup.doctor_risk_level != '소견 대기' else None
-                
-                # 위험도 우선순위
-                risk_priority = {
-                    '즉시 주의': 3,
-                    '경과 관찰': 2,
-                    '정상': 1,
-                    '소견 대기': 0,
-                }
-                
-                # 최고 위험도 업데이트
-                if current_risk:
-                    existing_risk = patients_dict[patient_id].get('doctor_risk_level')
-                    existing_priority = risk_priority.get(existing_risk, 0) if existing_risk else 0
-                    current_priority = risk_priority.get(current_risk, 0)
-                    
-                    if current_priority > existing_priority:
-                        patients_dict[patient_id]['doctor_risk_level'] = current_risk
-                        patients_dict[patient_id]['has_attention'] = current_risk == '즉시 주의'
-                
-                # 소견 미작성 여부 업데이트
-                if current_followup is None or (current_followup.doctor_risk_level == '소견 대기' if current_followup else True):
-                    patients_dict[patient_id]['needs_review'] = True
+            # 최신 소견을 이미 설정했으므로, 최고 위험도 계산 로직 제거
+            # 대신 최신 소견의 위험도를 그대로 사용
+            # (이미 latest_followup에서 최신 소견을 선택했으므로 추가 계산 불필요)
         
         # 최종 정리: 소견 필요 여부를 의사 판정 기준으로 다시 계산
         for patient_data in patients_dict.values():
@@ -860,12 +853,26 @@ class DoctorDashboardMainView(APIView):
                 followup_check__doctor_risk_level='소견 대기'
             ).count()
             
-            print(f"[DoctorDashboardMainView] 요약 정보: total={total_assigned_count}, immediate_attention={immediate_attention_count}, completed_opinions={completed_opinions_count}")
+            # 소견작성 필요 건수 (전체 기준으로 정확하게 계산)
+            # 소견이 없거나 소견 대기 상태인 경우
+            need_opinion_count = 0
+            for result in all_results:
+                try:
+                    followup_check = result.followup_check
+                    has_opinion = followup_check and followup_check.doctor_note and followup_check.doctor_risk_level != '소견 대기'
+                except Exception:
+                    has_opinion = False
+                
+                if not has_opinion:
+                    need_opinion_count += 1
+            
+            print(f"[DoctorDashboardMainView] 요약 정보: total={total_assigned_count}, immediate_attention={immediate_attention_count}, completed_opinions={completed_opinions_count}, need_opinion={need_opinion_count}")
 
             summary_data = {
                 'total_assigned_count': total_assigned_count,
                 'immediate_attention_count': immediate_attention_count,
                 'completed_opinions_count': completed_opinions_count,
+                'need_opinion_count': need_opinion_count,  # 소견작성 필요 건수 추가
             }
 
             # 3. 최종 응답 (각 섹션별로 최대 5개씩 반환)
