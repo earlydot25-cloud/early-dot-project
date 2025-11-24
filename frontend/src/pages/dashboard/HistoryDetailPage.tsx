@@ -2,7 +2,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import RiskLevelIcon from '../../components/RiskLevelIcon';
 
 // API BASE URL (환경 변수 또는 기본값)
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
@@ -82,7 +81,12 @@ const PhotoThumbnail: React.FC<{
   if (hasError || !src) {
     return (
       <div className="w-full h-full rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
-        <RiskLevelIcon riskLevel={riskLevel} source={riskSource} size={32} />
+        <div className="text-gray-400 text-xs text-center">
+          <svg className="w-8 h-8 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <span>이미지 없음</span>
+        </div>
       </div>
     );
   }
@@ -193,6 +197,17 @@ const HistoryDetailPage: React.FC = () => {
     [folderFromDB, folderName]
   );
 
+  // 뒤로가기 핸들러: 폴더 목록으로 이동
+  const handleBack = () => {
+    if (userId) {
+      // 의사용: 환자 목록으로 이동
+      navigate(`/dashboard/doctor/history?user=${userId}`);
+    } else {
+      // 일반 사용자용: 폴더 목록으로 이동
+      navigate('/dashboard/history');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="w-full bg-white px-4 py-5">
@@ -204,7 +219,7 @@ const HistoryDetailPage: React.FC = () => {
   return (
     <div className="w-full bg-white px-4 py-5">
       <button
-        onClick={() => navigate(-1)}
+        onClick={handleBack}
         className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
       >
         ← 뒤로가기
@@ -365,14 +380,14 @@ const HistoryDetailPage: React.FC = () => {
                 <div className="flex-shrink-0 w-20 h-20">
                   <PhotoThumbnail
                     src={resolveMediaUrl(r.photo.upload_storage_path)}
-                    alt={r.photo.file_name || '사진'}
+                    alt={r.photo.file_name || r.disease?.name_ko || '사진'}
                     riskLevel={riskLevel}
                     riskSource={riskSource as 'AI' | '의사' | '대기'}
                   />
                 </div>
 
                 {/* 가운데: 텍스트 정보 */}
-                <div className="flex-1 text-left leading-tight min-w-0">
+                <div className="flex-1 text-left leading-tight min-w-0 ml-3">
                   {/* 파일명 (수정 모드에서는 클릭 가능) */}
                   {isEditMode && editingFileName === r.id ? (
                     <input
@@ -434,12 +449,9 @@ const HistoryDetailPage: React.FC = () => {
                       {r.disease?.name_ko || r.photo.file_name || '분석 대기 중'}
                     </h3>
                   )}
-                  <div className="flex items-center gap-2 mb-1">
-                    <RiskLevelIcon riskLevel={riskLevel} source={riskSource as 'AI' | '의사' | '대기'} size={16} />
-                    <p className="text-xs text-gray-500">
-                      {riskSource} 위험도: {riskLevel || '정보 없음'}
-                    </p>
-                  </div>
+                  <p className="text-xs text-gray-500 mb-1">
+                    {riskSource} 위험도: {riskLevel || '정보 없음'}
+                  </p>
                   <p className="text-xs text-gray-500">
                     저장 날짜:{' '}
                     {r.photo.capture_date

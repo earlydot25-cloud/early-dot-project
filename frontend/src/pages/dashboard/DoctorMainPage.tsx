@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaChevronRight, FaExclamationTriangle, FaCheckCircle, FaUserMd } from 'react-icons/fa';
+import { FaChevronRight, FaChevronLeft, FaExclamationTriangle, FaCheckCircle, FaUserMd, FaMars, FaVenus } from 'react-icons/fa';
 import type { IconBaseProps } from 'react-icons';
 import axios from 'axios';
 
@@ -33,49 +33,56 @@ const resolveMediaUrl = (rawPath?: string) => {
 // -----------------------------------
 // 🔴 데이터 타입 정의 🔴
 // -----------------------------------
+interface PatientData {
+  name: string;
+  calculated_age: number | null;
+  family_history: string | null;
+}
+
 interface FollowUpCheckData {
   current_status: '요청중' | '확인 완료';
   doctor_risk_level: '소견 대기' | '즉시 주의' | '경과 관찰' | '정상';
   doctor_note: string | null;
+  last_updated_at?: string;
 }
+
 interface PhotoData {
   body_part: string;
   folder_name: string;
   upload_storage_path: string;
   capture_date: string;
+  onset_date: string | null;
+  symptoms_itch: string | null;
+  symptoms_pain: string | null;
+  symptoms_infection: string | null;
+  meta_sex?: string | null;
 }
+
 interface DiseaseData {
   name_ko: string;
+  name_en?: string;
 }
+
 interface DiagnosisResult {
   id: number;
+  patient: PatientData;
   photo: PhotoData;
   disease: DiseaseData;
   analysis_date: string;
-  risk_level: '높음' | '보통' | '낮음' ;
+  risk_level: '높음' | '보통' | '낮음';
   vlm_analysis_text: string | null;
   followup_check: FollowUpCheckData | null;
 }
-interface MainDashboardData {
-  summary: {
-    total_count: number;
-    attention_count: number;
-  };
-  history: DiagnosisResult[];
-}
 
-// 💡 의사 대시보드 요약 데이터 구조에 맞게 변경
 interface DoctorSummaryData {
-  total_assigned_count: number; // 백엔드 필드명: total_assigned_count
-  immediate_attention_count: number; // 백엔드 필드명: immediate_attention_count
+  total_assigned_count: number;
+  immediate_attention_count: number;
 }
 
-// 💡 메인 대시보드 데이터 타입을 의사 전용으로 변경
 interface DoctorDashboardData {
   summary: DoctorSummaryData;
-  history: DiagnosisResult[]; // DiagnosisResult는 DoctorCardSerializer의 구조를 따라야 정확함
+  history: DiagnosisResult[];
 }
-
 
 // -----------------------------------
 // 🔴 아이콘 컴포넌트 래퍼 🔴
@@ -83,204 +90,193 @@ interface DoctorDashboardData {
 type IconCmp = React.FC<IconBaseProps>;
 const UserMdIcon: IconCmp = (props) => <FaUserMd {...props} />;
 const ChevronRightIcon: IconCmp = (props) => <FaChevronRight {...props} />;
+const ChevronLeftIcon: IconCmp = (props) => <FaChevronLeft {...props} />;
 const ExclamationTriangleIcon: IconCmp = (props) => <FaExclamationTriangle {...props} />;
 const CheckCircleIcon: IconCmp = (props) => <FaCheckCircle {...props} />;
+const MarsIcon: IconCmp = (props: IconBaseProps) => <FaMars {...props} />;
+const VenusIcon: IconCmp = (props: IconBaseProps) => <FaVenus {...props} />;
+
 // -----------------------------------
-
-
-// --- [보조 컴포넌트] 진단 내역 카드 ---
-interface DiagnosisCardProps {
+// 🔴 환자 카드 컴포넌트 🔴
+// -----------------------------------
+interface PatientCardProps {
   data: DiagnosisResult;
-  isDoctorView?: boolean;
-  patientName?: string;
-  hasFamilyHistory?: boolean;
 }
 
-const DiagnosisCard: React.FC<DiagnosisCardProps> = ({
-  data,
-  isDoctorView = false,
-  patientName = "환자명 (없음)",
-  hasFamilyHistory = false,
-}) => {
+const PatientCard: React.FC<PatientCardProps> = ({ data }) => {
   const navigate = useNavigate();
 
-  const handleViewResult = () => {
+  const handleViewOpinion = () => {
     navigate(`/diagnosis/detail/${data.id}`);
   };
 
-  const hasDoctorNote = data.followup_check && data.followup_check.doctor_note && data.followup_check.doctor_risk_level !== '소견 대기';
-  const isRequesting = data.followup_check && data.followup_check.current_status === '요청중' && !hasDoctorNote;
+  const hasDoctorNote = data.followup_check && 
+    data.followup_check.doctor_note && 
+    data.followup_check.doctor_risk_level !== '소견 대기';
 
   const finalRiskLevel = hasDoctorNote
     ? data.followup_check!.doctor_risk_level
     : data.risk_level;
 
-  const riskLabel = hasDoctorNote ? '의사' : 'AI';
-  const isAttentionNeeded = finalRiskLevel === '높음' || finalRiskLevel === '즉시 주의';
+  const isAttentionNeeded = finalRiskLevel === '즉시 주의' || finalRiskLevel === '높음';
 
-  let riskDisplay;
-  let riskColor = 'text-gray-700';
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toISOString().split('T')[0];
+  };
 
-  if (finalRiskLevel === '높음' || finalRiskLevel === '즉시 주의') {
-    riskDisplay = `${riskLabel} - ${finalRiskLevel === '즉시 주의' ? '즉시 주의' : '높음'}`;
-    riskColor = 'text-red-600';
-  } else if (finalRiskLevel === '경과 관찰' || finalRiskLevel === '보통') {
-    riskDisplay = `${riskLabel} - 경과 관찰`;
-    riskColor = 'text-yellow-600';
-  } else {
-    riskDisplay = `${riskLabel} - 낮음`;
-    riskColor = 'text-green-600';
+  // 증상 태그 생성 (신체부위는 제외)
+  const symptomTags = [];
+  if (data.photo.symptoms_infection === '예' || data.photo.symptoms_infection === '있음') {
+    symptomTags.push({ text: `상처로 인한 감염(예)`, color: 'bg-red-100 text-red-700' });
   }
+  if (data.photo.symptoms_pain) {
+    const painLevel = data.photo.symptoms_pain === '심함' ? '심함' : data.photo.symptoms_pain;
+    symptomTags.push({ text: `통증(${painLevel})`, color: 'bg-red-100 text-red-700' });
+  }
+  if (data.photo.symptoms_itch) {
+    const itchLevel = data.photo.symptoms_itch === '보통' ? '보통' : data.photo.symptoms_itch;
+    symptomTags.push({ text: `가려움(${itchLevel})`, color: 'bg-yellow-100 text-yellow-700' });
+  }
+  
+  // 가족력 태그 (Y/N, yes/no, 있음/없음, 예/아니오 등 다양한 형식 처리)
+  const hasFamilyHistory = data.patient.family_history && (
+    data.patient.family_history === '있음' || 
+    data.patient.family_history === '예' ||
+    data.patient.family_history.toUpperCase() === 'Y' ||
+    data.patient.family_history.toLowerCase() === 'yes' ||
+    data.patient.family_history === '1' ||
+    data.patient.family_history === 'true'
+  );
+  const familyHistoryText = hasFamilyHistory ? '있음' : '없음';
+  const familyHistoryColor = hasFamilyHistory 
+    ? 'bg-red-100 text-red-700' 
+    : 'bg-gray-200 text-gray-700';
+  
+  // 발병시기 태그
+  const onsetTag = data.photo.onset_date ? { text: `발병 시기(${data.photo.onset_date})`, color: 'bg-gray-200 text-gray-700' } : null;
 
-  const buttonText = isDoctorView
-    ? (isRequesting ? '소견 작성 대기' : '소견 작성/보기')
-    : (isRequesting ? '요청 처리 대기' : '결과 열람');
+  // 성별 아이콘 (photo.meta_sex 또는 기본값 사용)
+  const isFemale = data.photo.meta_sex && (
+    data.photo.meta_sex.toLowerCase() === '여성' || 
+    data.photo.meta_sex.toUpperCase() === 'F' || 
+    data.photo.meta_sex.toLowerCase() === 'female' ||
+    data.photo.meta_sex.toLowerCase() === '여'
+  );
+  const genderIcon = isFemale 
+    ? <VenusIcon className="text-pink-500" size={14} />
+    : <MarsIcon className="text-blue-500" size={14} />;
 
-  const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('ko-KR');
-
-
-// -----------------------------------------------------------
-// 🔴 의사 뷰 카드 렌더링
-// -----------------------------------------------------------
-if (isDoctorView) {
-    return (
-        <div className={`p-4 border rounded-lg shadow-sm w-80 flex-shrink-0 bg-white ${isAttentionNeeded ? 'border-red-400' : 'border-gray-200'}`}>
-            <div className="flex justify-between items-start">
-
-                {/* 1. 좌측 핵심 정보 블록 (이미지, 환자명/병변명) */}
-                <div className="flex flex-col flex-grow">
-                    <div className="flex items-start mb-3">
-                        {/* 환부 이미지: 실제 이미지 경로 사용 */}
-                         <div className="w-16 h-16 rounded mr-3 flex items-center justify-center overflow-hidden flex-shrink-0">
-                            {data.photo && data.photo.upload_storage_path ? (
-                                <img
-                                    src={resolveMediaUrl(data.photo.upload_storage_path)}
-                                    alt={`${data.disease.name_ko} 이미지`}
-                                    className="w-full h-full object-cover"
-                                    onError={(e) => {
-                                        const target = e.target as HTMLImageElement;
-                                        target.style.display = 'none';
-                                        const parent = target.parentElement;
-                                        if (parent) {
-                                            parent.innerHTML = '<div class="w-full h-full bg-blue-500 flex items-center justify-center text-xs font-bold text-white">이미지 없음</div>';
-                                        }
-                                    }}
-                                />
-                            ) : (
-                                <div className="w-full h-full bg-blue-500 flex items-center justify-center text-xs font-bold text-white">
-                                    이미지 없음
-                                </div>
-                            )}
-                        </div>
-
-                        {/* 환자명, 가족력, 병변명 */}
-                        <div className="text-left flex-grow">
-                            <p className="text-lg font-bold text-gray-900 leading-tight">
-                                {patientName}
-                                <span className="text-xs font-normal text-red-500 ml-1">
-                                    {hasFamilyHistory ? '가족력:있음' : ''}
-                                </span>
-                            </p>
-                            <p className="text-sm font-medium text-gray-500">{data.disease.name_ko}</p>
-                        </div>
-                    </div>
-
-                    {/* 1-2. 저장 폴더/날짜 정보 */}
-                    <div className="text-sm text-gray-700 space-y-1 mt-3 border-t pt-3 border-gray-100">
-                        <p className="text-left">
-                            <span className="font-bold text-gray-900">저장 폴더:</span> {data.photo.folder_name}
-                        </p>
-                        <p className="text-left">
-                            <span className="font-bold text-gray-900">위치:</span> {data.photo.body_part}
-                        </p>
-                        <p className="text-left">
-                            <span className="font-bold text-gray-900">최초 생성:</span> {formatDate(data.photo.capture_date)}
-                        </p>
-                        <p className="text-left">
-                            <span className="font-bold text-gray-900">마지막 수정:</span> {formatDate(data.analysis_date)}
-                        </p>
-                    </div>
-                </div>
-
-                {/* 우측: 위험도 및 버튼 */}
-                <div className="ml-2 flex flex-col items-end flex-shrink-0">
-                    {/* AI 위험도 */}
-                    <div className="text-xs font-semibold text-right mb-1">
-                        <p className="text-gray-500">- AI -</p>
-                        <p className="text-red-600 font-bold">{data.risk_level}</p>
-                    </div>
-                    {/* 의사 소견 위험도 (있을 경우) */}
-                    {hasDoctorNote && (
-                        <div className="text-xs font-semibold text-right mb-3">
-                            <p className="text-gray-500">- 의사 -</p>
-                            <p className={riskColor}>{finalRiskLevel}</p>
-                        </div>
-                    )}
-
-                    <button
-                        onClick={handleViewResult}
-                        className="py-2 px-3 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition duration-150"
-                    >
-                        {buttonText}
-                    </button>
-                </div>
+  return (
+    <div className={`p-4 border rounded-lg shadow-sm bg-white mb-4 ${isAttentionNeeded ? 'border-red-400 shadow-red-100' : 'border-gray-200'}`}>
+      <div className="flex gap-4">
+        {/* 왼쪽: 환부 이미지 */}
+        <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100 border border-gray-200">
+          {data.photo && data.photo.upload_storage_path ? (
+            <img
+              src={resolveMediaUrl(data.photo.upload_storage_path)}
+              alt={`${data.disease.name_ko} 이미지`}
+              className="w-full h-full object-cover"
+              onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+                const parent = target.parentElement;
+                if (parent) {
+                  parent.innerHTML = '<div class="w-full h-full flex items-center justify-center text-xs text-gray-500 bg-gray-100">환부 이미지</div>';
+                }
+              }}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-xs text-gray-500 bg-gray-100">
+              환부 이미지
             </div>
-
-            {/* 하단: 최종 소견 */}
-            <div className="mt-4 pt-3 border-t border-gray-100">
-                {/* 부가 정보 태그 (더미: 실제 데이터 필드로 교체 필요) */}
-                <div className="flex flex-wrap gap-2 mb-3">
-                    <span className="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-700">만 45세</span>
-                    <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700">상처로 인한 감염(예)</span>
-                    <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700">통증(심함)</span>
-                    <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700">가려움(보통)</span>
-                </div>
-
-                {/* 최종 소견 */}
-                <div className={`bg-indigo-50 p-2 rounded`}>
-                     <p className={`text-xs font-medium mb-1 text-indigo-700 flex items-center`}>
-                        <UserMdIcon className="mr-1 w-3 h-3" /> 최종 소견
-                    </p>
-                    <p className="text-xs text-gray-700 line-clamp-2">
-                        {hasDoctorNote
-                            ? data.followup_check!.doctor_note || '의사 소견이 아직 작성되지 않았습니다.'
-                            : data.vlm_analysis_text || 'AI 분석 결과 텍스트만 있습니다.'}
-                    </p>
-                </div>
-            </div>
+          )}
         </div>
-    );
-}
 
-// -----------------------------------------------------------
-// 🔴 환자 뷰 카드 렌더링 (isDoctorView가 false일 때) (기존 로직 유지)
-// -----------------------------------------------------------
-return (
-    <div className={`p-4 border rounded-lg shadow-sm w-80 flex-shrink-0 bg-white ${isAttentionNeeded ? 'border-red-400' : 'border-gray-200'}`}>
-        <div className="flex justify-between items-start">
-            <div className="flex flex-col flex-grow">
-                {/* ... (환자 뷰의 이미지 및 병변 정보) ... */}
+        {/* 중간: 환자 정보 */}
+        <div className="flex-1 min-w-0">
+          <div className="mb-2">
+            <div className="flex items-center gap-1 mb-1">
+              {genderIcon}
+              <span className="text-lg font-bold text-gray-900">{data.patient.name}</span>
             </div>
-
-            <div className="ml-2 flex flex-col items-end">
-                {/* ... (환자 뷰의 위험도 및 버튼) ... */}
-            </div>
+          </div>
+          
+          <p className="text-base font-semibold text-gray-800 mb-2">{data.disease.name_ko}</p>
+          {data.photo.body_part && (
+            <p className="text-sm text-gray-600">위치: {data.photo.body_part}</p>
+          )}
         </div>
+
+        {/* 오른쪽: 위험도 및 버튼 */}
+        <div className="flex flex-col items-end flex-shrink-0">
+          <div className="text-center mb-3">
+            <div className="text-xs mb-1">
+              <span className="text-gray-500">- AI -</span>
+              <p className={`font-semibold ${data.risk_level === '높음' ? 'text-red-600' : data.risk_level === '보통' ? 'text-yellow-600' : 'text-green-600'}`}>
+                {data.risk_level}
+              </p>
+            </div>
+            {hasDoctorNote && (
+              <div className="text-xs mt-2">
+                <span className="text-gray-500">- 의사 -</span>
+                <p className={`font-semibold ${finalRiskLevel === '즉시 주의' ? 'text-red-600' : 'text-yellow-600'}`}>
+                  {finalRiskLevel}
+                </p>
+              </div>
+            )}
+          </div>
+          
+          <button
+            onClick={handleViewOpinion}
+            className="py-1.5 px-3 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition duration-150"
+          >
+            소견 열람
+          </button>
+        </div>
+      </div>
+
+      {/* 날짜 정보 (선 위) */}
+      <div className="mt-3 mb-3">
+        <div className="text-xs text-gray-600 space-y-1 pl-8">
+          <p>최초 생성 일자: {formatDate(data.photo.capture_date)}</p>
+          <p>마지막 수정 일자: {formatDate(data.analysis_date)}</p>
+        </div>
+      </div>
+
+      {/* 하단: 나이, 가족력, 발병시기, 증상 태그 (선 아래) */}
+      <div className="pt-3 border-t border-gray-200">
+        <div className="flex flex-wrap gap-2">
+          {/* 나이 태그 */}
+          {data.patient.calculated_age && (
+            <span className="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-700">
+              만 {data.patient.calculated_age}세
+            </span>
+          )}
+          
+          {/* 가족력 태그 */}
+          <span className={`px-2 py-1 text-xs rounded-full ${familyHistoryColor}`}>
+            가족력({familyHistoryText})
+          </span>
+          
+          {/* 발병 시기 태그 */}
+          {onsetTag && (
+            <span className={`px-2 py-1 text-xs rounded-full ${onsetTag.color}`}>
+              {onsetTag.text}
+            </span>
+          )}
+          
+          {/* 증상 태그 */}
+          {symptomTags.map((tag, idx) => (
+            <span key={idx} className={`px-2 py-1 text-xs rounded-full ${tag.color}`}>
+              {tag.text}
+            </span>
+          ))}
+        </div>
+      </div>
     </div>
-);
+  );
 };
-
-
-// --- [보조 함수] ABCDE 항목 렌더링 (제거됨) ---
-/*
-const renderABCDEItem = (key: string, title: string, description: string) => (
-  <div key={key} className="p-3 bg-white border rounded-lg shadow-sm">
-    <p className="text-md font-semibold text-gray-800 mb-1">{title}</p>
-    <p className="text-sm text-gray-600">{description}</p>
-  </div>
-);
-*/
-
 
 // -----------------------------------
 // --- [메인 컴포넌트] DoctorMainPage ---
@@ -291,73 +287,63 @@ const DoctorMainPage: React.FC = () => {
   const [data, setData] = useState<DoctorDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'attention' | 'needOpinion'>('attention');
+  const [currentPage, setCurrentPage] = useState(0);
 
   // 🔴 API 호출 로직
   useEffect(() => {
     const fetchDoctorData = async () => {
-        // 💡 백엔드 DRF API URL: 현재 로그인된 의사(doctors.uid_id)에게 필요한 대시보드 데이터를 가져옴
-        const API_URL = '/api/dashboard/doctor/main/';
-        //console.log('API URL:', API_URL); // URL이 올바른지 확인
+      const API_URL = '/api/dashboard/doctor/main/';
 
-        try {
-// 1. 토큰 가져오기 (주석 해제 및 확인)
-                const token = localStorage.getItem('accessToken');
-                //console.log('Token retrieved:', token ? 'Exists' : 'MISSING!'); // 토큰 존재 여부 확인
-                if (!token) {
-                    // 💡 토큰이 없으면 에러를 설정하고 함수 종료
-                    setError('인증 토큰이 없습니다. 로그인이 필요합니다.');
-                    setIsLoading(false);
-                    return; // 함수 즉시 종료
-                }
-                // 💡 3. Axios 요청 직전 확인
-                //console.log('Attempting to fetch data from API...'); // 이 로그가 찍히는지 확인!
-                const response = await axios.get<DoctorDashboardData>(API_URL, {
-                    headers: {
-                        // 2. Authorization 헤더에 Bearer 토큰 추가 (주석 해제)
-                        Authorization: `Bearer ${token}`,
-                    },
-                });
-
-                //console.log('API Response received:', response.data); // 응답 데이터 확인
-                setData(response.data);
-
-} catch (err: any) { // 🚨 err 타입을 'any'로 지정하여 TS 컴파일 오류를 회피
-            console.error("Failed to fetch doctor dashboard data:", err);
-
-            // 💡 [수정] axios.isAxiosError 대신, err.response 객체의 존재 여부로 Axios 오류를 확인
-            if (err.response) {
-                 console.error("Axios error response status:", err.response.status);
-                 console.error("Axios error response data:", err.response.data);
-                 console.error("Axios error config:", err.config);
-            }
-
-            // 💡 타입 단언을 사용하여 403 에러 안전하게 처리
-            const errorStatus = err.response?.status;
-
-            if (errorStatus === 403) {
-                // 로그인한 사용자가 의사 계정이 아님 -> 환자 대시보드로 리다이렉션
-                navigate('/dashboard/main'); // 🚨 절대 경로로 수정
-                return;
-            }
-
-            // 401 Unauthorized 오류 처리
-            if (errorStatus === 401) {
-                // 토큰 만료 또는 유효하지 않은 토큰 -> 로그인 페이지로 이동
-                setError('세션이 만료되었거나 인증에 실패했습니다. 다시 로그인해주세요.');
-                navigate('/login');
-                return;
-            }
-
-            // 그 외 에러 (404, 500 등) 처리
-            setError('의사 대시보드 데이터를 불러오는 데 실패했습니다. 서버 상태 및 인증을 확인하세요.');
-        } finally {
-            setIsLoading(false);
+      try {
+        const token = localStorage.getItem('accessToken');
+        if (!token) {
+          setError('인증 토큰이 없습니다. 로그인이 필요합니다.');
+          setIsLoading(false);
+          return;
         }
+
+        const response = await axios.get<DoctorDashboardData>(API_URL, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        setData(response.data);
+      } catch (err: any) {
+        console.error("Failed to fetch doctor dashboard data:", err);
+
+        if (err.response) {
+          console.error("Axios error response status:", err.response.status);
+          console.error("Axios error response data:", err.response.data);
+        }
+
+        const errorStatus = err.response?.status;
+
+        if (errorStatus === 403) {
+          navigate('/dashboard/main');
+          return;
+        }
+
+        if (errorStatus === 401) {
+          setError('세션이 만료되었거나 인증에 실패했습니다. 다시 로그인해주세요.');
+          navigate('/login');
+          return;
+        }
+
+        setError('의사 대시보드 데이터를 불러오는 데 실패했습니다. 서버 상태 및 인증을 확인하세요.');
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     fetchDoctorData();
   }, [navigate]);
 
+  // 탭 변경 시 페이지 초기화 (early return 이전에 호출되어야 함)
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [activeTab]);
 
   // 로딩 및 에러 처리 UI
   if (isLoading) {
@@ -371,60 +357,177 @@ const DoctorMainPage: React.FC = () => {
   const summary = data.summary;
   const history = data.history;
 
-  // 소견 작성이 필요한 항목 (AI 위험도가 '높음'이거나, 소견 요청 중인 경우)
-  const attentionHistory = history.filter(item =>
-    item.risk_level === '높음' || item.followup_check?.current_status === '요청중'
-  );
+  // 주의가 필요한 환자 (즉시 주의 또는 높음 위험도)
+  const attentionPatients = history.filter((item: DiagnosisResult) => {
+    const finalRisk = item.followup_check?.doctor_risk_level === '즉시 주의' || 
+                     item.risk_level === '높음';
+    return finalRisk;
+  });
 
-  // 진단 내역 전체보기 버튼 클릭 핸들러
-  const handleViewAllHistory = () => {
+  // 소견 작성이 필요한 환자 (소견이 없거나 소견 대기 상태)
+  const needOpinionPatients = history.filter((item: DiagnosisResult) => {
+    const hasOpinion = item.followup_check && 
+                      item.followup_check.doctor_note && 
+                      item.followup_check.doctor_risk_level !== '소견 대기';
+    return !hasOpinion;
+  });
+
+  // 소견 작성 완료 건수 계산
+  const completedOpinions = history.filter((item: DiagnosisResult) => {
+    return item.followup_check && 
+           item.followup_check.doctor_note && 
+           item.followup_check.doctor_risk_level !== '소견 대기';
+  }).length;
+
+  const handleViewAllPatients = () => {
     navigate('/dashboard/doctor/history');
   };
 
+  const displayedPatients = activeTab === 'attention' ? attentionPatients : needOpinionPatients;
+
+  // 페이지네이션 적용 여부 (3개 이상일 때만)
+  const shouldUsePagination = displayedPatients.length >= 3;
+  
+  // currentPage가 범위를 벗어나지 않도록 보정
+  const safeCurrentPage = Math.min(currentPage, Math.max(0, displayedPatients.length - 1));
+  const currentPatient = shouldUsePagination && displayedPatients.length > 0 
+    ? displayedPatients[safeCurrentPage] 
+    : null;
+  
+  const handlePrevPage = () => {
+    if (safeCurrentPage > 0) {
+      setCurrentPage(safeCurrentPage - 1);
+    }
+  };
+  
+  const handleNextPage = () => {
+    if (safeCurrentPage < displayedPatients.length - 1) {
+      setCurrentPage(safeCurrentPage + 1);
+    }
+  };
+
   return (
-    <div className="p-1 space-y-3">
-
-      {/* 1. 상단 요약 및 전체보기 버튼 */}
-       <section>
-        <div className="flex justify-between items-center mb-3 p-2 bg-gray-50 rounded-md shadow-inner">
-          <div className="text-sm font-medium text-gray-700 flex items-center space-x-4">
-            <span className="flex items-center">
-              <CheckCircleIcon className="text-blue-500 mr-1 w-4 h-4" />
-              {/* 🔴 total_count -> total_assigned_count로 변경 */}
-              전체 환부 {summary.total_assigned_count}건
-            </span>
-            <span className="flex items-center text-red-600 font-bold">
-              <ExclamationTriangleIcon className="mr-1 w-4 h-4" />
-              {/* 🔴 attention_count -> immediate_attention_count로 변경 */}
-              소견 요청 {summary.immediate_attention_count}건
-            </span>
-          </div>
-          <button onClick={handleViewAllHistory} className="flex items-center text-sm text-blue-600 font-medium hover:text-blue-800">
-            진단 내역 전체보기 <ChevronRightIcon className="ml-1 w-3 h-3" />
-          </button>
+    <div className="p-4 space-y-4 bg-gradient-to-b from-gray-50 to-white min-h-screen">
+      {/* 1. 상단 요약 카드 */}
+      <section className="grid grid-cols-2 gap-4">
+        <div className="bg-white py-3 px-6 rounded-lg shadow-sm border border-gray-200">
+          <div className="text-3xl font-bold text-blue-600 mb-1 text-center">{summary.total_assigned_count}</div>
+          <div className="text-xs text-gray-600 text-center">전체 환자</div>
         </div>
-
-        {/* 2. 소견 작성 및 확인 대기 진단 내역 */}
-        <h3 className="text-lg font-bold mb-3">진단 내역 (총 {attentionHistory.length}건)</h3>
-        <div className="flex space-x-4 overflow-x-scroll pb-3 scrollbar-hide">
-          {attentionHistory.length > 0 ? (
-            attentionHistory.map(item => (
-              <DiagnosisCard
-                  key={item.id}
-                  data={item}
-                  isDoctorView={true}
-                  patientName={`환자 No.${item.id}`}
-                  hasFamilyHistory={false}
-              />
-            ))
-          ) : (
-            <p className="text-gray-500 p-4 bg-white rounded-lg shadow-sm">
-              현재 소견 작성 대기 또는 확인 대기 중인 진단 내역이 없습니다.
-            </p>
-          )}
+        <div className="bg-white py-3 px-6 rounded-lg shadow-sm border border-gray-200">
+          <div className="text-3xl font-bold text-green-600 mb-1 text-center">{completedOpinions}</div>
+          <div className="text-xs text-gray-600 text-center">소견 작성 완료</div>
         </div>
       </section>
 
+      {/* 2. 탭 네비게이션 */}
+      <section>
+        <div className="flex gap-4 border-b border-gray-200 mb-3">
+          <button
+            onClick={() => setActiveTab('attention')}
+            className={`pb-2 px-2 text-sm font-medium ${
+              activeTab === 'attention'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            주의가 필요한 내 환자
+          </button>
+          <button
+            onClick={() => setActiveTab('needOpinion')}
+            className={`pb-2 px-2 text-xs font-medium ${
+              activeTab === 'needOpinion'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-red-600 hover:text-red-700'
+            }`}
+          >
+            소견작성 필요 {needOpinionPatients.length > 0 && `+${needOpinionPatients.length}건`}
+          </button>
+        </div>
+        <div className="mb-4 flex justify-end">
+          <button
+            onClick={handleViewAllPatients}
+            className="text-sm text-blue-600 font-medium hover:text-blue-800 flex items-center"
+          >
+            내 환자 전체보기 <ChevronRightIcon className="ml-1" size={12} />
+          </button>
+        </div>
+
+        {/* 3. 환자 카드 리스트 */}
+        <div className="space-y-0">
+          {displayedPatients.length > 0 ? (
+            <>
+              {shouldUsePagination ? (
+                // 페이지네이션 모드 (3개 이상일 때)
+                <div className="relative">
+                  {currentPatient && (
+                    <>
+                      {/* 환자 카드 */}
+                      <PatientCard key={currentPatient.id} data={currentPatient} />
+                      
+                      {/* 오버레이 네비게이션 버튼 */}
+                      <div className="absolute inset-0 pointer-events-none flex items-center justify-between px-1">
+                        {/* 왼쪽 이전 버튼 */}
+                        <button
+                          onClick={handlePrevPage}
+                          disabled={safeCurrentPage === 0}
+                          className={`pointer-events-auto p-1.5 rounded-full bg-white/80 hover:bg-white shadow-md transition-all ${
+                            safeCurrentPage === 0
+                              ? 'opacity-30 cursor-not-allowed'
+                              : 'opacity-100 hover:scale-110'
+                          }`}
+                        >
+                          <ChevronLeftIcon size={18} className="text-gray-700" />
+                        </button>
+                        
+                        {/* 오른쪽 다음 버튼 */}
+                        <button
+                          onClick={handleNextPage}
+                          disabled={safeCurrentPage === displayedPatients.length - 1}
+                          className={`pointer-events-auto p-1.5 rounded-full bg-white/80 hover:bg-white shadow-md transition-all ${
+                            safeCurrentPage === displayedPatients.length - 1
+                              ? 'opacity-30 cursor-not-allowed'
+                              : 'opacity-100 hover:scale-110'
+                          }`}
+                        >
+                          <ChevronRightIcon size={18} className="text-gray-700" />
+                        </button>
+                      </div>
+                      
+                      {/* 페이지 인디케이터 (카드 아래 중앙) */}
+                      <div className="flex items-center justify-center gap-2 mt-4">
+                        {displayedPatients.map((_, index) => (
+                          <button
+                            key={index}
+                            onClick={() => setCurrentPage(index)}
+                            className={`transition-all ${
+                              index === safeCurrentPage
+                                ? 'w-2.5 h-2.5 bg-blue-600'
+                                : 'w-2 h-2 bg-gray-300 hover:bg-gray-400'
+                            } rounded-full`}
+                            aria-label={`페이지 ${index + 1}로 이동`}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                // 일반 모드 (3개 미만일 때)
+                displayedPatients.map((item: DiagnosisResult) => (
+                  <PatientCard key={item.id} data={item} />
+                ))
+              )}
+            </>
+          ) : (
+            <div className="p-8 bg-white rounded-lg shadow-sm border border-gray-200 text-center text-gray-500">
+              {activeTab === 'attention'
+                ? '주의가 필요한 환자가 없습니다.'
+                : '소견 작성이 필요한 환자가 없습니다.'}
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 };

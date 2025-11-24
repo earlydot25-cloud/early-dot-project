@@ -539,10 +539,10 @@ class PatientsListView(APIView):
         for patient in assigned_patients:
             patient_id = patient.id
             
-            # 해당 환자의 모든 Results 가져오기
+            # 해당 환자의 모든 Results 가져오기 (photo도 함께 가져오기)
             patient_results = Results.objects.filter(
                 photo__user=patient
-            ).select_related('photo__user', 'followup_check').order_by('-analysis_date')
+            ).select_related('photo__user', 'followup_check', 'photo').order_by('-analysis_date')
             
             # 필터에 따라 Results 필터링 (필터가 '전체 보기'가 아니면)
             filtered_results = patient_results
@@ -566,9 +566,41 @@ class PatientsListView(APIView):
                 latest_result = patient_results.first()
                 latest_followup = latest_result.followup_check if latest_result and hasattr(latest_result, 'followup_check') else None
                 
+                # 최신 AI 위험도 가져오기
+                latest_ai_risk = latest_result.risk_level if latest_result else None
+                
+                # 환자 연령 및 성별 정보 (의사 메인 페이지와 동일한 방식: photo.meta_age, photo.meta_sex 우선)
+                patient_age = None
+                patient_sex = None
+                
+                # 최신 photo의 메타 정보 우선 사용
+                if latest_result and hasattr(latest_result, 'photo'):
+                    photo = latest_result.photo
+                    if hasattr(photo, 'meta_age') and photo.meta_age:
+                        patient_age = photo.meta_age
+                    if hasattr(photo, 'meta_sex') and photo.meta_sex:
+                        patient_sex = photo.meta_sex
+                
+                # photo 메타 정보가 없으면 Users 모델의 정보 사용
+                if patient_age is None:
+                    if hasattr(patient, 'birth_date') and patient.birth_date:
+                        from datetime import date
+                        today = date.today()
+                        patient_age = today.year - patient.birth_date.year - (
+                            (today.month, today.day) < (patient.birth_date.month, patient.birth_date.day)
+                        )
+                    elif hasattr(patient, 'age') and patient.age:
+                        patient_age = patient.age
+                
+                if patient_sex is None:
+                    patient_sex = getattr(patient, 'sex', None)
+                
                 patients_dict[patient_id] = {
                     'id': patient.id,
                     'name': patient.name or patient.email,
+                    'sex': patient_sex,
+                    'age': patient_age,
+                    'ai_risk_level': latest_ai_risk,
                     'latest_note': latest_followup.doctor_note if latest_followup and latest_followup.doctor_note else None,
                     'has_attention': latest_followup and latest_followup.doctor_risk_level == '즉시 주의' if latest_followup else False,
                     'doctor_risk_level': latest_followup.doctor_risk_level if latest_followup and latest_followup.doctor_risk_level else None,
@@ -734,7 +766,7 @@ class DoctorDashboardMainView(APIView):
 
             # 🔴 DoctorCardSerializer를 사용하여 환자 정보 및 증상을 포함하여 직렬화합니다.
             try:
-                history_data = DoctorCardSerializer(doctor_assigned_results, many=True).data
+                history_data = DoctorCardSerializer(doctor_assigned_results, many=True, context={'request': request}).data                
                 print(f"[DoctorDashboardMainView] 시리얼라이즈 완료: {len(history_data)}개 항목")
             except Exception as e:
                 print(f"[DoctorDashboardMainView] Serializer Error: {type(e).__name__}: {str(e)}")
