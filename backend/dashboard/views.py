@@ -82,11 +82,18 @@ class FoldersListView(APIView):
                 max_priority = -2
                 for folder_result in folder_results:
                     # 의사 소견 우선, 없으면 AI 위험도
-                    risk = folder_result.followup_check.doctor_risk_level if (
-                        folder_result.followup_check and 
-                        folder_result.followup_check.doctor_risk_level and 
-                        folder_result.followup_check.doctor_risk_level != '소견 대기'
-                    ) else folder_result.risk_level
+                    risk = None
+                    try:
+                        if hasattr(folder_result, 'followup_check') and folder_result.followup_check:
+                            followup = folder_result.followup_check
+                            if followup.doctor_risk_level and followup.doctor_risk_level != '소견 대기':
+                                risk = followup.doctor_risk_level
+                    except Exception:
+                        pass  # followup_check가 없으면 무시
+                    
+                    # 의사 소견이 없으면 AI 위험도 사용
+                    if not risk:
+                        risk = folder_result.risk_level if hasattr(folder_result, 'risk_level') else '분석 대기'
                     
                     priority = risk_levels_priority.get(risk, 0)
                     if priority > max_priority:
@@ -564,7 +571,44 @@ class PatientsListView(APIView):
             if patient_id not in patients_dict:
                 # 최신 Results의 FollowUpCheck 가져오기
                 latest_result = patient_results.first()
-                latest_followup = latest_result.followup_check if latest_result and hasattr(latest_result, 'followup_check') else None
+                
+                # doctor_risk_level이 있고 '소견 대기'가 아닌 최신 followup_check 찾기
+                # 최신 업데이트 시간(last_updated_at)을 기준으로 가장 최근 소견 선택
+                latest_followup = None
+                latest_followup_with_note = None
+                latest_update_time = None
+                latest_update_time_with_note = None
+                
+                for result in patient_results:
+                    # hasattr로 안전하게 확인
+                    if hasattr(result, 'followup_check'):
+                        try:
+                            followup = result.followup_check
+                            if followup:
+                                # doctor_risk_level이 있고 '소견 대기'가 아닌 경우
+                                if followup.doctor_risk_level and followup.doctor_risk_level != '소견 대기':
+                                    update_time = followup.last_updated_at if hasattr(followup, 'last_updated_at') else None
+                                    
+                                    # doctor_note가 있는 경우 우선 선택 (가장 최신 것)
+                                    if followup.doctor_note and followup.doctor_note.strip():
+                                        if latest_update_time_with_note is None or (update_time and update_time > latest_update_time_with_note):
+                                            latest_followup_with_note = followup
+                                            latest_update_time_with_note = update_time
+                                    
+                                    # doctor_note가 없어도 최신 것 선택
+                                    if latest_update_time is None or (update_time and update_time > latest_update_time):
+                                        latest_followup = followup
+                                        latest_update_time = update_time
+                        except Exception:
+                            # followup_check가 없는 경우 무시
+                            continue
+                
+                # doctor_note가 있는 것을 우선 사용, 없으면 doctor_risk_level만 있는 것 사용
+                if latest_followup_with_note:
+                    latest_followup = latest_followup_with_note
+                elif latest_followup is None:
+                    # doctor_risk_level이 없으면 최신 followup_check 사용
+                    latest_followup = latest_result.followup_check if latest_result and hasattr(latest_result, 'followup_check') else None
                 
                 # 최신 AI 위험도 가져오기
                 latest_ai_risk = latest_result.risk_level if latest_result else None
@@ -601,38 +645,15 @@ class PatientsListView(APIView):
                     'sex': patient_sex,
                     'age': patient_age,
                     'ai_risk_level': latest_ai_risk,
-                    'latest_note': latest_followup.doctor_note if latest_followup and latest_followup.doctor_note else None,
+                    'latest_note': latest_followup.doctor_note if latest_followup and latest_followup.doctor_note and latest_followup.doctor_note.strip() else None,
                     'has_attention': latest_followup and latest_followup.doctor_risk_level == '즉시 주의' if latest_followup else False,
                     'doctor_risk_level': latest_followup.doctor_risk_level if latest_followup and latest_followup.doctor_risk_level else None,
                     'needs_review': latest_followup is None or (latest_followup.doctor_risk_level == '소견 대기' if latest_followup else True),
                 }
             
-            # 환자별 최고 위험도 계산 (여러 Results가 있는 경우)
-            for result in patient_results:
-                current_followup = getattr(result, 'followup_check', None)
-                current_risk = current_followup.doctor_risk_level if current_followup and current_followup.doctor_risk_level and current_followup.doctor_risk_level != '소견 대기' else None
-                
-                # 위험도 우선순위
-                risk_priority = {
-                    '즉시 주의': 3,
-                    '경과 관찰': 2,
-                    '정상': 1,
-                    '소견 대기': 0,
-                }
-                
-                # 최고 위험도 업데이트
-                if current_risk:
-                    existing_risk = patients_dict[patient_id].get('doctor_risk_level')
-                    existing_priority = risk_priority.get(existing_risk, 0) if existing_risk else 0
-                    current_priority = risk_priority.get(current_risk, 0)
-                    
-                    if current_priority > existing_priority:
-                        patients_dict[patient_id]['doctor_risk_level'] = current_risk
-                        patients_dict[patient_id]['has_attention'] = current_risk == '즉시 주의'
-                
-                # 소견 미작성 여부 업데이트
-                if current_followup is None or (current_followup.doctor_risk_level == '소견 대기' if current_followup else True):
-                    patients_dict[patient_id]['needs_review'] = True
+            # 최신 소견을 이미 설정했으므로, 최고 위험도 계산 로직 제거
+            # 대신 최신 소견의 위험도를 그대로 사용
+            # (이미 latest_followup에서 최신 소견을 선택했으므로 추가 계산 불필요)
         
         # 최종 정리: 소견 필요 여부를 의사 판정 기준으로 다시 계산
         for patient_data in patients_dict.values():
@@ -756,18 +777,53 @@ class DoctorDashboardMainView(APIView):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
-            # 3. 쿼리 로직 수정: 의사에게 할당된 환자들의 모든 진단 결과 조회
+            # 3. 쿼리 로직 수정: 의사에게 할당된 환자들의 진단 결과 조회
             print(f"[DoctorDashboardMainView] 쿼리 시작: doctor_id={doctor_id}")
             # 의사에게 할당된 환자들의 모든 진단 결과 조회 (FollowUpCheck 유무와 관계없이)
-            doctor_assigned_results = Results.objects.filter(
+            all_results = Results.objects.filter(
                 photo__user__doctor=doctor_record  # 의사에게 할당된 환자들의 진단 결과
-            ).select_related('photo__user', 'disease', 'followup_check').order_by('-analysis_date')[:5]
-            print(f"[DoctorDashboardMainView] 쿼리 결과 개수: {doctor_assigned_results.count()}")
+            ).select_related('photo__user', 'disease', 'followup_check').order_by('-analysis_date')
+            print(f"[DoctorDashboardMainView] 전체 쿼리 결과 개수: {all_results.count()}")
+
+            # 3-1. 주의가 필요한 환자 필터링 (최대 5개)
+            # 의사 위험도가 '즉시 주의'이거나, 의사 소견에 '즉시 주의'가 포함된 경우
+            attention_results = []
+            for result in all_results:
+                # followup_check가 있는지 안전하게 확인
+                try:
+                    followup_check = result.followup_check
+                    doctor_risk_level = followup_check.doctor_risk_level if followup_check else None
+                    doctor_note = followup_check.doctor_note if followup_check else ''
+                except Exception:
+                    doctor_risk_level = None
+                    doctor_note = ''
+                
+                if doctor_risk_level == '즉시 주의' or (doctor_note and '즉시 주의' in doctor_note):
+                    attention_results.append(result)
+                    if len(attention_results) >= 5:
+                        break
+            
+            # 3-2. 소견작성 필요 환자 필터링 (최대 5개)
+            # 소견이 없거나 소견 대기 상태인 경우
+            need_opinion_results = []
+            for result in all_results:
+                # followup_check가 있는지 안전하게 확인
+                try:
+                    followup_check = result.followup_check
+                    has_opinion = followup_check and followup_check.doctor_note and followup_check.doctor_risk_level != '소견 대기'
+                except Exception:
+                    has_opinion = False
+                
+                if not has_opinion:
+                    need_opinion_results.append(result)
+                    if len(need_opinion_results) >= 5:
+                        break
 
             # 🔴 DoctorCardSerializer를 사용하여 환자 정보 및 증상을 포함하여 직렬화합니다.
             try:
-                history_data = DoctorCardSerializer(doctor_assigned_results, many=True, context={'request': request}).data                
-                print(f"[DoctorDashboardMainView] 시리얼라이즈 완료: {len(history_data)}개 항목")
+                attention_data = DoctorCardSerializer(attention_results, many=True, context={'request': request}).data
+                need_opinion_data = DoctorCardSerializer(need_opinion_results, many=True, context={'request': request}).data
+                print(f"[DoctorDashboardMainView] 시리얼라이즈 완료: attention={len(attention_data)}개, need_opinion={len(need_opinion_data)}개")
             except Exception as e:
                 print(f"[DoctorDashboardMainView] Serializer Error: {type(e).__name__}: {str(e)}")
                 import traceback
@@ -777,27 +833,54 @@ class DoctorDashboardMainView(APIView):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
-            # 2. 요약 정보 (즉시 주의 건수 계산)
-            #    - 의사 소견(doctor_risk_level)이 '즉시 주의'인 경우만 계산
+            # 2. 요약 정보 계산
+            total_assigned_count = Results.objects.filter(
+                photo__user__doctor=doctor_record
+            ).count()
+            
+            # 즉시 주의 건수 (의사 소견이 '즉시 주의'인 경우)
             immediate_attention_count = Results.objects.filter(
                 photo__user__doctor=doctor_record,
                 followup_check__doctor_risk_level='즉시 주의'
             ).count()
-            total_assigned_count = Results.objects.filter(
-                photo__user__doctor=doctor_record
+            
+            # 소견 작성 완료 건수 (소견이 있고 '소견 대기'가 아닌 경우)
+            completed_opinions_count = Results.objects.filter(
+                photo__user__doctor=doctor_record,
+                followup_check__doctor_note__isnull=False,
+                followup_check__doctor_risk_level__isnull=False
+            ).exclude(
+                followup_check__doctor_risk_level='소견 대기'
             ).count()
-            print(f"[DoctorDashboardMainView] 요약 정보: total={total_assigned_count}, immediate_attention={immediate_attention_count}")
+            
+            # 소견작성 필요 건수 (전체 기준으로 정확하게 계산)
+            # 소견이 없거나 소견 대기 상태인 경우
+            need_opinion_count = 0
+            for result in all_results:
+                try:
+                    followup_check = result.followup_check
+                    has_opinion = followup_check and followup_check.doctor_note and followup_check.doctor_risk_level != '소견 대기'
+                except Exception:
+                    has_opinion = False
+                
+                if not has_opinion:
+                    need_opinion_count += 1
+            
+            print(f"[DoctorDashboardMainView] 요약 정보: total={total_assigned_count}, immediate_attention={immediate_attention_count}, completed_opinions={completed_opinions_count}, need_opinion={need_opinion_count}")
 
             summary_data = {
                 'total_assigned_count': total_assigned_count,
                 'immediate_attention_count': immediate_attention_count,
+                'completed_opinions_count': completed_opinions_count,
+                'need_opinion_count': need_opinion_count,  # 소견작성 필요 건수 추가
             }
 
-            # 3. 최종 응답 (DoctorDashboardSerializer 구조 사용)
+            # 3. 최종 응답 (각 섹션별로 최대 5개씩 반환)
             print(f"[DoctorDashboardMainView] 응답 생성 완료")
             return Response({
                 'summary': summary_data,
-                'history': history_data
+                'attention_history': attention_data,  # 주의가 필요한 환자 최대 5개
+                'need_opinion_history': need_opinion_data  # 소견작성 필요 환자 최대 5개
             })
         except Exception as e:
             print(f"[DoctorDashboardMainView] FATAL ERROR: {type(e).__name__}: {str(e)}")

@@ -232,34 +232,35 @@ const HistoryDetailPage: React.FC = () => {
 
       <h2 className="text-lg font-bold mb-3 text-left">질환 목록</h2>
 
-      {/* 수정/삭제 탭 */}
-      <div className="flex items-center justify-end mb-4">
-        <div className="flex gap-2 border-b border-gray-200">
-          <button
-            onClick={() => {
-              setIsEditMode(false);
-              setSelectedRecords(new Set());
-            }}
-            className={`px-4 py-2 text-sm font-medium whitespace-nowrap ${
-              !isEditMode
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            조회
-          </button>
-          <button
-            onClick={() => setIsEditMode(true)}
-            className={`px-4 py-2 text-sm font-medium whitespace-nowrap ${
-              isEditMode
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            수정/삭제
-          </button>
-        </div>
-        {isEditMode && (
+      {/* 수정/삭제 탭 (일반 사용자만 표시, 의사는 조회만 가능) */}
+      {!userId && (
+        <div className="flex items-center justify-end mb-4">
+          <div className="flex gap-2 border-b border-gray-200">
+            <button
+              onClick={() => {
+                setIsEditMode(false);
+                setSelectedRecords(new Set());
+              }}
+              className={`px-4 py-2 text-sm font-medium whitespace-nowrap ${
+                !isEditMode
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              조회
+            </button>
+            <button
+              onClick={() => setIsEditMode(true)}
+              className={`px-4 py-2 text-sm font-medium whitespace-nowrap ${
+                isEditMode
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              수정/삭제
+            </button>
+          </div>
+          {isEditMode && (
           <div className="flex gap-2 ml-4">
             <button
               onClick={() => {
@@ -318,8 +319,9 @@ const HistoryDetailPage: React.FC = () => {
               </button>
             )}
           </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       <div className="space-y-3">
         {records.length > 0 ? (
@@ -336,7 +338,8 @@ const HistoryDetailPage: React.FC = () => {
               <div
                 key={r.id}
                 onClick={() => {
-                  if (!isEditMode) {
+                  // 의사는 조회만 가능하므로 항상 클릭 가능 (isEditMode가 false이거나 userId가 있으면)
+                  if (!userId || !isEditMode) {
                     // 일반인용인지 의사용인지 확인
                     const isDoctorPath = window.location.pathname.includes('/doctor/');
                     const basePath = isDoctorPath ? '/dashboard/doctor/history' : '/dashboard/history';
@@ -353,11 +356,11 @@ const HistoryDetailPage: React.FC = () => {
                   }
                 }}
                 className={`flex items-center bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition gap-3 ${
-                  isEditMode ? 'cursor-default' : 'cursor-pointer'
+                  (userId || !isEditMode) ? 'cursor-pointer' : 'cursor-default'
                 } ${selectedRecords.has(r.id) ? 'ring-2 ring-blue-500' : ''}`}
               >
-                {/* 체크박스 (수정 모드일 때만) */}
-                {isEditMode && (
+                {/* 체크박스 (수정 모드일 때만, 의사는 사용 불가) */}
+                {!userId && isEditMode && (
                   <input
                     type="checkbox"
                     checked={selectedRecords.has(r.id)}
@@ -435,16 +438,16 @@ const HistoryDetailPage: React.FC = () => {
                   ) : (
                     <h3 
                       className={`text-sm font-semibold text-gray-900 mb-1 truncate ${
-                        isEditMode ? 'cursor-pointer hover:text-blue-600 underline' : ''
+                        !userId && isEditMode ? 'cursor-pointer hover:text-blue-600 underline' : ''
                       }`}
                       onClick={(e) => {
-                        if (isEditMode) {
+                        if (!userId && isEditMode) {
                           e.stopPropagation();
                           setEditingFileName(r.id);
                           setEditFileName(r.photo.file_name || '');
                         }
                       }}
-                      title={isEditMode ? '클릭하여 파일명 수정' : ''}
+                      title={!userId && isEditMode ? '클릭하여 파일명 수정' : ''}
                     >
                       {r.disease?.name_ko || r.photo.file_name || '분석 대기 중'}
                     </h3>

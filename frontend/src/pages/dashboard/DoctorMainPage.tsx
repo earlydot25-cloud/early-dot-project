@@ -77,11 +77,14 @@ interface DiagnosisResult {
 interface DoctorSummaryData {
   total_assigned_count: number;
   immediate_attention_count: number;
+  completed_opinions_count: number;
+  need_opinion_count: number;  // 소견작성 필요 건수 (전체 기준)
 }
 
 interface DoctorDashboardData {
   summary: DoctorSummaryData;
-  history: DiagnosisResult[];
+  attention_history: DiagnosisResult[];  // 주의가 필요한 환자 최대 5개
+  need_opinion_history: DiagnosisResult[];  // 소견작성 필요 환자 최대 5개
 }
 
 // -----------------------------------
@@ -101,9 +104,10 @@ const VenusIcon: IconCmp = (props: IconBaseProps) => <FaVenus {...props} />;
 // -----------------------------------
 interface PatientCardProps {
   data: DiagnosisResult;
+  isPagination?: boolean;
 }
 
-const PatientCard: React.FC<PatientCardProps> = ({ data }) => {
+const PatientCard: React.FC<PatientCardProps> = ({ data, isPagination = false }) => {
   const navigate = useNavigate();
 
   const handleViewOpinion = () => {
@@ -131,12 +135,25 @@ const PatientCard: React.FC<PatientCardProps> = ({ data }) => {
     symptomTags.push({ text: `상처로 인한 감염(예)`, color: 'bg-red-100 text-red-700' });
   }
   if (data.photo.symptoms_pain) {
-    const painLevel = data.photo.symptoms_pain === '심함' ? '심함' : data.photo.symptoms_pain;
-    symptomTags.push({ text: `통증(${painLevel})`, color: 'bg-red-100 text-red-700' });
+    const painLevel = data.photo.symptoms_pain;
+    const isPainSevere = painLevel === '심함' || painLevel === '심각' || painLevel === '있음';
+    const isPainModerate = painLevel === '약간~보통' || painLevel === '약간' || painLevel === '보통';
+    let painColor = 'bg-gray-200 text-gray-700';
+    if (isPainSevere) {
+      painColor = 'bg-red-100 text-red-700';
+    } else if (isPainModerate) {
+      painColor = 'bg-orange-100 text-orange-700'; // 약간~보통, 보통은 주황색
+    }
+    symptomTags.push({ 
+      text: `통증(${painLevel})`, 
+      color: painColor
+    });
   }
   if (data.photo.symptoms_itch) {
-    const itchLevel = data.photo.symptoms_itch === '보통' ? '보통' : data.photo.symptoms_itch;
-    symptomTags.push({ text: `가려움(${itchLevel})`, color: 'bg-yellow-100 text-yellow-700' });
+    const itchLevel = data.photo.symptoms_itch;
+    const isItchNone = itchLevel === '없음' || itchLevel === 'None' || itchLevel === 'N';
+    const itchColor = isItchNone ? 'bg-gray-200 text-gray-700' : 'bg-gray-200 text-gray-700';
+    symptomTags.push({ text: `가려움(${itchLevel})`, color: itchColor });
   }
   
   // 가족력 태그 (Y/N, yes/no, 있음/없음, 예/아니오 등 다양한 형식 처리)
@@ -167,31 +184,31 @@ const PatientCard: React.FC<PatientCardProps> = ({ data }) => {
     ? <VenusIcon className="text-pink-500" size={14} />
     : <MarsIcon className="text-blue-500" size={14} />;
 
-  return (
-    <div className={`p-4 border rounded-lg shadow-sm bg-white mb-4 ${isAttentionNeeded ? 'border-red-400 shadow-red-100' : 'border-gray-200'}`}>
+    return (
+    <div className={`p-4 border rounded-lg shadow-sm bg-white mb-4 border-gray-200`}>
       <div className="flex gap-4">
         {/* 왼쪽: 환부 이미지 */}
         <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100 border border-gray-200">
-          {data.photo && data.photo.upload_storage_path ? (
-            <img
-              src={resolveMediaUrl(data.photo.upload_storage_path)}
-              alt={`${data.disease.name_ko} 이미지`}
-              className="w-full h-full object-cover"
+                            {data.photo && data.photo.upload_storage_path ? (
+                                <img
+                                    src={resolveMediaUrl(data.photo.upload_storage_path)}
+                                    alt={`${data.disease.name_ko} 이미지`}
+                                    className="w-full h-full object-cover"
               onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-                const target = e.target as HTMLImageElement;
-                target.style.display = 'none';
-                const parent = target.parentElement;
-                if (parent) {
+                                        const target = e.target as HTMLImageElement;
+                                        target.style.display = 'none';
+                                        const parent = target.parentElement;
+                                        if (parent) {
                   parent.innerHTML = '<div class="w-full h-full flex items-center justify-center text-xs text-gray-500 bg-gray-100">환부 이미지</div>';
-                }
-              }}
-            />
-          ) : (
+                                        }
+                                    }}
+                                />
+                            ) : (
             <div className="w-full h-full flex items-center justify-center text-xs text-gray-500 bg-gray-100">
               환부 이미지
-            </div>
-          )}
-        </div>
+                                </div>
+                            )}
+                        </div>
 
         {/* 중간: 환자 정보 */}
         <div className="flex-1 min-w-0">
@@ -199,57 +216,57 @@ const PatientCard: React.FC<PatientCardProps> = ({ data }) => {
             <div className="flex items-center gap-1 mb-1">
               {genderIcon}
               <span className="text-lg font-bold text-gray-900">{data.patient.name}</span>
-            </div>
-          </div>
-          
+                        </div>
+                    </div>
+
           <p className="text-base font-semibold text-gray-800 mb-2">{data.disease.name_ko}</p>
           {data.photo.body_part && (
             <p className="text-sm text-gray-600">위치: {data.photo.body_part}</p>
           )}
-        </div>
+                </div>
 
         {/* 오른쪽: 위험도 및 버튼 */}
         <div className="flex flex-col items-end flex-shrink-0">
           <div className="text-center mb-3">
             <div className="text-xs mb-1">
               <span className="text-gray-500">- AI -</span>
-              <p className={`font-semibold ${data.risk_level === '높음' ? 'text-red-600' : data.risk_level === '보통' ? 'text-yellow-600' : 'text-green-600'}`}>
+              <p className={`font-semibold ${data.risk_level === '높음' ? 'text-red-600' : data.risk_level === '보통' ? 'text-orange-600' : 'text-green-600'}`}>
                 {data.risk_level}
               </p>
-            </div>
-            {hasDoctorNote && (
+                    </div>
+                    {hasDoctorNote && (
               <div className="text-xs mt-2">
                 <span className="text-gray-500">- 의사 -</span>
-                <p className={`font-semibold ${finalRiskLevel === '즉시 주의' ? 'text-red-600' : 'text-yellow-600'}`}>
+                <p className={`font-semibold ${finalRiskLevel === '즉시 주의' ? 'text-red-600' : 'text-orange-600'}`}>
                   {finalRiskLevel}
                 </p>
-              </div>
-            )}
+                        </div>
+                    )}
           </div>
-          
-          <button
+
+                    <button
             onClick={handleViewOpinion}
             className="py-1.5 px-3 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition duration-150"
-          >
+                    >
             소견 열람
-          </button>
-        </div>
-      </div>
+                    </button>
+                </div>
+            </div>
 
       {/* 날짜 정보 (선 위) */}
       <div className="mt-3 mb-3">
-        <div className="text-xs text-gray-600 space-y-1 pl-8">
+        <div className={`text-xs text-gray-600 space-y-1 ${isPagination ? 'pl-8' : ''}`}>
           <p>최초 생성 일자: {formatDate(data.photo.capture_date)}</p>
           <p>마지막 수정 일자: {formatDate(data.analysis_date)}</p>
         </div>
-      </div>
+            </div>
 
       {/* 하단: 나이, 가족력, 발병시기, 증상 태그 (선 아래) */}
       <div className="pt-3 border-t border-gray-200">
         <div className="flex flex-wrap gap-2">
           {/* 나이 태그 */}
-          {data.patient.calculated_age && (
-            <span className="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-700">
+          {data.patient.calculated_age !== null && data.patient.calculated_age !== undefined && (
+            <span className="px-2 py-1 text-xs rounded-full bg-sky-100 text-sky-700">
               만 {data.patient.calculated_age}세
             </span>
           )}
@@ -272,10 +289,10 @@ const PatientCard: React.FC<PatientCardProps> = ({ data }) => {
               {tag.text}
             </span>
           ))}
+            </div>
         </div>
-      </div>
     </div>
-  );
+);
 };
 
 // -----------------------------------
@@ -293,48 +310,48 @@ const DoctorMainPage: React.FC = () => {
   // 🔴 API 호출 로직
   useEffect(() => {
     const fetchDoctorData = async () => {
-      const API_URL = '/api/dashboard/doctor/main/';
+        const API_URL = '/api/dashboard/doctor/main/';
 
-      try {
-        const token = localStorage.getItem('accessToken');
-        if (!token) {
-          setError('인증 토큰이 없습니다. 로그인이 필요합니다.');
-          setIsLoading(false);
+        try {
+                const token = localStorage.getItem('accessToken');
+                if (!token) {
+                    setError('인증 토큰이 없습니다. 로그인이 필요합니다.');
+                    setIsLoading(false);
           return;
-        }
+                }
 
-        const response = await axios.get<DoctorDashboardData>(API_URL, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+                const response = await axios.get<DoctorDashboardData>(API_URL, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
 
-        setData(response.data);
+                setData(response.data);
       } catch (err: any) {
-        console.error("Failed to fetch doctor dashboard data:", err);
+            console.error("Failed to fetch doctor dashboard data:", err);
 
-        if (err.response) {
-          console.error("Axios error response status:", err.response.status);
-          console.error("Axios error response data:", err.response.data);
-        }
+            if (err.response) {
+                 console.error("Axios error response status:", err.response.status);
+                 console.error("Axios error response data:", err.response.data);
+            }
 
-        const errorStatus = err.response?.status;
+            const errorStatus = err.response?.status;
 
-        if (errorStatus === 403) {
+            if (errorStatus === 403) {
           navigate('/dashboard/main');
-          return;
-        }
+                return;
+            }
 
-        if (errorStatus === 401) {
-          setError('세션이 만료되었거나 인증에 실패했습니다. 다시 로그인해주세요.');
-          navigate('/login');
-          return;
-        }
+            if (errorStatus === 401) {
+                setError('세션이 만료되었거나 인증에 실패했습니다. 다시 로그인해주세요.');
+                navigate('/login');
+                return;
+            }
 
-        setError('의사 대시보드 데이터를 불러오는 데 실패했습니다. 서버 상태 및 인증을 확인하세요.');
-      } finally {
-        setIsLoading(false);
-      }
+            setError('의사 대시보드 데이터를 불러오는 데 실패했습니다. 서버 상태 및 인증을 확인하세요.');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     fetchDoctorData();
@@ -355,29 +372,12 @@ const DoctorMainPage: React.FC = () => {
   }
 
   const summary = data.summary;
-  const history = data.history;
+  // 백엔드에서 이미 필터링된 데이터 사용 (최대 5개씩)
+  const attentionPatients = (data.attention_history || []).slice(0, 5);
+  const needOpinionPatients = (data.need_opinion_history || []).slice(0, 5);
 
-  // 주의가 필요한 환자 (즉시 주의 또는 높음 위험도)
-  const attentionPatients = history.filter((item: DiagnosisResult) => {
-    const finalRisk = item.followup_check?.doctor_risk_level === '즉시 주의' || 
-                     item.risk_level === '높음';
-    return finalRisk;
-  });
-
-  // 소견 작성이 필요한 환자 (소견이 없거나 소견 대기 상태)
-  const needOpinionPatients = history.filter((item: DiagnosisResult) => {
-    const hasOpinion = item.followup_check && 
-                      item.followup_check.doctor_note && 
-                      item.followup_check.doctor_risk_level !== '소견 대기';
-    return !hasOpinion;
-  });
-
-  // 소견 작성 완료 건수 계산
-  const completedOpinions = history.filter((item: DiagnosisResult) => {
-    return item.followup_check && 
-           item.followup_check.doctor_note && 
-           item.followup_check.doctor_risk_level !== '소견 대기';
-  }).length;
+  // 소견 작성 완료 건수 (백엔드에서 계산된 값 사용)
+  const completedOpinions = summary.completed_opinions_count || 0;
 
   const handleViewAllPatients = () => {
     navigate('/dashboard/doctor/history');
@@ -421,7 +421,7 @@ const DoctorMainPage: React.FC = () => {
       </section>
 
       {/* 2. 탭 네비게이션 */}
-      <section>
+       <section>
         <div className="flex gap-4 border-b border-gray-200 mb-3">
           <button
             onClick={() => setActiveTab('attention')}
@@ -441,9 +441,9 @@ const DoctorMainPage: React.FC = () => {
                 : 'text-red-600 hover:text-red-700'
             }`}
           >
-            소견작성 필요 {needOpinionPatients.length > 0 && `+${needOpinionPatients.length}건`}
+            소견작성 필요 {summary.need_opinion_count > 0 && `+${summary.need_opinion_count}건`}
           </button>
-        </div>
+          </div>
         <div className="mb-4 flex justify-end">
           <button
             onClick={handleViewAllPatients}
@@ -463,7 +463,7 @@ const DoctorMainPage: React.FC = () => {
                   {currentPatient && (
                     <>
                       {/* 환자 카드 */}
-                      <PatientCard key={currentPatient.id} data={currentPatient} />
+                      <PatientCard key={currentPatient.id} data={currentPatient} isPagination={true} />
                       
                       {/* 오버레이 네비게이션 버튼 */}
                       <div className="absolute inset-0 pointer-events-none flex items-center justify-between px-1">
@@ -515,7 +515,7 @@ const DoctorMainPage: React.FC = () => {
               ) : (
                 // 일반 모드 (3개 미만일 때)
                 displayedPatients.map((item: DiagnosisResult) => (
-                  <PatientCard key={item.id} data={item} />
+                  <PatientCard key={item.id} data={item} isPagination={false} />
                 ))
               )}
             </>

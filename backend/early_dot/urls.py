@@ -18,7 +18,7 @@ Including another URLconf
 # early_dot/urls.py
 from django.contrib import admin
 from django.urls import path, include
-from users.views import UserSignupView, UserProfileView
+from users.views import UserSignupView, UserProfileView, RemovePatientView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from django.conf import settings
 from django.conf.urls.static import static
@@ -26,11 +26,10 @@ from django.conf.urls.static import static
 urlpatterns = [
     path("admin/", admin.site.urls),
     # 회원
-    path("api/auth/signup/",  UserSignupView.as_view(),   name="signup"),
-    path("api/auth/profile/", UserProfileView.as_view(),  name="profile"),
-    path("api/auth/login/",   TokenObtainPairView.as_view(), name="token_obtain_pair"),
-    path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path("api/auth/", include('users.urls')),  # users 앱 URL 포함 (signup, login, profile 등)
     path('api/diagnosis/', include('diagnosis.urls')),  # diagnosis 앱 (진단 업로드)
     path('api/dashboard/', include('dashboard.urls')),  # dashboard 앱 (기록 조회)
     path('api/admin_tools/', include('admin_tools.urls')),  # admin_tools 앱 (관리자)
+    # 의사 전용: 담당 환자 제거
+    path('api/doctors/patients/<int:patient_id>/remove/', RemovePatientView.as_view(), name="remove_patient"),
  ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

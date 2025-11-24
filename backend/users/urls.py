@@ -15,3 +15,4 @@ urlpatterns = [
 ]
 
 # 최종 URL 예시: /api/auth/login/
+# 의사 전용 환자 제거는 early_dot/urls.py에서 직접 연결됨: /api/doctors/patients/<int:patient_id>/remove/
