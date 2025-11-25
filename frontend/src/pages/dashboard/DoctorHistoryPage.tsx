@@ -448,7 +448,7 @@ const DoctorHistoryPage: React.FC = () => {
   }
 
   return (
-    <div className="w-full bg-gradient-to-b from-gray-50 to-white px-4 py-5 min-h-screen">
+    <div className="w-full bg-gradient-to-b from-gray-50 to-white px-4 py-5 min-h-screen max-w-full md:max-w-6xl lg:max-w-7xl xl:max-w-[1400px] mx-auto">
       {/* 헤더 */}
       {viewMode !== 'patients' && (
         <button

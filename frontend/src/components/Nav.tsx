@@ -74,7 +74,8 @@ const Nav: React.FC = () => {
       {/* 375px 프레임 가운데 정렬 + 좌우 패딩 제거로 "왼쪽 끝" 붙이기 */}
       <div
         style={{
-          width: 'min(100%, 375px)',
+          width: '100%',
+          maxWidth: '375px',
           margin: '0 auto',
           padding: '10px 16px', // 좌우 패딩 추가
           display: 'flex',

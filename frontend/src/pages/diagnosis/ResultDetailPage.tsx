@@ -262,7 +262,7 @@ const ResultDetailPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto bg-gray-50 min-h-screen px-4 py-5">
+      <div className="w-full max-w-full mx-auto bg-gray-50 min-h-screen px-4 py-5">
         <div className="text-center text-gray-500 mt-10">데이터 불러오는 중...</div>
       </div>
     );
@@ -270,7 +270,7 @@ const ResultDetailPage: React.FC = () => {
 
   if (!data) {
     return (
-      <div className="w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto bg-gray-50 min-h-screen px-4 py-5">
+      <div className="w-full max-w-full mx-auto bg-gray-50 min-h-screen px-4 py-5">
         <button
           onClick={() => navigate(-1)}
           className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
@@ -330,7 +330,7 @@ const ResultDetailPage: React.FC = () => {
     .sort((a, b) => getSymptomSeverity(b.value) - getSymptomSeverity(a.value));
 
   return (
-    <div className="w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto bg-gray-50 min-h-screen px-4 py-5 pb-24">
+    <div className="w-full max-w-full mx-auto bg-gray-50 min-h-screen px-4 py-5 pb-24">
       {/* 헤더: 폴더명 - 파일명 */}
       <div className="mb-4 flex items-center justify-between">
         <button

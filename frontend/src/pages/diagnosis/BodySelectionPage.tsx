@@ -86,64 +86,66 @@ const BodySelectionPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
-      {/* 제목 섹션 */}
-      <div className="px-4 pt-6 pb-4">
-        <h2 className="text-xl font-bold text-gray-900 mb-1">신체 부위 선택</h2>
-        <p className="text-sm text-gray-600">검사할 신체 부위를 선택하세요.</p>
-      </div>
+      <div className="max-w-md mx-auto">
+        {/* 제목 섹션 */}
+        <div className="px-4 pt-6 pb-4">
+          <h2 className="text-xl font-bold text-gray-900 mb-1 text-center">신체 부위 선택</h2>
+          <p className="text-sm text-gray-600 text-center">검사할 신체 부위를 선택하세요.</p>
+        </div>
 
-      {/* 부위 선택 버튼 그리드 */}
-      <div className="px-4 pb-4">
-        <div className="grid grid-cols-2 gap-3">
-          {ALL_PARTS.map((p) => (
+        {/* 부위 선택 버튼 그리드 */}
+        <div className="px-4 pb-4">
+          <div className="grid grid-cols-2 gap-3">
+            {ALL_PARTS.map((p) => (
+              <button
+                key={p}
+                onClick={() => handlePick(p)}
+                className={`
+                  px-4 py-5 rounded-xl text-center font-medium transition-all border-2
+                  ${selected === p 
+                    ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-md' 
+                    : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:shadow-sm'
+                  }
+                `}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 선택된 부위 표시 */}
+        {selected && (
+          <div className="px-4 pb-4">
+            <div className="text-sm text-gray-500 text-center">
+              선택된 부위: <span className="font-semibold text-gray-900">{selected}</span>
+            </div>
+          </div>
+        )}
+
+        {/* 하단 네비게이션 버튼 */}
+        <div className="px-4 pb-4">
+          <div className="flex justify-between gap-3">
             <button
-              key={p}
-              onClick={() => handlePick(p)}
+              onClick={() => window.history.back()}
+              className="flex-1 px-4 py-3 rounded-lg border border-gray-300 bg-white text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+            >
+              이전
+            </button>
+            <button
+              onClick={goNext}
+              disabled={!selected}
               className={`
-                px-4 py-5 rounded-xl text-center font-medium transition-all border-2
-                ${selected === p 
-                  ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-md' 
-                  : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:shadow-sm'
+                flex-1 px-4 py-3 rounded-lg font-medium transition-colors
+                ${selected 
+                  ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md' 
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 }
               `}
             >
-              {p}
+              다음
             </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 선택된 부위 표시 */}
-      {selected && (
-        <div className="px-4 pb-4">
-          <div className="text-sm text-gray-500 text-center">
-            선택된 부위: <span className="font-semibold text-gray-900">{selected}</span>
           </div>
-        </div>
-      )}
-
-      {/* 하단 네비게이션 버튼 */}
-      <div className="px-4 pb-4">
-        <div className="flex justify-between gap-3">
-          <button
-            onClick={() => window.history.back()}
-            className="flex-1 px-4 py-3 rounded-lg border border-gray-300 bg-white text-gray-700 font-medium hover:bg-gray-50 transition-colors"
-          >
-            이전
-          </button>
-          <button
-            onClick={goNext}
-            disabled={!selected}
-            className={`
-              flex-1 px-4 py-3 rounded-lg font-medium transition-colors
-              ${selected 
-                ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }
-            `}
-          >
-            다음
-          </button>
         </div>
       </div>
 
