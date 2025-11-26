@@ -89,8 +89,8 @@ const BodySelectionPage: React.FC = () => {
       <div className="max-w-md mx-auto">
         {/* 제목 섹션 */}
         <div className="px-4 pt-6 pb-4">
-          <h2 className="text-xl font-bold text-gray-900 mb-1 text-center">신체 부위 선택</h2>
-          <p className="text-sm text-gray-600 text-center">검사할 신체 부위를 선택하세요.</p>
+          <h2 className="text-xl font-bold text-gray-900 mb-1 text-left">신체 부위 선택</h2>
+          <p className="text-sm text-gray-600 text-left">검사할 신체 부위를 선택하세요.</p>
         </div>
 
         {/* 부위 선택 버튼 그리드 */}

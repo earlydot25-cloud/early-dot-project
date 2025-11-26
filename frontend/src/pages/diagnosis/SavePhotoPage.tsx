@@ -318,243 +318,249 @@ const SavePhotoPage: React.FC = () => {
   };
 
   return (
-    <div className="py-4 relative">
-      {/* 로딩 오버레이 */}
-      {isSubmitting && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-             <div className="bg-white rounded-lg p-6 shadow-xl max-w-[300px] w-full mx-4">
-            <div className="flex flex-col items-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-              <p className="text-gray-700 text-center">수초 ~ 수분 소요됩니다.</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 제목 */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">[Diagnosis] 2단계: 사진 저장</h2>
-      </div>
-
-      {/* 미리보기 카드 */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6 shadow-sm">
-        <div className="flex gap-4 mb-4">
-          <div className="flex-1 h-48 bg-gray-900 rounded-lg overflow-hidden border border-gray-800">
-            {previewUrl ? (
-              <img 
-                src={previewUrl} 
-                alt="preview" 
-                className="w-full h-full object-cover" 
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
-                미리보기가 없습니다
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+      <div className="max-w-md mx-auto">
+        {/* 로딩 오버레이 */}
+        {isSubmitting && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 shadow-xl max-w-[300px] w-full mx-4">
+              <div className="flex flex-col items-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                <p className="text-gray-700 text-center">수초 ~ 수분 소요됩니다.</p>
               </div>
-            )}
-          </div>
-          <div className="flex flex-col gap-2">
-            <button 
-              onClick={handleRetake}
-              className="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
-            >
-              카메라 다시 촬영
-            </button>
-            <button 
-              onClick={handleRefreshFields}
-              className="px-4 py-2 rounded-lg border border-gray-300 bg-gray-50 text-gray-600 text-sm font-medium hover:bg-gray-100 transition-colors whitespace-nowrap"
-            >
-              기입 내역 새로고침
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 폼 카드 */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6 shadow-sm">
-        <div className="space-y-4">
-          {/* 기본 정보 */}
-          <div className="relative">
-            <label className="block text-sm font-medium text-gray-700 mb-2">폴더명</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={folderName}
-                onChange={(e) => setFolderName(e.target.value)}
-                placeholder="예) 김민준_25"
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              />
-              <button
-                type="button"
-                onClick={handleToggleFolderList}
-                className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-600 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                aria-label="폴더 목록 열기"
-              >
-                ☰
-              </button>
             </div>
-            {folderListVisible && (
-              <div className="absolute z-10 mt-2 w-full max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg">
-                {folderListLoading ? (
-                  <p className="px-4 py-3 text-sm text-gray-500">불러오는 중...</p>
-                ) : folderListError ? (
-                  <p className="px-4 py-3 text-sm text-red-500">{folderListError}</p>
-                ) : folderList.length === 0 ? (
-                  <p className="px-4 py-3 text-sm text-gray-500">폴더가 존재하지 않습니다.</p>
+          </div>
+        )}
+
+        {/* 제목 */}
+        <div className="px-4 pt-6 pb-4">
+          <h2 className="text-xl font-bold text-gray-900 mb-1 text-left">사진 저장</h2>
+        </div>
+
+        {/* 미리보기 카드 */}
+        <div className="px-4 pb-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4 shadow-sm">
+            <div className="flex gap-4 mb-4">
+              <div className="flex-1 h-48 bg-gray-900 rounded-lg overflow-hidden border border-gray-800">
+                {previewUrl ? (
+                  <img 
+                    src={previewUrl} 
+                    alt="preview" 
+                    className="w-full h-full object-cover" 
+                  />
                 ) : (
-                  <ul>
-                    {folderList.map((name) => (
-                      <li key={name}>
-                        <button
-                          type="button"
-                          onClick={() => handleSelectFolder(name)}
-                          className="w-full text-left px-4 py-2 text-sm hover:bg-blue-50"
-                        >
-                          {name}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
+                    미리보기가 없습니다
+                  </div>
                 )}
               </div>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">사진명</label>
-            <input
-              type="text"
-              value={fileName}
-              onChange={(e) => {
-                setFileNameTouched(true);
-                setFileName(e.target.value);
-              }}
-              placeholder="예) capture_123.jpg"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            />
-            <p className="text-xs text-gray-500 mt-1">확장자를 포함해 입력하거나 비워두면 자동 생성됩니다.</p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">신체부위</label>
-            <input
-              type="text"
-              value={bodyPart}
-              readOnly
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
-            />
-          </div>
-
-          {/* 증상 정보 */}
-          <div className="pt-2 border-t border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">증상 정보</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">가려움</label>
-                <select 
-                  value={itch} 
-                  onChange={(e) => setItch(e.target.value as any)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+              <div className="flex flex-col gap-2">
+                <button 
+                  onClick={handleRetake}
+                  className="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
                 >
-                  {SEVERITY.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">통증</label>
-                <select 
-                  value={pain} 
-                  onChange={(e) => setPain(e.target.value as any)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                  카메라 다시 촬영
+                </button>
+                <button 
+                  onClick={handleRefreshFields}
+                  className="px-4 py-2 rounded-lg border border-gray-300 bg-gray-50 text-gray-600 text-sm font-medium hover:bg-gray-100 transition-colors whitespace-nowrap"
                 >
-                  {SEVERITY.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">색변화</label>
-                <select 
-                  value={color} 
-                  onChange={(e) => setColor(e.target.value as any)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
-                >
-                  {SEVERITY.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">상처로 인한 감염</label>
-                <select 
-                  value={infection} 
-                  onChange={(e) => setInfection(e.target.value as any)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
-                >
-                  {SEVERITY.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">출혈</label>
-                <select 
-                  value={blood} 
-                  onChange={(e) => setBlood(e.target.value as any)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
-                >
-                  {SEVERITY.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">발병시기</label>
-                <select 
-                  value={onset} 
-                  onChange={(e) => setOnset(e.target.value as any)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
-                >
-                  {ONSET.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* 개인 정보 */}
-          <div className="pt-2 border-t border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">개인 정보</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">성별</label>
-                <select 
-                  value={sex} 
-                  onChange={(e) => setSex(e.target.value as any)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
-                >
-                  {SEX.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">생년월일</label>
-                <input
-                  type="date"
-                  value={birth}
-                  onChange={(e) => setBirth(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                />
+                  기입 내역 새로고침
+                </button>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* 제출 버튼 */}
-      <div>
-        <button 
-          onClick={onSubmit}
-          className="w-full py-4 rounded-xl bg-blue-600 text-white font-bold text-lg hover:bg-blue-700 transition-colors shadow-md"
-        >
-          제출하고 결과로 이동
-        </button>
+        {/* 폼 카드 */}
+        <div className="px-4 pb-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-6 mb-4 shadow-sm">
+            <div className="space-y-4">
+              {/* 기본 정보 */}
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-2">폴더명</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={folderName}
+                    onChange={(e) => setFolderName(e.target.value)}
+                    placeholder="예) 김민준_25"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleToggleFolderList}
+                    className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-600 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    aria-label="폴더 목록 열기"
+                  >
+                    ☰
+                  </button>
+                </div>
+                {folderListVisible && (
+                  <div className="absolute z-10 mt-2 w-full max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg">
+                    {folderListLoading ? (
+                      <p className="px-4 py-3 text-sm text-gray-500">불러오는 중...</p>
+                    ) : folderListError ? (
+                      <p className="px-4 py-3 text-sm text-red-500">{folderListError}</p>
+                    ) : folderList.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-gray-500">폴더가 존재하지 않습니다.</p>
+                    ) : (
+                      <ul>
+                        {folderList.map((name) => (
+                          <li key={name}>
+                            <button
+                              type="button"
+                              onClick={() => handleSelectFolder(name)}
+                              className="w-full text-left px-4 py-2 text-sm hover:bg-blue-50"
+                            >
+                              {name}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">사진명</label>
+                <input
+                  type="text"
+                  value={fileName}
+                  onChange={(e) => {
+                    setFileNameTouched(true);
+                    setFileName(e.target.value);
+                  }}
+                  placeholder="예) capture_123.jpg"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                />
+                <p className="text-xs text-gray-500 mt-1">확장자를 포함해 입력하거나 비워두면 자동 생성됩니다.</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">신체부위</label>
+                <input
+                  type="text"
+                  value={bodyPart}
+                  readOnly
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                />
+              </div>
+
+              {/* 증상 정보 */}
+              <div className="pt-2 border-t border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">증상 정보</h3>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">가려움</label>
+                    <select 
+                      value={itch} 
+                      onChange={(e) => setItch(e.target.value as any)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                    >
+                      {SEVERITY.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">통증</label>
+                    <select 
+                      value={pain} 
+                      onChange={(e) => setPain(e.target.value as any)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                    >
+                      {SEVERITY.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">색변화</label>
+                    <select 
+                      value={color} 
+                      onChange={(e) => setColor(e.target.value as any)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                    >
+                      {SEVERITY.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">상처로 인한 감염</label>
+                    <select 
+                      value={infection} 
+                      onChange={(e) => setInfection(e.target.value as any)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                    >
+                      {SEVERITY.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">출혈</label>
+                    <select 
+                      value={blood} 
+                      onChange={(e) => setBlood(e.target.value as any)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                    >
+                      {SEVERITY.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">발병시기</label>
+                    <select 
+                      value={onset} 
+                      onChange={(e) => setOnset(e.target.value as any)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                    >
+                      {ONSET.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* 개인 정보 */}
+              <div className="pt-2 border-t border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">개인 정보</h3>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">성별</label>
+                    <select 
+                      value={sex} 
+                      onChange={(e) => setSex(e.target.value as any)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                    >
+                      {SEX.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">생년월일</label>
+                    <input
+                      type="date"
+                      value={birth}
+                      onChange={(e) => setBirth(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 제출 버튼 */}
+        <div className="px-4 pb-4">
+          <button 
+            onClick={onSubmit}
+            className="w-full py-4 rounded-xl bg-blue-600 text-white font-bold text-lg hover:bg-blue-700 transition-colors shadow-md"
+          >
+            제출하고 결과로 이동
+          </button>
+        </div>
       </div>
     </div>
   );

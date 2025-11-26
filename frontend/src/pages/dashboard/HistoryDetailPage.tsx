@@ -118,6 +118,7 @@ const HistoryDetailPage: React.FC = () => {
   const [selectedRecords, setSelectedRecords] = useState<Set<number>>(new Set());
   const [editingFileName, setEditingFileName] = useState<number | null>(null);
   const [editFileName, setEditFileName] = useState<string>('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // ✅ 환자명 로드 (의사용일 때만)
   useEffect(() => {
@@ -276,42 +277,8 @@ const HistoryDetailPage: React.FC = () => {
             </button>
             {selectedRecords.size > 0 && (
               <button
-                onClick={async () => {
-                  if (!window.confirm(`선택한 ${selectedRecords.size}개의 파일을 삭제하시겠습니까?`)) {
-                    return;
-                  }
-
-                  try {
-                    const token = localStorage.getItem('accessToken');
-                    const response = await axios.request<{ deleted_count: number; errors?: string[] }>({
-                      method: 'DELETE',
-                      url: '/api/dashboard/records/bulk/delete/',
-                      headers: {
-                        Authorization: `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                      },
-                      data: {
-                        ids: Array.from(selectedRecords),
-                      } as any,
-                    });
-
-                    if (response.data.deleted_count > 0) {
-                      alert(`${response.data.deleted_count}개의 파일이 삭제되었습니다.`);
-                      // 목록 새로고침
-                      const params: any = { folder: folderName };
-                      if (userId) params.user = userId;
-                      const res = await axios.get<RecordItem[]>('/api/dashboard/records/', {
-                        params,
-                        headers: { Authorization: `Bearer ${token}` },
-                      });
-                      setRecords(res.data);
-                      setSelectedRecords(new Set());
-                      setIsEditMode(false);
-                    }
-                  } catch (err) {
-                    console.error('Delete error:', err);
-                    alert('삭제 중 오류가 발생했습니다.');
-                  }
+                onClick={() => {
+                  setShowDeleteModal(true);
                 }}
                 className="text-xs px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
               >
@@ -482,6 +449,67 @@ const HistoryDetailPage: React.FC = () => {
           </p>
         )}
       </div>
+
+      {/* 삭제 확인 모달 */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-5 max-w-[320px] w-full mx-4">
+            <h3 className="text-base font-bold text-gray-900 mb-3">파일 삭제 확인</h3>
+            <p className="text-sm text-gray-600 mb-5">
+              선택한 {selectedRecords.size}개의 파일을 삭제하시겠습니까?
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                }}
+                className="px-3 py-2 bg-gray-200 text-gray-700 text-sm rounded-md hover:bg-gray-300 transition duration-150"
+              >
+                취소
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const token = localStorage.getItem('accessToken');
+                    const response = await axios.request<{ deleted_count: number; errors?: string[] }>({
+                      method: 'DELETE',
+                      url: '/api/dashboard/records/bulk/delete/',
+                      headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                      },
+                      data: {
+                        ids: Array.from(selectedRecords),
+                      } as any,
+                    });
+
+                    if (response.data.deleted_count > 0) {
+                      setShowDeleteModal(false);
+                      alert(`${response.data.deleted_count}개의 파일이 삭제되었습니다.`);
+                      // 목록 새로고침
+                      const params: any = { folder: folderName };
+                      if (userId) params.user = userId;
+                      const res = await axios.get<RecordItem[]>('/api/dashboard/records/', {
+                        params,
+                        headers: { Authorization: `Bearer ${token}` },
+                      });
+                      setRecords(res.data);
+                      setSelectedRecords(new Set());
+                      setIsEditMode(false);
+                    }
+                  } catch (err) {
+                    console.error('Delete error:', err);
+                    alert('삭제 중 오류가 발생했습니다.');
+                  }
+                }}
+                className="px-3 py-2 bg-red-500 text-white text-sm rounded-md hover:bg-red-600 transition duration-150"
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
