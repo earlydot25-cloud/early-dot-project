@@ -61,7 +61,6 @@ class Photos(models.Model):
     file_name = models.CharField(max_length=100)
 
     body_part = models.CharField(max_length=50)
-    hair = models.CharField(max_length=20, blank=True, null=True)
     capture_date = models.DateTimeField(auto_now_add=True)
     symptoms_itch = models.TextField(blank=True, null=True)
     symptoms_pain = models.TextField(blank=True, null=True)
@@ -90,7 +89,6 @@ class Results(models.Model):
     risk_level = models.CharField(max_length=10)
     class_probs = models.JSONField()
     grad_cam_path = models.ImageField(upload_to='cams/', blank=True, null=True)
-    vlm_analysis_text = models.TextField(blank=True, null=True)
     disease = models.ForeignKey(
         DiseaseInfo,
         on_delete=models.RESTRICT,

@@ -214,24 +214,9 @@ const handleAccountDelete = async () => {
   );
 
   const PatientSpecificFields: React.FC = () => {
+    // doctor_id가 없는 경우 담당의사 정보 섹션을 표시하지 않음
     if (!assignedDoctorExists) {
-        return (
-             <div className="mt-3 pt-3 border-t border-gray-200">
-                 <div className="flex items-center gap-2 mb-3">
-                   <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                   </svg>
-                   <h3 className="text-sm font-semibold text-gray-900">담당의사 정보</h3>
-                 </div>
-                 <p className="text-xs text-gray-500 text-left mb-2">현재 담당의사가 지정되지 않았습니다.</p>
-                 <FormField
-                    label="담당의사 실명"
-                    name="assigned_doctor_name"
-                    value={formData.assigned_doctor_name || ''}
-                    isEditable={isEditing}
-                />
-            </div>
-        );
+        return null;
     }
 
     const doctor = assignedDoctor!;

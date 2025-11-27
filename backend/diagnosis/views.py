@@ -204,7 +204,6 @@ class PhotoUploadView(APIView):
                             risk_level=prediction_data.get("risk_level", "중간"),
                             class_probs=prediction_data.get("class_probs", {}),
                             grad_cam_path=grad_cam_path,
-                            vlm_analysis_text=prediction_data.get("vlm_analysis_text"),
                             disease=disease,
                         )
                         result_id = result.id  # Results ID 저장
