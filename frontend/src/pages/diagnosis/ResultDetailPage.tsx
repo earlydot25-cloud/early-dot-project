@@ -283,7 +283,9 @@ const ResultDetailPage: React.FC = () => {
   }
 
   // ✅ 안전한 URL 생성
-  const originalUrl = resolveMediaUrl(data.photo.upload_storage_path);
+  const originalUrl = data.photo && data.photo.upload_storage_path 
+    ? resolveMediaUrl(data.photo.upload_storage_path) 
+    : '';
   const gradcamUrl = data.grad_cam_path ? resolveMediaUrl(data.grad_cam_path) : '';
 
   // ✅ 위험도 판단
@@ -321,11 +323,11 @@ const ResultDetailPage: React.FC = () => {
 
   // 증상 정렬 (심한 순서대로)
   const symptoms = [
-    { label: '가려움', value: data.photo.symptoms_itch, key: 'itch' },
-    { label: '통증', value: data.photo.symptoms_pain, key: 'pain' },
-    { label: '색 변화', value: data.photo.symptoms_color, key: 'color' },
-    { label: '감염', value: data.photo.symptoms_infection, key: 'infection' },
-    { label: '출혈', value: data.photo.symptoms_blood, key: 'blood' },
+    { label: '가려움', value: data.photo?.symptoms_itch, key: 'itch' },
+    { label: '통증', value: data.photo?.symptoms_pain, key: 'pain' },
+    { label: '색 변화', value: data.photo?.symptoms_color, key: 'color' },
+    { label: '감염', value: data.photo?.symptoms_infection, key: 'infection' },
+    { label: '출혈', value: data.photo?.symptoms_blood, key: 'blood' },
   ].filter(s => s.value && s.value !== '없음')
     .sort((a, b) => getSymptomSeverity(b.value) - getSymptomSeverity(a.value));
 
@@ -354,7 +356,7 @@ const ResultDetailPage: React.FC = () => {
       
       {/* 실제 화면 컨텐츠 */}
       <h1 className="text-lg font-bold text-gray-900 mb-4">
-        {data.photo.folder_name} - {data.photo.file_name}
+        {data.photo?.folder_name || ''} - {data.photo?.file_name || ''}
       </h1>
 
       {/* 주의 요망 배너 (위험한 경우만) */}
@@ -379,7 +381,17 @@ const ResultDetailPage: React.FC = () => {
         <h3 className="text-sm font-semibold mb-3 text-gray-900">AI 예측 진단 이미지 분석</h3>
 
         {/* 탭 버튼 (항상 표시) */}
-        <div className="flex justify-around mb-3 border-b border-gray-200" style={{ display: 'flex', width: '100%', minHeight: '40px' }}>
+        <div 
+          className="flex justify-around mb-3 border-b border-gray-200" 
+          style={{ 
+            display: 'flex', 
+            width: '100%', 
+            minHeight: '44px',
+            alignItems: 'center',
+            position: 'relative',
+            zIndex: 1
+          }}
+        >
           <button
             className={`text-sm font-semibold pb-2 flex-1 ${
               !showGradCam
@@ -387,7 +399,15 @@ const ResultDetailPage: React.FC = () => {
                 : 'text-gray-500'
             }`}
             onClick={() => setShowGradCam(false)}
-            style={{ display: 'block', visibility: 'visible', opacity: 1 }}
+            style={{ 
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              visibility: 'visible', 
+              opacity: 1,
+              minHeight: '40px',
+              cursor: 'pointer'
+            }}
           >
             원본 환부 이미지
           </button>
@@ -398,37 +418,44 @@ const ResultDetailPage: React.FC = () => {
                 : 'text-gray-500'
             }`}
             onClick={() => setShowGradCam(true)}
-            style={{ display: 'block', visibility: 'visible', opacity: 1 }}
+            style={{ 
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              visibility: 'visible', 
+              opacity: 1,
+              minHeight: '40px',
+              cursor: 'pointer'
+            }}
           >
             AI GradCAM 분석
           </button>
         </div>
 
         {/* 이미지 표시 */}
-        <div className="w-full bg-gray-100 rounded-lg overflow-hidden text-center">
-          {showGradCam && gradcamUrl ? (
+        <div className="w-full bg-gray-100 rounded-lg overflow-hidden text-center" style={{ minHeight: '200px' }}>
+          {originalUrl || gradcamUrl ? (
             <img
-              src={gradcamUrl}
-              alt="GradCAM 분석"
+              src={showGradCam && gradcamUrl ? gradcamUrl : (originalUrl || '')}
+              alt={showGradCam && gradcamUrl ? 'GradCAM 분석' : '원본 이미지'}
               className="w-full h-auto max-h-96 object-contain"
               onError={(e) => {
-                // GradCAM 이미지가 없으면 원본 이미지로 대체
+                // GradCAM 이미지가 없거나 에러가 발생하면 원본 이미지로 대체
                 const target = e.target as HTMLImageElement;
-                target.src = originalUrl;
+                if (showGradCam && gradcamUrl && originalUrl) {
+                  target.src = originalUrl;
+                } else {
+                  target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em"%3E이미지 없음%3C/text%3E%3C/svg%3E';
+                }
               }}
             />
           ) : (
-            <img
-              src={originalUrl}
-              alt="원본 이미지"
-              className="w-full h-auto max-h-96 object-contain"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em"%3E이미지 없음%3C/text%3E%3C/svg%3E';
-              }}
-            />
+            <div className="w-full h-64 flex items-center justify-center text-gray-500">
+              이미지를 불러올 수 없습니다
+            </div>
           )}
           <p className="text-gray-500 text-xs mt-2 pb-1">
-            {showGradCam ? 'AI GradCAM 분석' : '원본 환부 이미지'}
+            {showGradCam && gradcamUrl ? 'AI GradCAM 분석' : '원본 환부 이미지'}
           </p>
         </div>
       </div>

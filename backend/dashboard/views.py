@@ -184,7 +184,6 @@ class RecordListView(APIView):
                     'disease': None,
                     'analysis_date': photo.capture_date.isoformat() if photo.capture_date else None,
                     'risk_level': '분석 대기',
-                    'vlm_analysis_text': None,
                     'followup_check': None,
                 })
             
@@ -245,7 +244,6 @@ class RecordDetailView(APIView):
                     'risk_level': '분석 대기',
                     'class_probs': {},
                     'grad_cam_path': '',
-                    'vlm_analysis_text': None,
                     'followup_check': None,
                     'user': {
                         'name': photo.user.name or photo.user.email,

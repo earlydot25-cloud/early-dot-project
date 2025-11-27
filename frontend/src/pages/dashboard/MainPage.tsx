@@ -116,6 +116,15 @@ const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data, isDoctorView = fals
     !!data.followup_check?.doctor_note &&
     data.followup_check?.doctor_risk_level !== '소견 대기';
 
+  // doctor_uid가 있는 환자의 경우, followup_check가 있으면 의사 위험도 표시 (소견 대기 포함)
+  const hasFollowupCheck = !!data.followup_check;
+  // current_status가 '요청중'이거나 doctor_risk_level이 '소견 대기'이면 소견 대기 상태
+  const isWaitingForOpinion = (data.doctor_uid !== null && data.doctor_uid !== undefined) && hasFollowupCheck && 
+    (data.followup_check?.current_status === '요청중' || data.followup_check?.doctor_risk_level === '소견 대기');
+  
+  // doctor_uid가 있고 followup_check가 있으면 의사 위험도 표시 (소견 대기 포함)
+  const shouldShowDoctorRisk = (data.doctor_uid !== null && data.doctor_uid !== undefined) && hasFollowupCheck;
+
   const finalRiskLevel =
     hasDoctorNote ? data.followup_check!.doctor_risk_level : data.risk_level;
 
@@ -133,6 +142,9 @@ const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data, isDoctorView = fals
     : hasDoctorNote
     ? '결과 열람'
     : '요청 처리 대기';
+
+  // 요청 중 상태 확인
+  const isRequestPending = data.followup_check?.current_status === '요청중';
 
   return (
     <div className={`p-4 border rounded-lg shadow-sm bg-white mb-4 border-gray-200`}>
@@ -166,7 +178,14 @@ const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data, isDoctorView = fals
             <p className="text-xs font-medium text-gray-500 mb-1">AI 예측 병변</p>
             <p className="text-base font-semibold text-gray-800 mb-2">{data.disease.name_ko}</p>
             {data.photo.body_part && (
-              <p className="text-sm text-gray-600">위치: {data.photo.body_part}</p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-600">위치: {data.photo.body_part}</p>
+                {isRequestPending && (
+                  <div className="bg-sky-100 text-sky-700 text-xs font-semibold px-2 py-1 rounded">
+                    요청 중
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -180,11 +199,19 @@ const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data, isDoctorView = fals
                 {data.risk_level}
               </p>
             </div>
-            {hasDoctorNote && (
+            {shouldShowDoctorRisk && (
               <div className="text-xs mt-2">
                 <span className="text-gray-500">- 의사 -</span>
-                <p className={`font-semibold ${finalRiskLevel === '즉시 주의' ? 'text-red-600' : 'text-orange-600'}`}>
-                  {finalRiskLevel}
+                <p className={`font-semibold ${
+                  isWaitingForOpinion 
+                    ? 'text-gray-600' 
+                    : finalRiskLevel === '즉시 주의' 
+                    ? 'text-red-600' 
+                    : finalRiskLevel === '경과 관찰'
+                    ? 'text-orange-600'
+                    : 'text-green-600'
+                }`}>
+                  {isWaitingForOpinion ? '소견 대기' : (data.followup_check?.doctor_risk_level || '소견 대기')}
                 </p>
               </div>
             )}
@@ -223,13 +250,15 @@ const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data, isDoctorView = fals
           </p>
         </div>
       ) : (
-        hasDoctorNote && (
+        (hasDoctorNote || isRequestPending) && (
           <div className="mt-3 pt-3 border-t border-gray-100 bg-indigo-50 p-2 rounded">
             <p className="text-xs font-medium mb-1 text-indigo-700 flex items-center">
               <UserMdIcon className="mr-1" size={12} /> 의사 소견
             </p>
             <p className="text-xs text-gray-700 line-clamp-2">
-              {data.followup_check!.doctor_note || '의사 소견이 아직 작성되지 않았습니다.'}
+              {isRequestPending 
+                ? '의사 소견 요청 중입니다.'
+                : (data.followup_check!.doctor_note || '의사 소견이 아직 작성되지 않았습니다.')}
             </p>
           </div>
         )

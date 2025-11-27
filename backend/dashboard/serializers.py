@@ -58,7 +58,6 @@ class PhotoOnlySerializer(serializers.ModelSerializer):
             'disease': None,  # Results가 없으므로 None
             'analysis_date': instance.capture_date.isoformat() if instance.capture_date else None,
             'risk_level': '분석 대기',  # Results가 없으므로 기본값
-            'vlm_analysis_text': None,
             'followup_check': None,
         }
 
@@ -218,7 +217,7 @@ class ResultDetailSerializer(serializers.ModelSerializer):
         model = Results
         fields = [
             'id', 'photo', 'disease', 'analysis_date', 'risk_level', 'class_probs',
-            'grad_cam_path', 'vlm_analysis_text', 'followup_check', 'user'
+            'grad_cam_path', 'followup_check', 'user'
         ]
     
     def to_representation(self, instance):
@@ -267,7 +266,7 @@ class ResultMainSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Results
-        fields = ['id', 'photo', 'disease', 'analysis_date', 'risk_level', 'vlm_analysis_text', 'followup_check']
+        fields = ['id', 'photo', 'disease', 'analysis_date', 'risk_level', 'followup_check']
 
 
 # 🔴 신규: 의사 대시보드용 Result 시리얼라이저

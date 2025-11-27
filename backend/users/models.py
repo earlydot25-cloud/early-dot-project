@@ -67,6 +67,7 @@ class Doctors(models.Model):
     hospital = models.CharField(max_length=100, blank=True, null=True)
     cert_path = models.FileField(upload_to=doctor_cert_upload_to, blank=True, null=True)
     status = models.CharField(max_length=20)
+    rejection_reason = models.TextField(blank=True, null=True, help_text='가입 거절 사유')
 
     class Meta:
         db_table = 'doctors'
