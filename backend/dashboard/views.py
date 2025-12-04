@@ -65,7 +65,7 @@ class FoldersListView(APIView):
                     user=target_user,
                     folder_name=folder['folder_name']
                 )
-                folder_results = Results.objects.filter(photo__in=folder_photos).select_related('followup_check')
+                folder_results = Results.objects.filter(photo__in=folder_photos).select_related('photo', 'photo__user', 'disease', 'followup_check')
                 
                 max_risk_level = '낮음'  # 기본값
                 risk_levels_priority = {
@@ -142,7 +142,7 @@ class RecordListView(APIView):
             photos_query = photos_query.filter(folder_name=folder_name)
         
         # 해당 Photos와 연결된 Results 가져오기
-        results = Results.objects.filter(photo__in=photos_query).select_related('photo', 'disease', 'followup_check').order_by('-analysis_date')
+        results = Results.objects.filter(photo__in=photos_query).select_related('photo', 'photo__user', 'disease', 'followup_check').order_by('-analysis_date')
         
         # Results가 있는 Photos ID 목록
         photos_with_results = [r.photo_id for r in results]
@@ -231,6 +231,17 @@ class RecordDetailView(APIView):
                         {'error': 'Permission denied'},
                         status=status.HTTP_403_FORBIDDEN
                     )
+                
+                # 🔴 Photos.id로 조회했지만, 연결된 Results가 있는지 확인
+                try:
+                    # photo와 연결된 Results가 있는지 확인 (OneToOne 관계)
+                    result = Results.objects.select_related('photo', 'photo__user', 'disease', 'followup_check').get(photo=photo)
+                    # Results가 있으면 ResultDetailSerializer로 반환
+                    serializer = ResultDetailSerializer(result, context={'request': request})
+                    return Response(serializer.data, status=status.HTTP_200_OK)
+                except Results.DoesNotExist:
+                    # Results가 없을 때만 Photos만 있는 경우로 처리
+                    pass
                 
                 # Photos만 있을 때의 응답 구조 (Results 형태와 호환)
                 # PhotoDetailSerializer가 이미 context를 받아서 절대 URL을 생성하므로

@@ -26,17 +26,17 @@ class DoctorApplicationSerializer(serializers.ModelSerializer):
             'hospital',
             'status',
             'rejection_reason',
-            'cert_file',
+            'cert_path',
             'cert_file_url',
         ]
         read_only_fields = ['status', 'rejection_reason']
     
     def get_cert_file_url(self, obj):
         """인증서 파일의 절대 URL 반환"""
-        if obj.cert_file and hasattr(obj.cert_file, 'url'):
+        if obj.cert_path and hasattr(obj.cert_path, 'url'):
             request = self.context.get('request')
             if request:
-                return request.build_absolute_uri(obj.cert_file.url)
-            return obj.cert_file.url
+                return request.build_absolute_uri(obj.cert_path.url)
+            return obj.cert_path.url
         return None
 

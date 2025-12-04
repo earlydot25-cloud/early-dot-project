@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 import sys
 import logging
+import asyncio
 # CORS 및 Pydantic 모델 관련 라이브러리
 import base64
 import numpy as np
@@ -112,7 +113,7 @@ async def remove_hair(file: UploadFile = File(...)):
     # 파이프라인 처리
     try:
         logger.info("[FastAPI] 파이프라인 처리 시작")
-        processed_bytes = pipeline.process(image_bytes)
+        processed_bytes = await asyncio.to_thread(pipeline.process, image_bytes)
         logger.info(f"[FastAPI] 파이프라인 처리 완료: {len(processed_bytes)} bytes")
     except Exception as e:
         import traceback
@@ -159,7 +160,7 @@ async def predict(file: UploadFile = File(...)):
     # 예측 수행
     try:
         logger.info("[FastAPI] 예측 시작")
-        prediction_result = prediction_pipeline.predict(image_bytes)
+        prediction_result = await asyncio.to_thread(prediction_pipeline.predict, image_bytes)
         logger.info(f"[FastAPI] 예측 완료: {prediction_result}")
 
         # GradCAM 이미지를 base64로 인코딩 (있는 경우)
@@ -173,7 +174,6 @@ async def predict(file: UploadFile = File(...)):
             "disease_name_ko": prediction_result["disease_name_ko"],
             "disease_name_en": prediction_result["disease_name_en"],
             "grad_cam_bytes": grad_cam_base64,
-            "vlm_analysis_text": prediction_result.get("vlm_analysis_text"),
         }
     except Exception as e:
         import traceback
