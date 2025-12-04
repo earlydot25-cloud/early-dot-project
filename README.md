@@ -140,7 +140,79 @@
 
 ---
 
-## 🤝 3. 협업 및 폴더 구조
+## 🗄️ 3. 데이터베이스 초기화 및 가짜 데이터 생성
+
+### 3.1. 현재 데이터 삭제 및 가짜 데이터 생성
+
+웹 평가를 위한 가짜 데이터를 생성하려면 다음 단계를 따르세요:
+
+#### Docker 환경에서 실행
+
+```bash
+# 1. 기존 데이터베이스 데이터 삭제
+docker compose exec django conda run --no-capture-output -n early_dot_env python manage.py clear_database --confirm
+
+# 2. 가짜 데이터 생성 (media 폴더도 함께 초기화)
+docker compose exec django conda run --no-capture-output -n early_dot_env python manage.py create_fake_data --clear-media
+```
+
+#### 로컬 환경에서 실행
+
+```bash
+cd backend
+
+# 1. 기존 데이터베이스 데이터 삭제
+python manage.py clear_database --confirm
+
+# 2. 가짜 데이터 생성 (media 폴더도 함께 초기화)
+python manage.py create_fake_data --clear-media
+```
+
+### 3.2. 생성되는 데이터
+
+- **의사**: 3명 (기본값)
+  - 이메일: `doctor1@example.com`, `doctor2@example.com`, ...
+  - 비밀번호: `doctor1`, `doctor2`, ...
+- **환자**: 10명 (기본값)
+  - 이메일: `patient1@example.com`, `patient2@example.com`, ...
+  - 비밀번호: `patient1`, `patient2`, ...
+  - 일부는 의사와 연결됨
+- **일반 사용자**: 5명 (기본값)
+  - 이메일: `user1@example.com`, `user2@example.com`, ...
+  - 비밀번호: `user1`, `user2`, ...
+- **사진**: 환자당 3장씩 (기본값)
+- **진단 결과**: 각 사진마다 생성
+
+### 3.3. 옵션 설정
+
+더 많은 데이터를 생성하려면:
+
+```bash
+# Docker 환경
+docker compose exec django conda run --no-capture-output -n early_dot_env python manage.py create_fake_data \
+    --clear-media \
+    --num-doctors 5 \
+    --num-patients 20 \
+    --num-normal-users 10 \
+    --photos-per-patient 5
+
+# 로컬 환경
+cd backend
+python manage.py create_fake_data \
+    --clear-media \
+    --num-doctors 5 \
+    --num-patients 20 \
+    --num-normal-users 10 \
+    --photos-per-patient 5
+```
+
+### 3.4. 상세 가이드
+
+더 자세한 내용은 `backend/FAKE_DATA_GUIDE.md` 파일을 참조하세요.
+
+---
+
+## 🤝 4. 협업 및 폴더 구조
 
 * **백엔드**: `backend/` 폴더의 각 앱(users, diagnosis 등)에 분담된 API를 구현합니다.
 * **프론트엔드**: `frontend/src/pages/` 아래의 기능 폴더(auth, capture, history)에 UI를 구현합니다.
