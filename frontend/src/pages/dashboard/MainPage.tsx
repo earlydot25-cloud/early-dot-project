@@ -181,7 +181,7 @@ const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data, isDoctorView = fals
               <div className="flex items-center justify-between">
                 <p className="text-sm text-gray-600">위치: {data.photo.body_part}</p>
                 {isRequestPending && (
-                  <div className="bg-sky-100 text-sky-700 text-xs font-semibold px-2 py-1 rounded">
+                  <div className="bg-sky-100 text-sky-700 text-xs font-semibold px-2 py-1 rounded text-right">
                     요청 중
                   </div>
                 )}

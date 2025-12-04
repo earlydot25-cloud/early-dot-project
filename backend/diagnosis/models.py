@@ -29,9 +29,37 @@ def build_upload_path(instance, original_filename):
     
     # 최종 파일 이름
     final_filename = f"{base_name}{ext}"
-
+    
     # 최종 경로
     return f"uploads/{storage_folder}/{folder}/{final_filename}"
+
+
+def build_grad_cam_path(instance, original_filename):
+    """
+    Grad-CAM 이미지 업로드 경로 생성 함수
+    Results는 Photos와 OneToOne 관계이므로 Photos의 user와 folder_name을 사용
+    uploads와 동일한 폴더 구조: cams/{user_id}/{folder_name}/image_{photo_id}.png
+    """
+    # Results는 Photos와 OneToOne 관계이므로 photo를 통해 접근
+    if hasattr(instance, 'photo') and instance.photo:
+        user_id = instance.photo.user.id if instance.photo.user else 'unknown'
+        folder_name = instance.photo.folder_name if hasattr(instance.photo, 'folder_name') else 'default'
+        photo_id = instance.photo.id
+        # Photo의 file_name도 사용 (일관성 유지)
+        photo_file_name = instance.photo.file_name if hasattr(instance.photo, 'file_name') else f'photo_{photo_id}'
+    else:
+        # 안전한 기본값 (일반적으로 발생하지 않지만 방어 코드)
+        user_id = 'unknown'
+        folder_name = 'default'
+        photo_id = getattr(instance, 'id', 'unknown')
+        photo_file_name = f'photo_{photo_id}'
+    
+    # 확장자: 원본 확장자 유지 (없으면 .png)
+    ext = os.path.splitext(original_filename)[1] or '.png'
+    
+    # 최종 경로: cams/{user_id}/{folder_name}/image_{photo_id}.png
+    # uploads 구조와 동일하게: uploads/{user_id}/{folder_name}/{file_name}.jpg
+    return f"cams/{user_id}/{folder_name}/image_{photo_id}{ext}"
 
 class DiseaseInfo(models.Model):
     name_ko = models.CharField(max_length=100)
@@ -88,7 +116,7 @@ class Results(models.Model):
     analysis_date = models.DateTimeField(auto_now_add=True)
     risk_level = models.CharField(max_length=10)
     class_probs = models.JSONField()
-    grad_cam_path = models.ImageField(upload_to='cams/', blank=True, null=True)
+    grad_cam_path = models.ImageField(upload_to=build_grad_cam_path, blank=True, null=True)
     disease = models.ForeignKey(
         DiseaseInfo,
         on_delete=models.RESTRICT,
