@@ -174,7 +174,7 @@ class PredictionPipeline:
         logger.info(f"[Prediction] 모델 디렉토리: {self.models_dir}")
         
         # 모델 파일 경로 확인
-        model_path = self.models_dir / "combined_resnet50_effnetb4_best.pt"
+        model_path = self.models_dir / "ensemble_finetune_best_60epochst.pt"
         
         if not model_path.exists():
             logger.error(f"[Prediction] 모델 파일을 찾을 수 없습니다: {model_path}")
