@@ -31,3 +31,13 @@ frontend/node_modules/
 # 빌드 출력 폴더
 frontend/build/
 early-dot-project/
+
+# --------------------
+# Kubernetes 배포 파일 (서버별 설정이므로 Git에 올리지 않음)
+# --------------------
+k8s/
+*.yaml
+*.yml
+!docker-compose.yml
+!model_api/model_environment.yml
+!backend/unified_environment.yml
