@@ -19,6 +19,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-icons": "^4.11.0",
+    "react-image-crop": "^11.0.10",
     "react-router-dom": "^7.9.4",
     "react-scripts": "5.0.1",
     "react-webcam": "^7.2.0",

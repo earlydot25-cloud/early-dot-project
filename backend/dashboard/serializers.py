@@ -20,16 +20,21 @@ class PhotosSerializer(serializers.ModelSerializer):
         fields = ['id', 'body_part', 'folder_name', 'file_name', 'capture_date', 'upload_storage_path']
     
     def get_upload_storage_path(self, obj):
-        """이미지 URL을 절대 경로로 변환"""
+        """이미지 URL을 상대 경로로 반환 (프론트엔드에서 처리)"""
         if obj.upload_storage_path:
             url = obj.upload_storage_path.url
+            # 이미 완전한 URL이면 그대로 사용 (외부 URL인 경우)
             if url.startswith('http'):
+                # 내부 호스트명(django, project_django)이 포함된 경우 경로만 추출
+                if 'django' in url or 'project_django' in url:
+                    # http://django:8000/media/... -> /media/...
+                    import re
+                    match = re.search(r'/media/.*$', url)
+                    if match:
+                        return match.group(0)
                 return url
-            # 상대 경로를 절대 경로로 변환
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(url)
-            return f"http://127.0.0.1:8000{url}"
+            # 상대 경로는 그대로 반환 (/media/... 형태)
+            return url
         return ''
 
 
@@ -142,15 +147,21 @@ class PhotoSymptomsSerializer(serializers.ModelSerializer):
         return data
     
     def get_upload_storage_path(self, obj):
-        """이미지 URL을 절대 경로로 변환"""
+        """이미지 URL을 상대 경로로 반환 (프론트엔드에서 처리)"""
         if obj.upload_storage_path:
             url = obj.upload_storage_path.url
+            # 이미 완전한 URL이면 그대로 사용 (외부 URL인 경우)
             if url.startswith('http'):
+                # 내부 호스트명(django, project_django)이 포함된 경우 경로만 추출
+                if 'django' in url or 'project_django' in url:
+                    # http://django:8000/media/... -> /media/...
+                    import re
+                    match = re.search(r'/media/.*$', url)
+                    if match:
+                        return match.group(0)
                 return url
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(url)
-            return f"http://127.0.0.1:8000{url}"
+            # 상대 경로는 그대로 반환 (/media/... 형태)
+            return url
         return ''
 
 
@@ -169,15 +180,21 @@ class PhotoDetailSerializer(serializers.ModelSerializer):
         ]
     
     def get_upload_storage_path(self, obj):
-        """이미지 URL을 절대 경로로 변환"""
+        """이미지 URL을 상대 경로로 반환 (프론트엔드에서 처리)"""
         if obj.upload_storage_path:
             url = obj.upload_storage_path.url
+            # 이미 완전한 URL이면 그대로 사용 (외부 URL인 경우)
             if url.startswith('http'):
+                # 내부 호스트명(django, project_django)이 포함된 경우 경로만 추출
+                if 'django' in url or 'project_django' in url:
+                    # http://django:8000/media/... -> /media/...
+                    import re
+                    match = re.search(r'/media/.*$', url)
+                    if match:
+                        return match.group(0)
                 return url
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(url)
-            return f"http://127.0.0.1:8000{url}"
+            # 상대 경로는 그대로 반환 (/media/... 형태)
+            return url
         return ''
 
 
@@ -245,15 +262,21 @@ class ResultDetailSerializer(serializers.ModelSerializer):
         }
     
     def get_grad_cam_path(self, obj):
-        """GradCAM 이미지 URL 생성"""
+        """GradCAM 이미지 URL 생성 (상대 경로로 반환)"""
         if obj.grad_cam_path:
             url = obj.grad_cam_path.url
+            # 이미 완전한 URL이면 그대로 사용 (외부 URL인 경우)
             if url.startswith('http'):
+                # 내부 호스트명(django, project_django)이 포함된 경우 경로만 추출
+                if 'django' in url or 'project_django' in url:
+                    # http://django:8000/media/... -> /media/...
+                    import re
+                    match = re.search(r'/media/.*$', url)
+                    if match:
+                        return match.group(0)
                 return url
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(url)
-            return f"http://127.0.0.1:8000{url}"
+            # 상대 경로는 그대로 반환 (/media/... 형태)
+            return url
         return ''
 
 

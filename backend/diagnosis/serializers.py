@@ -63,7 +63,8 @@ class PhotoUploadSerializer(serializers.ModelSerializer):
                 if request:
                     representation['upload_storage_path'] = request.build_absolute_uri(url)
                 else:
-                    representation['upload_storage_path'] = f"http://127.0.0.1:8000{url}"
+                    # request가 없을 때는 상대 경로 반환 (프론트엔드에서 처리)
+                    representation['upload_storage_path'] = url
         return representation
 
 

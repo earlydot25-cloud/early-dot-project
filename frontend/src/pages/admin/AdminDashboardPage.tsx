@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaDownload, FaCheck, FaTimes, FaUserMd, FaSpinner } from 'react-icons/fa';
 import type { IconBaseProps } from 'react-icons';
-import { getDoctorList, approveDoctor, rejectDoctor, getCertDownloadUrl, type DoctorApplication } from '../../services/adminServices';
+import { getDoctorList, approveDoctor, rejectDoctor, getCertDownloadUrl, type DoctorApplication, getDoctorUid, getDoctorEmail } from '../../services/adminServices';
 import { http } from '../../services/http';
 
 // 아이콘 안전 래퍼
@@ -252,18 +252,21 @@ const AdminDashboardPage: React.FC = () => {
               <p className="text-[13px]">해당 상태의 의사 가입 신청이 없습니다.</p>
             </div>
           ) : (
-            doctors.map(doctor => (
-              <DoctorCard
-                key={doctor.uid}
-                doctor={doctor}
-                onApprove={() => handleApprove(doctor.uid)}
-                onReject={() => handleReject(doctor.uid)}
-                onDownloadCert={() => handleDownloadCert(doctor.uid)}
-                isProcessing={processingIds.has(doctor.uid)}
-                formatDate={formatDate}
-                getStatusBadgeColor={getStatusBadgeColor}
-              />
-            ))
+            doctors.map(doctor => {
+              const uid = getDoctorUid(doctor);
+              return (
+                <DoctorCard
+                  key={uid}
+                  doctor={doctor}
+                  onApprove={() => handleApprove(uid)}
+                  onReject={() => handleReject(uid)}
+                  onDownloadCert={() => handleDownloadCert(uid)}
+                  isProcessing={processingIds.has(uid)}
+                  formatDate={formatDate}
+                  getStatusBadgeColor={getStatusBadgeColor}
+                />
+              );
+            })
           )}
         </div>
       )}
@@ -363,7 +366,7 @@ const DoctorCard: React.FC<DoctorCardProps> = ({
           </div>
           <div>
             <h3 className="text-[15px] font-extrabold text-slate-900">{doctor.name}</h3>
-            <p className="text-[12px] text-slate-500">{doctor.email}</p>
+            <p className="text-[12px] text-slate-500">{getDoctorEmail(doctor)}</p>
           </div>
         </div>
         <span className={`px-2 py-1 rounded-full text-[11px] font-semibold ${getStatusBadgeColor(doctor.status)}`}>
@@ -373,24 +376,32 @@ const DoctorCard: React.FC<DoctorCardProps> = ({
 
       {/* 기본 정보 */}
       <div className="grid grid-cols-2 gap-3 mb-4 text-[13px]">
-        <div>
-          <span className="text-slate-500">성별:</span>
-          <span className="ml-2 text-slate-900 font-medium">{doctor.sex === 'M' ? '남성' : doctor.sex === 'F' ? '여성' : doctor.sex}</span>
-        </div>
-        <div>
-          <span className="text-slate-500">나이:</span>
-          <span className="ml-2 text-slate-900 font-medium">{doctor.age}세</span>
-        </div>
-        <div>
-          <span className="text-slate-500">생년월일:</span>
-          <span className="ml-2 text-slate-900 font-medium text-[12px]">{formatDate(doctor.birth_date)}</span>
-        </div>
-        <div>
-          <span className="text-slate-500">가족력:</span>
-          <span className="ml-2 text-slate-900 font-medium">
-            {doctor.family_history === 'Y' ? '있음' : doctor.family_history === 'N' ? '없음' : '모름'}
-          </span>
-        </div>
+        {doctor.sex && (
+          <div>
+            <span className="text-slate-500">성별:</span>
+            <span className="ml-2 text-slate-900 font-medium">{doctor.sex === 'M' ? '남성' : doctor.sex === 'F' ? '여성' : doctor.sex}</span>
+          </div>
+        )}
+        {doctor.age !== undefined && (
+          <div>
+            <span className="text-slate-500">나이:</span>
+            <span className="ml-2 text-slate-900 font-medium">{doctor.age}세</span>
+          </div>
+        )}
+        {doctor.birth_date && (
+          <div>
+            <span className="text-slate-500">생년월일:</span>
+            <span className="ml-2 text-slate-900 font-medium text-[12px]">{formatDate(doctor.birth_date)}</span>
+          </div>
+        )}
+        {doctor.family_history && (
+          <div>
+            <span className="text-slate-500">가족력:</span>
+            <span className="ml-2 text-slate-900 font-medium">
+              {doctor.family_history === 'Y' ? '있음' : doctor.family_history === 'N' ? '없음' : '모름'}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* 의사 정보 */}
@@ -405,10 +416,12 @@ const DoctorCard: React.FC<DoctorCardProps> = ({
             <span className="text-slate-500">소속 병원:</span>
             <span className="ml-2 text-slate-900 font-medium">{doctor.hospital || '미입력'}</span>
           </div>
-          <div>
-            <span className="text-slate-500">가입 신청일:</span>
-            <span className="ml-2 text-slate-900 font-medium text-[12px]">{formatDate(doctor.date_joined)}</span>
-          </div>
+          {doctor.date_joined && (
+            <div>
+              <span className="text-slate-500">가입 신청일:</span>
+              <span className="ml-2 text-slate-900 font-medium text-[12px]">{formatDate(doctor.date_joined)}</span>
+            </div>
+          )}
         </div>
       </div>
 

@@ -16,6 +16,7 @@ import HistoryDetailPage from './pages/dashboard/HistoryDetailPage';
 import HistoryResultPage from './pages/dashboard/HistoryResultPage';
 import ProfilePage from './pages/dashboard/ProfilePage';
 import ResultDetailPage from './pages/diagnosis/ResultDetailPage';
+import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 
 // 로그인 여부 판별 함수 개선
 const isAuthed = (): boolean => {
@@ -152,6 +153,9 @@ console.log("-----------------------------------------------------------------")
           
           <Route path="/dashboard/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
           <Route path="/diagnosis/detail/:id" element={<RequireAuth><ResultDetailPage /></RequireAuth>} />
+          
+          {/* 관리자 페이지 */}
+          <Route path="/admin/dashboard" element={<RequireAuth><AdminDashboardPage /></RequireAuth>} />
         </Routes>
       </Layout>
     </BrowserRouter>

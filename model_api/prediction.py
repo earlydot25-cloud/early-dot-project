@@ -9,33 +9,39 @@ import logging
 logger = logging.getLogger(__name__)
 
 # 클래스 인덱스/영문명을 한국어 질병명으로 매핑하는 딕셔너리
-# TODO: 모델이 예측하는 클래스에 맞게 수정하세요
+# 모델이 예측하는 8개 클래스
 CLASS_TO_KOREAN = {
-    # 클래스 인덱스로 매핑 (일반적인 피부 질환 분류)
-    0: "정상",
-    1: "악성 흑색종",
-    2: "기저세포암",
-    3: "편평세포암",
-    4: "양성 모반",
-    5: "지루각화증",
+    # 클래스 인덱스로 매핑 (8개 피부 질환 분류)
+    0: "흑색종",  # Melanoma (MEL)
+    1: "모반",  # Nevus (NV)
+    2: "기저세포암",  # Basal Cell Carcinoma (BCC)
+    3: "편평세포암",  # Squamous Cell Carcinoma (SCC)
+    4: "피부섬유종",  # Dermatofibroma (DF)
+    5: "양성 각화증",  # Benign Keratosis (BKL)
+    6: "혈관종",  # Vascular (VASC)
+    7: "정상",  # Normal (추정)
     
     # 영문명으로 매핑
-    "normal": "정상",
-    "malignant_melanoma": "악성 흑색종",
+    "melanoma": "흑색종",
+    "nevus": "모반",
     "basal_cell_carcinoma": "기저세포암",
     "squamous_cell_carcinoma": "편평세포암",
-    "benign_nevus": "양성 모반",
-    "seborrheic_keratosis": "지루각화증",
+    "dermatofibroma": "피부섬유종",
+    "benign_keratosis": "양성 각화증",
+    "vascular": "혈관종",
+    "normal": "정상",
 }
 
 # 한국어 질병명을 영문명으로 매핑하는 딕셔너리
 KOREAN_TO_ENGLISH = {
-    "정상": "Normal",
-    "악성 흑색종": "Malignant Melanoma",
+    "흑색종": "Melanoma",
+    "모반": "Nevus",
     "기저세포암": "Basal Cell Carcinoma",
     "편평세포암": "Squamous Cell Carcinoma",
-    "양성 모반": "Benign Nevus",
-    "지루각화증": "Seborrheic Keratosis",
+    "피부섬유종": "Dermatofibroma",
+    "양성 각화증": "Benign Keratosis",
+    "혈관종": "Vascular",
+    "정상": "Normal",
 }
 
 
@@ -77,7 +83,7 @@ class PredictionPipeline:
         # 일반적인 앙상블 구조: 두 모델의 특징을 결합하여 분류
         
         class CombinedModel(nn.Module):
-            def __init__(self, num_classes=6):  # 기본 6개 클래스 (정상, 악성 흑색종, 기저세포암, 편평세포암, 양성 모반, 지루각화증)
+            def __init__(self, num_classes=8):  # 기본 8개 클래스 (흑색종, 모반, 기저세포암, 편평세포암, 피부섬유종, 양성 각화증, 혈관종, 정상)
                 super(CombinedModel, self).__init__()
                 
                 # ResNet50 백본
@@ -129,16 +135,26 @@ class PredictionPipeline:
         
         # 모델 생성
         # state_dict 키를 보고 num_classes 추론
-        num_classes = 6  # 기본값
-        for key in state_dict_keys:
-            if 'classifier' in key or 'fc' in key:
-                if 'weight' in key:
-                    # 마지막 레이어의 출력 차원 확인
-                    weight_shape = state_dict[key].shape
-                    if len(weight_shape) == 2:
+        num_classes = 8  # 기본값 (8개 클래스)
+        # 마지막 classifier 레이어 찾기 (입력 차원이 512인 것)
+        classifier_keys = [key for key in state_dict_keys if ('classifier' in key or 'fc' in key) and 'weight' in key]
+        if classifier_keys:
+            # 입력 차원이 512인 레이어 찾기 (마지막 Linear 레이어)
+            for key in classifier_keys:
+                weight_shape = state_dict[key].shape
+                if len(weight_shape) == 2:
+                    # 입력 차원이 512면 마지막 레이어
+                    if weight_shape[1] == 512:
                         num_classes = weight_shape[0]
-                        logger.info(f"[Prediction] state_dict에서 num_classes 추론: {num_classes}")
+                        logger.info(f"[Prediction] state_dict에서 num_classes 추론: {num_classes} (키: {key})")
                         break
+            else:
+                # 입력 차원이 512인 레이어를 찾지 못한 경우, 마지막 classifier 레이어 사용
+                last_key = classifier_keys[-1]
+                weight_shape = state_dict[last_key].shape
+                if len(weight_shape) == 2:
+                    num_classes = weight_shape[0]
+                    logger.info(f"[Prediction] state_dict에서 num_classes 추론 (마지막 레이어): {num_classes} (키: {last_key})")
         
         model = CombinedModel(num_classes=num_classes)
         
@@ -214,7 +230,20 @@ class PredictionPipeline:
                 elif 'network' in checkpoint:
                     model_to_load = checkpoint['network']
                     logger.info("[Prediction] 'network' 키에서 모델 객체 발견")
-                # 4. 'state_dict'만 있는 경우 - 모델 아키텍처 필요
+                # 4. 'model_state_dict' 키가 있는 경우 - 모델 아키텍처 필요
+                elif 'model_state_dict' in checkpoint:
+                    logger.info("[Prediction] 'model_state_dict' 키 발견. 모델 아키텍처를 정의합니다.")
+                    try:
+                        model_to_load = self._build_combined_model(checkpoint['model_state_dict'], device)
+                        logger.info("[Prediction] 모델 아키텍처를 정의하여 로드했습니다.")
+                    except Exception as build_error:
+                        logger.error(f"[Prediction] 모델 아키텍처 정의 실패: {build_error}")
+                        raise RuntimeError(
+                            "모델 파일에 model_state_dict만 저장되어 있습니다. "
+                            "모델 아키텍처를 정의하고 load_state_dict()를 사용해야 합니다. "
+                            f"에러: {str(build_error)}"
+                        )
+                # 5. 'state_dict'만 있는 경우 - 모델 아키텍처 필요
                 elif 'state_dict' in checkpoint:
                     logger.error("[Prediction] 'state_dict'만 발견됨. 모델 아키텍처가 필요합니다.")
                     logger.error("[Prediction] 체크포인트에 'model', 'net', 'network' 키가 없습니다.")
@@ -415,13 +444,18 @@ class PredictionPipeline:
                 logger.info(f"[Prediction] 확률 분포: {probs_np}")
             
             # 클래스 인덱스를 확률로 변환
-            # 모델 출력이 클래스 개수에 맞는지 확인
+            # 모델은 8개 클래스만 분류함
             num_classes = len(probs_np)
             logger.info(f"[Prediction] 예측된 클래스 수: {num_classes}")
             
-            # 클래스 인덱스를 딕셔너리로 변환
-            raw_class_probs = {i: float(probs_np[i]) for i in range(num_classes)}
-            logger.info(f"[Prediction] 원시 확률: {raw_class_probs}")
+            # 모델 출력이 8개가 아니면 에러
+            if num_classes != 8:
+                logger.error(f"[Prediction] 모델 출력이 8개가 아닙니다: {num_classes}개")
+                raise ValueError(f"모델 출력이 8개 클래스가 아닙니다. 실제 출력: {num_classes}개")
+            
+            # 클래스 인덱스를 딕셔너리로 변환 (8개만)
+            raw_class_probs = {i: float(probs_np[i]) for i in range(8)}
+            logger.info(f"[Prediction] 원시 확률 (8개): {raw_class_probs}")
             
             # 한국어로 변환
             korean_class_probs = self._convert_class_probs_to_korean(raw_class_probs)

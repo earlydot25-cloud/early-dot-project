@@ -1,6 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { fetchUserProfile } from '../../services/userServices';
+import ReactCrop, { Crop, PixelCrop, centerCrop, makeAspectCrop } from 'react-image-crop';
+import 'react-image-crop/dist/ReactCrop.css';
 
 // 백엔드 업로드 엔드포인트
 // 환경 변수가 있으면 사용, 없으면 상대 경로 사용 (프록시 또는 같은 도메인)
@@ -29,6 +31,15 @@ const SavePhotoPage: React.FC = () => {
   const [file, setFile] = useState<File | null>(incomingFile ?? null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(incomingPreviewUrl ?? null);
   const [bodyPart] = useState<string>(incomingBodyPart);
+  
+  // 크롭 관련 상태
+  const [crop, setCrop] = useState<Crop>();
+  const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
+  const [croppedFile, setCroppedFile] = useState<File | null>(null);
+  const [croppedPreviewUrl, setCroppedPreviewUrl] = useState<string | null>(null);
+  const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     if (incomingFile) {
@@ -48,6 +59,118 @@ const SavePhotoPage: React.FC = () => {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 이미지 로드 시 초기 크롭 영역 설정 (더 작은 영역으로 시작)
+  const onImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    const { naturalWidth, naturalHeight } = img;
+    const { width, height } = img;
+    
+    // 이미지 비율 저장
+    const aspectRatio = naturalWidth / naturalHeight;
+    setImageAspectRatio(aspectRatio);
+    
+    // 이미지의 작은 쪽을 기준으로 60% 크기로 시작
+    const minDimension = Math.min(naturalWidth, naturalHeight);
+    const maxDimension = Math.max(naturalWidth, naturalHeight);
+    const cropSizePercent = (minDimension * 0.6 / maxDimension) * 100;
+    
+    const crop = centerCrop(
+      makeAspectCrop(
+        {
+          unit: '%',
+          width: Math.min(cropSizePercent, 60), // 최대 60%
+        },
+        1, // 정사각형 비율
+        width,
+        height
+      ),
+      width,
+      height
+    );
+    setCrop(crop);
+  };
+
+  // 크롭된 이미지를 File로 변환
+  const getCroppedImg = async (
+    image: HTMLImageElement,
+    pixelCrop: PixelCrop,
+    fileName: string
+  ): Promise<File> => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      throw new Error('Canvas context가 없습니다.');
+    }
+
+    const scaleX = image.naturalWidth / image.width;
+    const scaleY = image.naturalHeight / image.height;
+
+    canvas.width = pixelCrop.width;
+    canvas.height = pixelCrop.height;
+
+    ctx.drawImage(
+      image,
+      pixelCrop.x * scaleX,
+      pixelCrop.y * scaleY,
+      pixelCrop.width * scaleX,
+      pixelCrop.height * scaleY,
+      0,
+      0,
+      pixelCrop.width,
+      pixelCrop.height
+    );
+
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('Canvas가 비어있습니다.'));
+          return;
+        }
+        const file = new File([blob], fileName, { type: 'image/jpeg' });
+        resolve(file);
+      }, 'image/jpeg', 0.95);
+    });
+  };
+
+  // 사진 잘라내기 적용 핸들러
+  const handleApplyCrop = async () => {
+    if (!completedCrop || !imgRef.current || !previewUrl) {
+      alert('잘라낼 이미지가 없습니다.');
+      return;
+    }
+
+    try {
+      const image = imgRef.current;
+      const croppedFile = await getCroppedImg(
+        image,
+        completedCrop,
+        file?.name || `cropped_${Date.now()}.jpg`
+      );
+      
+      // 잘라낸 이미지 미리보기 생성
+      const reader = new FileReader();
+      reader.onload = () => {
+        setCroppedPreviewUrl(reader.result as string);
+      };
+      reader.readAsDataURL(croppedFile);
+      
+      setCroppedFile(croppedFile);
+      alert('사진이 잘라졌습니다.');
+    } catch (error) {
+      console.error('사진 잘라내기 실패:', error);
+      alert('사진 잘라내기에 실패했습니다.');
+    }
+  };
+
+  // 사진 잘라내기 취소 핸들러
+  const handleCancelCrop = () => {
+    setCrop(undefined);
+    setCompletedCrop(undefined);
+    setCroppedFile(null);
+    setCroppedPreviewUrl(null);
+  };
 
   const [folderName, setFolderName] = useState<string>('');
   const [fileName, setFileName] = useState<string>('');
@@ -157,7 +280,7 @@ const SavePhotoPage: React.FC = () => {
     setFolderListError(null);
     try {
       const token = localStorage.getItem('accessToken');
-      const res = await fetch(`${API_BASE_URL}/api/dashboard/folders/`, {
+      const res = await fetch('/api/dashboard/folders/', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -191,7 +314,8 @@ const SavePhotoPage: React.FC = () => {
   };
 
   const onSubmit = async () => {
-    let finalFile: File | null = file;
+    // 크롭된 파일이 있으면 우선 사용
+    let finalFile: File | null = croppedFile || file;
     if (!finalFile && previewUrl) {
       const [meta, data] = previewUrl.split(',');
       const mime = meta.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
@@ -320,17 +444,71 @@ const SavePhotoPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <div className="max-w-md mx-auto">
-        {/* 로딩 오버레이 */}
+        {/* 로딩 오버레이 - 펄스 애니메이션 (심장박동 효과) */}
         {isSubmitting && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 shadow-xl max-w-[300px] w-full mx-4">
+            <div className="bg-white rounded-lg p-8 shadow-xl max-w-[320px] w-full mx-4">
               <div className="flex flex-col items-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-                <p className="text-gray-700 text-center">수초 ~ 수분 소요됩니다.</p>
+                {/* 펄스 애니메이션 (심장박동 효과) */}
+                <div className="relative mb-6" style={{ width: '80px', height: '80px' }}>
+                  {/* 외부 펄스 링 */}
+                  <div 
+                    className="absolute inset-0 rounded-full bg-blue-400 opacity-60"
+                    style={{
+                      animation: 'pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }}
+                  ></div>
+                  {/* 중간 펄스 링 */}
+                  <div 
+                    className="absolute inset-0 rounded-full bg-blue-500 opacity-40"
+                    style={{
+                      animation: 'pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                      animationDelay: '0.3s',
+                    }}
+                  ></div>
+                  {/* 중심 원 */}
+                  <div 
+                    className="absolute inset-0 rounded-full bg-blue-600 flex items-center justify-center"
+                    style={{
+                      animation: 'pulse-heart 1.5s ease-in-out infinite',
+                    }}
+                  >
+                    <div className="w-6 h-6 rounded-full bg-white"></div>
+                  </div>
+                </div>
+                <p className="text-gray-700 text-center text-base font-medium mb-1">사진을 분석하고 있습니다...</p>
+                <p className="text-gray-500 text-center text-sm">수초 ~ 수분 소요됩니다</p>
               </div>
             </div>
           </div>
         )}
+        
+        {/* 펄스 애니메이션 스타일 */}
+        <style>{`
+          @keyframes pulse-ring {
+            0% {
+              transform: scale(0.8);
+              opacity: 0.6;
+            }
+            50% {
+              transform: scale(1.2);
+              opacity: 0.2;
+            }
+            100% {
+              transform: scale(1.4);
+              opacity: 0;
+            }
+          }
+          
+          @keyframes pulse-heart {
+            0%, 100% {
+              transform: scale(1);
+            }
+            50% {
+              transform: scale(1.1);
+            }
+          }
+        `}</style>
 
         {/* 제목 */}
         <div className="px-4 pt-6 pb-4">
@@ -340,34 +518,122 @@ const SavePhotoPage: React.FC = () => {
         {/* 미리보기 카드 */}
         <div className="px-4 pb-4">
           <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4 shadow-sm">
-            <div className="flex gap-4 mb-4">
-              <div className="flex-1 h-48 bg-gray-900 rounded-lg overflow-hidden border border-gray-800">
-                {previewUrl ? (
-                  <img 
-                    src={previewUrl} 
-                    alt="preview" 
-                    className="w-full h-full object-cover" 
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
-                    미리보기가 없습니다
-                  </div>
-                )}
+            {/* 사진 잘라내기 안내 텍스트 */}
+            {previewUrl && !croppedPreviewUrl && (
+              <div className="mb-3 text-center">
+                <p className="text-sm text-gray-600 font-medium">환부 영역을 정사각형으로 선택해주세요</p>
+                <p className="text-xs text-gray-500 mt-1">드래그하여 잘라낼 영역을 조정할 수 있습니다</p>
               </div>
-              <div className="flex flex-col gap-2">
-                <button 
-                  onClick={handleRetake}
-                  className="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
+            )}
+            
+            {/* 이미지 크롭 영역 - 이미지 비율에 맞춰 동적 조정 */}
+            <div className="mb-4">
+              {previewUrl ? (
+                <div className="relative w-full rounded-lg overflow-hidden border-2 border-gray-300 shadow-lg">
+                  {croppedPreviewUrl ? (
+                    // 잘라낸 이미지 표시
+                    <div className="relative w-full bg-gray-50">
+                      <div className="flex items-center justify-center">
+                        <img 
+                          src={croppedPreviewUrl} 
+                          alt="잘라낸 사진 미리보기" 
+                          className="max-w-full max-h-[500px] object-contain rounded-lg shadow-md" 
+                        />
+                      </div>
+                      <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full font-medium">
+                        ✓ 잘라내기 완료
+                      </div>
+                    </div>
+                  ) : (
+                    // 사진 잘라내기 도구 표시 - 이미지 크기에 맞춰 동적 조정 (패딩 없음)
+                    <div className="relative w-full flex items-center justify-center" style={{ 
+                      maxHeight: '500px'
+                    }}>
+                      <div className="flex items-center justify-center">
+                        <ReactCrop
+                          crop={crop}
+                          onChange={(_, percentCrop) => setCrop(percentCrop)}
+                          onComplete={(c) => setCompletedCrop(c)}
+                          aspect={1}
+                          minWidth={30}
+                          minHeight={30}
+                          style={{ 
+                            maxWidth: '100%', 
+                            maxHeight: '500px',
+                            display: 'inline-block'
+                          }}
+                        >
+                          <img
+                            ref={imgRef}
+                            src={previewUrl}
+                            alt="preview"
+                            style={{ 
+                              maxWidth: '100%',
+                              maxHeight: '500px',
+                              display: 'block',
+                              width: 'auto',
+                              height: 'auto',
+                              margin: '0 auto'
+                            }}
+                            onLoad={onImageLoad}
+                          />
+                        </ReactCrop>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="w-full bg-gray-900 rounded-lg overflow-hidden border border-gray-800 flex items-center justify-center" style={{ minHeight: '200px' }}>
+                  <div className="text-gray-400 text-sm">미리보기가 없습니다</div>
+                </div>
+              )}
+            </div>
+            
+            {/* 사진 잘라내기 제어 버튼 */}
+            {previewUrl && !croppedPreviewUrl && (
+              <div className="flex gap-2 mb-4">
+                <button
+                  onClick={handleApplyCrop}
+                  disabled={!completedCrop}
+                  className="flex-1 px-4 py-3 rounded-lg bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed shadow-md disabled:shadow-none"
                 >
-                  카메라 다시 촬영
+                  ✓ 사진 잘라내기
                 </button>
-                <button 
-                  onClick={handleRefreshFields}
-                  className="px-4 py-2 rounded-lg border border-gray-300 bg-gray-50 text-gray-600 text-sm font-medium hover:bg-gray-100 transition-colors whitespace-nowrap"
+                <button
+                  onClick={handleCancelCrop}
+                  className="px-4 py-3 rounded-lg border-2 border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors"
                 >
-                  기입 내역 새로고침
+                  취소
                 </button>
               </div>
+            )}
+            
+            {/* 잘라낸 후 다시 잘라내기 버튼 */}
+            {croppedPreviewUrl && (
+              <div className="mb-4">
+                <button
+                  onClick={handleCancelCrop}
+                  className="w-full px-4 py-2.5 rounded-lg border-2 border-blue-500 bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors"
+                >
+                  🔄 사진 다시 잘라내기
+                </button>
+              </div>
+            )}
+            
+            {/* 하단 버튼들 */}
+            <div className="flex flex-col gap-2 pt-2 border-t border-gray-200">
+              <button 
+                onClick={handleRetake}
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                📷 카메라 다시 촬영
+              </button>
+              <button 
+                onClick={handleRefreshFields}
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 bg-gray-50 text-gray-600 text-sm font-medium hover:bg-gray-100 transition-colors"
+              >
+                🔄 기입 내역 새로고침
+              </button>
             </div>
           </div>
         </div>
@@ -543,8 +809,28 @@ const SavePhotoPage: React.FC = () => {
                       type="date"
                       value={birth}
                       onChange={(e) => setBirth(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-gray-900"
+                      style={{
+                        WebkitAppearance: 'none',
+                        MozAppearance: 'textfield',
+                        appearance: 'none',
+                        minHeight: '44px', // 모바일 터치 친화적 크기
+                        fontSize: '16px', // 모바일에서 확대 방지
+                        color: birth ? '#111827' : '#9CA3AF', // 값이 있으면 진한 색, 없으면 회색
+                      }}
+                      placeholder="YYYY-MM-DD"
                     />
+                    {/* 모바일에서 값이 보이지 않을 경우를 위한 대체 표시 */}
+                    {birth && (
+                      <p className="text-xs text-gray-600 mt-1.5 font-medium">
+                        선택된 날짜: {birth.split('-').join('. ')}
+                      </p>
+                    )}
+                    {!birth && (
+                      <p className="text-xs text-gray-400 mt-1.5">
+                        생년월일을 선택해주세요
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

@@ -19,7 +19,7 @@ COPY requirements_base.txt .
 RUN conda install -n base -c conda-forge mamba -y
 
 # 3. 환경 생성 (Conda 패키지만 설치)
-RUN mamba env create -f unified_environment.yml || conda env create -f unified_environment.yml \
+RUN mamba env create -f unified_environment.yml -y || conda env create -f unified_environment.yml -y \
     && conda clean -afy
 
 # conda 환경 이름을 early_dot_env 로 설정

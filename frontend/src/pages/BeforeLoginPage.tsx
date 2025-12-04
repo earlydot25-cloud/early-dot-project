@@ -46,12 +46,15 @@ const BeforeLoginPage: React.FC<Props> = ({ onLogin, onSignup}) => {
       style={{
         position: "relative",
         display: "flex",
-        minHeight: "100dvh",
+        width: "100%",
+        minHeight: "100%",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "flex-start",
-        padding: "0 24px",
-        paddingTop: "12dvh",
+        padding: "0 max(16px, env(safe-area-inset-left, 16px))",
+        paddingRight: "max(16px, env(safe-area-inset-right, 16px))",
+        paddingTop: "clamp(60px, 12vh, 120px)",
+        paddingBottom: "clamp(20px, 5vh, 40px)",
         textAlign: "center",
         background: "#fff",
         overflow: "hidden",
@@ -78,8 +81,8 @@ const BeforeLoginPage: React.FC<Props> = ({ onLogin, onSignup}) => {
       <div style={{ position: "relative", marginBottom: 24, zIndex: 10 }}>
         <EarlyDotWordmark height={84} />
       </div>
-      <div style={{ position: "relative", width: "100%", maxWidth: 420, zIndex: 10 }}>
-        <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ position: "relative", width: "100%", maxWidth: "min(420px, calc(100% - 32px))", zIndex: 10 }}>
+        <div style={{ display: "grid", gap: 12, width: "100%" }}>
           <PageButton onClick={handleLogin} aria-label="로그인으로 이동">로그인</PageButton>
           <PageButton variant="outline" onClick={handleSignup} aria-label="회원가입으로 이동">
             회원가입
