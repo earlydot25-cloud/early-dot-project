@@ -59,43 +59,32 @@ interface ResultDetail {
   user_id?: number;  // 환자 Users.id
 }
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000';
+// 배포 환경에서는 /api 프록시 경로 사용
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 const RISK_OPTIONS = ['소견 대기', '즉시 주의', '경과 관찰', '정상'] as const;
 type RiskOption = typeof RISK_OPTIONS[number];
 
 const normalizeHost = (url: string) =>
   url.replace(/^http:\/\/(?:django|project_django)(?::\d+)?/i, API_BASE_URL);
 
-// ✅ 경로 보정 함수
+// ✅ 경로 보정 함수 - 이미지는 /media/ 경로로 직접 접근
 const resolveMediaUrl = (rawPath?: string) => {
   if (!rawPath) return '';
   let path = rawPath.replace(/\\/g, '/');
 
-  // 절대 URL인 경우
+  // 이미 완전한 URL이면 그대로 사용
   if (/^https?:\/\//i.test(path)) {
     const currentOrigin = window.location.origin;
     
-    // 백엔드가 프론트엔드 ngrok URL로 이미지 URL을 생성한 경우
-    // (백엔드가 request.build_absolute_uri()를 사용할 때 발생)
-    // 프록시 설정이 있으면 그대로 사용, 없으면 백엔드 URL로 변환 필요
-    if (path.startsWith(currentOrigin) && path.includes('/media/')) {
-      // 프록시 설정이 있으면 그대로 사용
-      // package.json에 "proxy": "http://django:8000" 설정이 있으므로
-      // 같은 호스트로 요청하면 프록시가 백엔드로 전달
+    // 현재 호스트와 같은 도메인이면 그대로 사용 (프록시가 처리)
+    if (path.startsWith(currentOrigin)) {
       return path;
     }
     
-    // localhost나 127.0.0.1인 경우
+    // localhost나 127.0.0.1인 경우 현재 호스트로 변환
     if (path.includes('127.0.0.1:8000') || path.includes('localhost:8000')) {
-      // 프록시 설정이 있으면 현재 호스트로 변환
-      // 프록시가 백엔드로 요청을 전달하므로
-      if (currentOrigin.includes('ngrok') || currentOrigin.includes('localhost')) {
-        // ngrok을 통해 접속 중이면 현재 호스트 사용 (프록시가 처리)
-        const mediaPath = path.replace(/^https?:\/\/[^\/]+/i, '');
-        return `${currentOrigin}${mediaPath}`;
-      }
-      // 로컬 개발 환경에서는 그대로 사용 (프록시가 처리)
-      return path;
+      const mediaPath = path.replace(/^https?:\/\/[^\/]+/i, '');
+      return `${currentOrigin}${mediaPath}`;
     }
     
     // ngrok URL이 포함되어 있으면 그대로 사용
@@ -106,18 +95,45 @@ const resolveMediaUrl = (rawPath?: string) => {
     return normalizeHost(path);
   }
   
-  // 상대 경로인 경우
-  if (path.startsWith('/')) return `${API_BASE_URL}${path}`;
-  if (path.startsWith('media/')) return `${API_BASE_URL}/${path}`;
+  // /media/ 경로는 /api 없이 직접 접근
+  if (path.startsWith('/media/')) {
+    return path;
+  }
 
+  // media/로 시작하는 경우
+  if (path.startsWith('media/')) {
+    return `/${path}`;
+  }
+
+  // /media/가 포함된 경우
   if (path.includes('/media/')) {
     const parts = path.split('/media/');
     if (parts.length > 1) {
-      return `${API_BASE_URL}/media/${parts[parts.length - 1]}`;
+      return `/media/${parts[parts.length - 1]}`;
     }
   }
 
-  return `${API_BASE_URL}/media/${path}`;
+  // /로 시작하는 경우 (절대 경로)
+  if (path.startsWith('/')) {
+    // /api로 시작하면 제거하고 처리
+    if (path.startsWith('/api/')) {
+      const withoutApi = path.replace(/^\/api\//, '');
+      // media 경로면 /media/로 변환
+      if (withoutApi.startsWith('media/')) {
+        return `/${withoutApi}`;
+      }
+      return `${API_BASE_URL}${path}`;
+    }
+    // /media/로 시작하면 그대로 사용
+    if (path.startsWith('/media/')) {
+      return path;
+    }
+    // 다른 절대 경로는 API_BASE_URL 사용
+    return `${API_BASE_URL}${path}`;
+  }
+
+  // 상대 경로인 경우 /media/ 추가
+  return `/media/${path}`;
 };
 
 // 증상 심각도 순서 (심한 것부터)
@@ -159,7 +175,7 @@ const HistoryResultPage: React.FC = () => {
     const fetchData = async () => {
       try {
         const token = localStorage.getItem('accessToken');
-        const response = await axios.get<ResultDetail>(`${API_BASE_URL}/api/dashboard/records/${resultId}/`, {
+        const response = await axios.get<ResultDetail>(`/api/dashboard/records/${resultId}/`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -206,7 +222,7 @@ const HistoryResultPage: React.FC = () => {
       setFollowupMessage(null);
       const token = localStorage.getItem('accessToken');
       const response = await axios.patch(
-        `${API_BASE_URL}/api/dashboard/records/${data.id}/followup/update/`,
+        `/api/dashboard/records/${data.id}/followup/update/`,
         {
           doctor_note: doctorNote,
           doctor_risk_level: doctorRiskLevel,
@@ -613,7 +629,7 @@ const HistoryResultPage: React.FC = () => {
                   try {
                     const token = localStorage.getItem('accessToken');
                     await axios.post(
-                      `${API_BASE_URL}/api/dashboard/records/${data.id}/request-followup/`,
+                      `/api/dashboard/records/${data.id}/request-followup/`,
                       {},
                       {
                         headers: {

@@ -144,7 +144,7 @@ const CapturePage: React.FC = () => {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/*';
-      input.capture = 'environment'; // 후면 카메라 사용
+      // input.capture = 'environment'; // 후면 카메라 고정 해제: 갤러리에서도 선택 가능
       
       input.onchange = (e) => {
         const file = (e.target as HTMLInputElement).files?.[0];

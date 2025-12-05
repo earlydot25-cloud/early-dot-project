@@ -17,11 +17,12 @@ Including another URLconf
 
 # early_dot/urls.py
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from users.views import UserSignupView, UserProfileView, RemovePatientView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.static import serve as static_serve
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -32,4 +33,12 @@ urlpatterns = [
     path('api/admin_tools/', include('admin_tools.urls')),  # admin_tools 앱 (관리자)
     # 의사 전용: 담당 환자 제거
     path('api/doctors/patients/<int:patient_id>/remove/', RemovePatientView.as_view(), name="remove_patient"),
- ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+]
+
+# 개발/로컬에서는 static() 사용, 배포 환경에서도 /media/를 Django가 직접 서빙하도록 보장
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+else:
+    urlpatterns += [
+        re_path(r'^media/(?P<path>.*)$', static_serve, {'document_root': settings.MEDIA_ROOT}),
+    ]

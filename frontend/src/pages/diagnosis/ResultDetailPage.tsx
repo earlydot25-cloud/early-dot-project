@@ -59,30 +59,64 @@ interface ResultDetail {
   user: UserInfo;
 }
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000';
+// 배포 환경에서는 /api 프록시 경로 사용
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 const RISK_OPTIONS = ['소견 대기', '즉시 주의', '경과 관찰', '정상'] as const;
 type RiskOption = typeof RISK_OPTIONS[number];
 
 const normalizeHost = (url: string) =>
   url.replace(/^http:\/\/(?:django|project_django)(?::\d+)?/i, API_BASE_URL);
 
-// ✅ 경로 보정 함수
+// ✅ 경로 보정 함수 - 이미지는 /media/ 경로로 직접 접근
 const resolveMediaUrl = (rawPath?: string) => {
   if (!rawPath) return '';
   let path = rawPath.replace(/\\/g, '/');
 
-  if (/^https?:\/\//i.test(path)) return normalizeHost(path);
-  if (path.startsWith('/')) return `${API_BASE_URL}${path}`;
-  if (path.startsWith('media/')) return `${API_BASE_URL}/${path}`;
+  // 이미 완전한 URL이면 그대로 사용
+  if (/^https?:\/\//i.test(path)) {
+    return normalizeHost(path);
+  }
 
+  // /media/ 경로는 /api 없이 직접 접근
+  if (path.startsWith('/media/')) {
+    // 상대 경로로 처리 (현재 도메인 기준)
+    return path;
+  }
+
+  // media/로 시작하는 경우
+  if (path.startsWith('media/')) {
+    return `/${path}`;
+  }
+
+  // /media/가 포함된 경우
   if (path.includes('/media/')) {
     const parts = path.split('/media/');
     if (parts.length > 1) {
-      return `${API_BASE_URL}/media/${parts[parts.length - 1]}`;
+      return `/media/${parts[parts.length - 1]}`;
     }
   }
 
-  return `${API_BASE_URL}/media/${path}`;
+  // /로 시작하는 경우 (절대 경로)
+  if (path.startsWith('/')) {
+    // /api로 시작하면 제거하고 처리
+    if (path.startsWith('/api/')) {
+      const withoutApi = path.replace(/^\/api\//, '');
+      // media 경로면 /media/로 변환
+      if (withoutApi.startsWith('media/')) {
+        return `/${withoutApi}`;
+      }
+      return `${API_BASE_URL}${path}`;
+    }
+    // /media/로 시작하면 그대로 사용
+    if (path.startsWith('/media/')) {
+      return path;
+    }
+    // 다른 절대 경로는 API_BASE_URL 사용
+    return `${API_BASE_URL}${path}`;
+  }
+
+  // 상대 경로인 경우 /media/ 추가
+  return `/media/${path}`;
 };
 
 // 증상 심각도 순서 (심한 것부터)
@@ -182,7 +216,7 @@ const ResultDetailPage: React.FC = () => {
       setFollowupMessage(null);
       const token = localStorage.getItem('accessToken');
       const response = await axios.patch(
-        `${API_BASE_URL}/api/dashboard/records/${data.id}/followup/update/`,
+        `/api/dashboard/records/${data.id}/followup/update/`,
         {
           doctor_note: doctorNote,
           doctor_risk_level: doctorRiskLevel,

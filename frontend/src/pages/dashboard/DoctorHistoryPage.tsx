@@ -11,37 +11,74 @@ type IconCmp = React.FC<IconBaseProps>;
 const MarsIcon: IconCmp = (props: IconBaseProps) => <FaMars {...props} />;
 const VenusIcon: IconCmp = (props: IconBaseProps) => <FaVenus {...props} />;
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000';
+// 배포 환경에서는 /api 프록시 경로 사용
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
-// 경로 보정 함수
+// django, project_django 같은 내부 호스트를 현재 호스트 또는 API_BASE_URL로 정규화
+const normalizeHost = (url: string) =>
+  url.replace(/^http:\/\/(?:django|project_django)(?::\d+)?/i, API_BASE_URL || window.location.origin);
+
+// ✅ 경로 보정 함수 - 이미지는 /media/ 경로로 직접 접근
 const resolveMediaUrl = (rawPath?: string) => {
   if (!rawPath) return '';
   let path = rawPath.replace(/\\/g, '/');
 
-  // 이미 절대 URL이면 그대로 사용
+  // 이미 완전한 URL이면 그대로 사용
   if (/^https?:\/\//i.test(path)) {
-    if (API_BASE_URL && !path.includes(API_BASE_URL)) {
+    const currentOrigin = window.location.origin;
+    if (path.startsWith(currentOrigin)) {
       return path;
     }
-    return path;
-  }
-  
-  // 상대 경로 처리
-  if (path.startsWith('/')) {
-    return API_BASE_URL ? `${API_BASE_URL}${path}` : path;
-  }
-  if (path.startsWith('media/')) {
-    return API_BASE_URL ? `${API_BASE_URL}/${path}` : `/${path}`;
+    if (path.includes('127.0.0.1:8000') || path.includes('localhost:8000')) {
+      const mediaPath = path.replace(/^https?:\/\/[^\/]+/i, '');
+      return `${currentOrigin}${mediaPath}`;
+    }
+    // ngrok URL은 그대로 사용
+    if (path.includes('ngrok')) {
+      return path;
+    }
+    // django, project_django 같은 내부 호스트를 현재 호스트/API_BASE_URL로 변환
+    return normalizeHost(path);
   }
 
+  // /media/ 경로는 /api 없이 직접 접근
+  if (path.startsWith('/media/')) {
+    return path;
+  }
+
+  // media/로 시작하는 경우
+  if (path.startsWith('media/')) {
+    return `/${path}`;
+  }
+
+  // /media/가 포함된 경우
   if (path.includes('/media/')) {
     const parts = path.split('/media/');
     if (parts.length > 1) {
-      return API_BASE_URL ? `${API_BASE_URL}/media/${parts[parts.length - 1]}` : `/media/${parts[parts.length - 1]}`;
+      return `/media/${parts[parts.length - 1]}`;
     }
   }
 
-  return API_BASE_URL ? `${API_BASE_URL}/media/${path}` : `/media/${path}`;
+  // /로 시작하는 경우 (절대 경로)
+  if (path.startsWith('/')) {
+    // /api로 시작하면 제거하고 처리
+    if (path.startsWith('/api/')) {
+      const withoutApi = path.replace(/^\/api\//, '');
+      if (withoutApi.startsWith('media/')) {
+        return `/${withoutApi}`;
+      }
+      return API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+    }
+    // /media/로 시작하면 그대로 사용
+    if (path.startsWith('/media/')) {
+      return path;
+    }
+    // 다른 절대 경로는 API_BASE_URL 사용
+    return API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+  }
+
+  // 상대 경로인 경우 /media/ 추가
+  return `/media/${path}`;
 };
 
 // 이미지 로드 실패 시 대체 컴포넌트
@@ -153,7 +190,7 @@ const DoctorHistoryPage: React.FC = () => {
     const fetchPatients = async () => {
       try {
         const token = localStorage.getItem('accessToken');
-        const response = await axios.get<Patient[]>(`${API_BASE_URL}/api/dashboard/patients/`, {
+        const response = await axios.get<Patient[]>('/api/dashboard/patients/', {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -189,7 +226,7 @@ const DoctorHistoryPage: React.FC = () => {
       try {
         const token = localStorage.getItem('accessToken');
         console.log('[DoctorHistoryPage] 폴더 목록 요청: patient_id=', selectedPatientId);
-        const response = await axios.get<Folder[]>(`${API_BASE_URL}/api/dashboard/folders/`, {
+        const response = await axios.get<Folder[]>('/api/dashboard/folders/', {
           params: { user: selectedPatientId },
           headers: {
             Authorization: `Bearer ${token}`,
@@ -215,7 +252,7 @@ const DoctorHistoryPage: React.FC = () => {
     try {
       const token = localStorage.getItem('accessToken');
       console.log('[DoctorHistoryPage] 진단 기록 요청: patient_id=', selectedPatientId, 'folder=', folderName);
-      const response = await axios.get<RecordItem[]>(`${API_BASE_URL}/api/dashboard/records/`, {
+      const response = await axios.get<RecordItem[]>('/api/dashboard/records/', {
         params: { user: selectedPatientId, folder: folderName },
         headers: {
           Authorization: `Bearer ${token}`,

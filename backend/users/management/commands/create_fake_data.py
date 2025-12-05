@@ -130,11 +130,18 @@ class Command(BaseCommand):
         
         diseases_data = [
             {
-                'name_ko': '악성 흑색종',
-                'name_en': 'Malignant Melanoma',
+                'name_ko': '흑색종',
+                'name_en': 'Melanoma',
                 'classification': '악성',
                 'description': '가장 위험한 피부암 중 하나입니다.',
                 'recommendation': '즉시 병원 방문을 권장합니다.',
+            },
+            {
+                'name_ko': '모반',
+                'name_en': 'Nevus',
+                'classification': '양성',
+                'description': '일반적인 점으로, 큰 문제가 없습니다.',
+                'recommendation': '정기적인 관찰을 권장합니다.',
             },
             {
                 'name_ko': '기저세포암',
@@ -151,18 +158,32 @@ class Command(BaseCommand):
                 'recommendation': '정기적인 검진을 권장합니다.',
             },
             {
+                'name_ko': '피부섬유종',
+                'name_en': 'Dermatofibroma',
+                'classification': '양성',
+                'description': '피부의 섬유 조직에서 발생하는 양성 종양입니다.',
+                'recommendation': '정기적인 관찰을 권장합니다.',
+            },
+            {
+                'name_ko': '양성 각화증',
+                'name_en': 'Benign Keratosis',
+                'classification': '양성',
+                'description': '피부의 각질층이 비정상적으로 두꺼워진 양성 질환입니다.',
+                'recommendation': '정기적인 관찰을 권장합니다.',
+            },
+            {
+                'name_ko': '혈관 병변',
+                'name_en': 'Vascular',
+                'classification': '양성',
+                'description': '혈관 관련 피부 병변입니다.',
+                'recommendation': '정기적인 관찰을 권장합니다.',
+            },
+            {
                 'name_ko': '정상',
                 'name_en': 'Normal',
                 'classification': '양성',
                 'description': '특별한 이상이 없는 정상 상태입니다.',
                 'recommendation': '건강을 유지하세요.',
-            },
-            {
-                'name_ko': '양성 모반',
-                'name_en': 'Benign Nevus',
-                'classification': '양성',
-                'description': '일반적인 점으로, 큰 문제가 없습니다.',
-                'recommendation': '정기적인 관찰을 권장합니다.',
             },
         ]
         

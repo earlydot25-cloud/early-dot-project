@@ -50,14 +50,24 @@ class FoldersListView(APIView):
             ).order_by('-capture_date').first()
             
             if latest_photo:
-                # 이미지 URL 생성 (절대 경로)
+                # 이미지 URL 생성 (상대 경로 반환)
                 image_url = ''
                 if latest_photo.upload_storage_path:
                     url = latest_photo.upload_storage_path.url
                     if url.startswith('http'):
-                        image_url = url
+                        # 내부 호스트명(django, project_django)이 포함된 경우 경로만 추출
+                        if 'django' in url or 'project_django' in url:
+                            import re
+                            match = re.search(r'/media/.*$', url)
+                            if match:
+                                image_url = match.group(0)
+                            else:
+                                image_url = url
+                        else:
+                            image_url = url
                     else:
-                        image_url = f"http://127.0.0.1:8000{url}"
+                        # 상대 경로 그대로 반환 (프론트엔드에서 처리)
+                        image_url = url
                 
                 # 해당 폴더의 최고 위험도 계산
                 # 폴더 내 모든 Photos의 Results를 확인하여 최고 위험도 찾기
@@ -162,14 +172,24 @@ class RecordListView(APIView):
             # Results가 없는 Photos도 포함 (분석 대기 상태)
             from django.conf import settings
             for photo in photos_without_results:
-                # 이미지 URL 생성 (절대 경로)
+                # 이미지 URL 생성 (상대 경로 반환)
                 image_url = ''
                 if photo.upload_storage_path:
-                    if photo.upload_storage_path.url.startswith('http'):
-                        image_url = photo.upload_storage_path.url
+                    url = photo.upload_storage_path.url
+                    if url.startswith('http'):
+                        # 내부 호스트명(django, project_django)이 포함된 경우 경로만 추출
+                        if 'django' in url or 'project_django' in url:
+                            import re
+                            match = re.search(r'/media/.*$', url)
+                            if match:
+                                image_url = match.group(0)
+                            else:
+                                image_url = url
+                        else:
+                            image_url = url
                     else:
-                        # 상대 경로를 절대 경로로 변환 (request를 사용)
-                        image_url = request.build_absolute_uri(photo.upload_storage_path.url)
+                        # 상대 경로 그대로 반환 (프론트엔드에서 처리)
+                        image_url = url
                 
                 records_data.append({
                     'id': photo.id,

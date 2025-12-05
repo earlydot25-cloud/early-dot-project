@@ -38,6 +38,11 @@ SIMPLE_JWT = {
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# 파일 업로드 크기 제한 증가 (이미지 업로드용)
+# 기본값: 2.5MB → 50MB로 증가
+DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB
+
 # .env 파일 위치를 기반으로 환경 설정 로드
 env = environ.Env(
     # set casting, default value
@@ -57,7 +62,7 @@ DJANGO_ENV = env("DJANGO_ENV", default="local")
 
 
 # SECRET_KEY와 DEBUG를 환경 변수에서 가져옵니다.
-SECRET_KEY = env('Django_SECRET_KEY')
+SECRET_KEY = env('DJANGO_SECRET_KEY')
 DEBUG = env('DEBUG')
 
 

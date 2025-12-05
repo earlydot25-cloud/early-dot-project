@@ -12,7 +12,7 @@ RUN conda install -n base -c conda-forge mamba -y
 
 # 3. 환경 생성 (Conda 패키지만 설치)
 # 이 단계는 이제 numpy, opencv, python, pip 만 설치하므로 충돌이 발생할 확률이 극히 낮습니다.
-RUN mamba env create -f model_environment.yml || conda env create -f model_environment.yml \
+RUN mamba env create -f model_environment.yml -y || conda env create -f model_environment.yml -y \
     && conda clean -afy
 
 # conda 환경 이름을 model_env 로 설정하고, 이후 명령어를 이 환경에서 실행하도록 준비

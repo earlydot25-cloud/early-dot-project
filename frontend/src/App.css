@@ -1,4 +1,26 @@
 /* frontend/src/App.css */
+:root {
+  /* 안전 영역 변수 (iOS notch, Android navigation bar 대응) */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  /* iOS 스크롤 부드럽게 */
+  -webkit-overflow-scrolling: touch;
+}
+
 #root {
   width: 100%;
   margin: 0;
@@ -6,73 +28,85 @@
   text-align: left;
   display: flex;
   justify-content: center;
-  align-items: center;
-  height: 100vh;
+  align-items: flex-start;
   min-height: 100vh;
+  min-height: 100dvh; /* 동적 뷰포트 높이 */
+  background-color: #f5f5f5;
 }
 
 .card {
   padding: 2em;
 }
 
-/* 전체 앱 컨테이너 (Layout.tsx의 div) 스타일 */
+/* 전체 앱 컨테이너 (Layout.tsx의 div) 스타일 - 반응형으로 변경 */
 .app-container {
-    /* 모바일 뷰포트 고정 */
-    width: 375px;
-    max-width: 100%;
-    height: 812px; /* 💡 높이를 812px로 고정합니다. */
-    margin: 0 auto;
+    width: 100%;
+    max-width: 100vw;
+    min-height: 100vh;
+    min-height: 100dvh; /* 동적 뷰포트 높이 */
+    margin: 0;
     position: relative;
-    overflow: hidden; /* 💡 전체 컨테이너는 오버플로우 숨김 처리 */
+    overflow-x: hidden;
     background-color: white;
-    /* display: flex; flex-direction: column; 제거 */
+    /* 안전 영역 패딩 적용 */
+    padding-top: var(--safe-area-inset-top);
+    padding-bottom: var(--safe-area-inset-bottom);
+    padding-left: var(--safe-area-inset-left);
+    padding-right: var(--safe-area-inset-right);
 }
 
-/* 상단 Nav 스타일 (Nav.tsx에서 사용) - 변경 없음 */
+/* 상단 Nav 스타일 (Nav.tsx에서 사용) - 반응형으로 변경 */
 .nav-header {
     position: fixed;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 375px;
+    top: var(--safe-area-inset-top);
+    left: 0;
+    right: 0;
+    width: 100%;
     height: 60px;
     background-color: white;
     border-bottom: 1px solid #ddd;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 15px;
+    padding: 0 max(15px, var(--safe-area-inset-left));
+    padding-right: max(15px, var(--safe-area-inset-right));
     z-index: 1000;
 }
 
-/* 하단 Nav 스타일 (BottomNav.tsx에서 사용) - 변경 없음 */
+/* 하단 Nav 스타일 (BottomNav.tsx에서 사용) - 반응형으로 변경 */
 .bottom-nav {
     position: fixed;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 375px;
+    bottom: var(--safe-area-inset-bottom);
+    left: 0;
+    right: 0;
+    width: 100%;
     height: 60px;
     background-color: white;
     border-top: 1px solid #ddd;
     display: flex;
     justify-content: space-around;
     align-items: center;
+    padding-bottom: var(--safe-area-inset-bottom);
+    padding-left: max(0px, var(--safe-area-inset-left));
+    padding-right: max(0px, var(--safe-area-inset-right));
     z-index: 1000;
 }
 
-/* 메인 콘텐츠 영역 (Layout.tsx의 main) 스타일 */
+/* 메인 콘텐츠 영역 (Layout.tsx의 main) 스타일 - 반응형으로 변경 */
 .main-content {
     /* 💡 Nav와 BottomNav 사이에 absolute로 배치 */
     position: absolute;
-    top: 60px; /* Nav 높이만큼 아래로 */
-    bottom: 60px; /* BottomNav 높이만큼 위로 */
+    top: calc(60px + var(--safe-area-inset-top)); /* Nav 높이 + 안전 영역 */
+    bottom: calc(60px + var(--safe-area-inset-bottom)); /* BottomNav 높이 + 안전 영역 */
     left: 0;
     right: 0;
+    width: 100%;
 
     /* 💡 스크롤 가능하게 처리 */
     overflow-y: auto;
     overflow-x: hidden;
+    /* iOS 스크롤 부드럽게 */
+    -webkit-overflow-scrolling: touch;
 
     /* Tailwind 클래스로 패딩을 제어할 수 있도록 기본값 제거 */
     padding-left: 0;
