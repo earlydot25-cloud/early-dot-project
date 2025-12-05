@@ -247,6 +247,8 @@ class HairRemovalPipeline:
         Returns:
             처리된 이미지 바이트
         """
+        print("[Pipeline] ========== 털 제거 파이프라인 시작 (총 4단계) ==========")
+        
         # 바이트를 numpy array로 변환
         try:
             nparr = np.frombuffer(image_bytes, np.uint8)
@@ -262,9 +264,9 @@ class HairRemovalPipeline:
         
         # Stage 1: 마스크 추출
         try:
-            print("[Pipeline] Stage 1: 마스크 추출 시작")
+            print("[Pipeline] [1/4] Stage 1: 마스크 추출 시작")
             mask_binary = self._predict_mask(bgr)
-            print("[Pipeline] Stage 1: 마스크 추출 완료")
+            print("[Pipeline] [1/4] Stage 1: 마스크 추출 완료")
         except Exception as e:
             print(f"[Pipeline] Stage 1 실패: {e}")
             import traceback
@@ -273,7 +275,7 @@ class HairRemovalPipeline:
         
         # Stage 2: 전처리 (BSRGAN + 정규화)
         try:
-            print("[Pipeline] Stage 2: 전처리 시작")
+            print("[Pipeline] [2/4] Stage 2: 전처리 시작 (해상도 및 선명도 향상)")
             prep_img, prep_mask, prep_meta = normalize_image_and_mask(
                 bgr,
                 mask_binary,
@@ -284,7 +286,7 @@ class HairRemovalPipeline:
                 edge_small=self.BSRGAN_EDGE_SMALL,
                 max_passes=self.BSRGAN_MAX_PASSES,
             )
-            print("[Pipeline] Stage 2: 전처리 완료")
+            print("[Pipeline] [2/4] Stage 2: 전처리 완료")
         except Exception as e:
             print(f"[Pipeline] Stage 2 실패: {e}")
             import traceback
@@ -293,9 +295,9 @@ class HairRemovalPipeline:
         
         # Stage 3: LaMa 인페인팅
         try:
-            print("[Pipeline] Stage 3: LaMa 인페인팅 시작")
+            print("[Pipeline] [3/4] Stage 3: 털 제거 (LaMa 인페인팅) 시작")
             hairless_bgr = self._run_lama_inpaint(prep_img, prep_mask)
-            print("[Pipeline] Stage 3: LaMa 인페인팅 완료")
+            print("[Pipeline] [3/4] Stage 3: 털 제거 완료")
         except Exception as e:
             print(f"[Pipeline] Stage 3 실패: {e}")
             import traceback
@@ -304,12 +306,12 @@ class HairRemovalPipeline:
         
         # Stage 4: 후처리
         try:
-            print("[Pipeline] Stage 4: 후처리 시작")
+            print("[Pipeline] [4/4] Stage 4: 후처리 시작")
             enhanced_bgr, enhance_meta = enhance_hairless_image(
                 hairless_bgr,
                 target_long_edge=self.POST_TARGET_LONG_EDGE,
             )
-            print("[Pipeline] Stage 4: 후처리 완료")
+            print("[Pipeline] [4/4] Stage 4: 후처리 완료")
         except Exception as e:
             print(f"[Pipeline] Stage 4 실패: {e}")
             import traceback
@@ -322,6 +324,7 @@ class HairRemovalPipeline:
             if not success:
                 raise RuntimeError("이미지 인코딩 실패")
             print(f"[Pipeline] 이미지 인코딩 완료 (크기: {len(encoded_img.tobytes())} bytes)")
+            print("[Pipeline] ========== 털 제거 파이프라인 완료 ==========")
             return encoded_img.tobytes()
         except Exception as e:
             print(f"[Pipeline] 이미지 인코딩 실패: {e}")

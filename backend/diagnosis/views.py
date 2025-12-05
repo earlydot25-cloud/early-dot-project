@@ -62,9 +62,9 @@ class PhotoUploadView(APIView):
             # Results ID 추적 (AI 예측 성공 시 사용)
             result_id = None
             
-            # 💡 털 제거 파이프라인 호출 (전처리 모델 역할)
+            # 털 제거 파이프라인 호출 (전처리 모델 역할)
             # FastAPI 서버에 이미지 전송하여 털 제거 처리
-            # ⚠️ 중요: 원본 이미지는 이미 저장되어 있으므로, 처리 실패해도 문제 없음
+            # 중요: 원본 이미지는 이미 저장되어 있으므로, 처리 실패해도 문제 없음
             processed_image_bytes = None
             image_path = None
             file_name = None
@@ -80,13 +80,14 @@ class PhotoUploadView(APIView):
                     if not os.path.exists(image_path):
                         print(f"[Diagnosis] 경고: 이미지 파일이 존재하지 않습니다: {image_path}")
                     else:
+                        print(f"[Diagnosis] ========== 전체 파이프라인 시작 (총 5단계) ==========")
                         print(f"[Diagnosis] 이미지 파일 확인: {image_path} (크기: {os.path.getsize(image_path)} bytes)")
                         
                         with open(image_path, 'rb') as f:
                             image_bytes = f.read()
                         
                         # FastAPI 서버 호출 (털 제거)
-                        print(f"[Diagnosis] FastAPI 호출 시작: {fastapi_url}/remove-hair")
+                        print(f"[Diagnosis] [1/5] 털 제거 파이프라인 시작: {fastapi_url}/remove-hair")
                         
                         response = requests.post(
                             f"{fastapi_url}/remove-hair",
@@ -97,7 +98,7 @@ class PhotoUploadView(APIView):
                         if response.status_code == 200:
                             # 처리된 이미지로 원본 파일 덮어쓰기
                             processed_image_bytes = response.content
-                            print(f"[Diagnosis] 처리된 이미지 크기: {len(processed_image_bytes)} bytes")
+                            print(f"[Diagnosis] [1/5] 처리된 이미지 크기: {len(processed_image_bytes)} bytes")
                             
                             # 기존 파일 백업 (선택적)
                             backup_path = f"{image_path}.backup"
@@ -107,7 +108,7 @@ class PhotoUploadView(APIView):
                             
                             with open(image_path, 'wb') as f:
                                 f.write(processed_image_bytes)
-                            print(f"[Diagnosis] 털 제거 처리 완료: Photo ID {photo_instance.id}")
+                            print(f"[Diagnosis] [1/5] 털 제거 파이프라인 완료: Photo ID {photo_instance.id}")
                         else:
                             print(f"[Diagnosis] 털 제거 처리 실패: {response.status_code}")
                             print(f"[Diagnosis] 응답 내용: {response.text[:500]}")  # 처음 500자만 출력
@@ -130,42 +131,41 @@ class PhotoUploadView(APIView):
                 if settings.DEBUG:
                     traceback.print_exc()
             
-            # 💡 AI 모델 예측 호출 (털 제거 성공/실패 여부와 관계없이 실행)
+            # AI 모델 예측 호출 (털 제거 성공/실패 여부와 관계없이 실행)
             # 털 제거된 이미지가 있으면 사용, 없으면 원본 이미지 사용
             if image_path and os.path.exists(image_path):
                 try:
-                    print(f"[Diagnosis] ========== AI 모델 예측 시작 ==========")
-                    print(f"[Diagnosis] FastAPI URL: {fastapi_url}/predict")
+                    print(f"[Diagnosis] [2/5] 환부 분류 파이프라인 시작: {fastapi_url}/predict")
                     
                     # 털 제거된 이미지가 있으면 사용, 없으면 원본 이미지 사용
                     if processed_image_bytes:
                         image_bytes_for_predict = processed_image_bytes
-                        print(f"[Diagnosis] 털 제거된 이미지로 예측 진행")
+                        print(f"[Diagnosis] [2/5] 털 제거된 이미지로 예측 진행")
                         content_type = "image/png"
                     else:
                         # 원본 이미지로 예측 시도
                         with open(image_path, 'rb') as f:
                             image_bytes_for_predict = f.read()
-                        print(f"[Diagnosis] 원본 이미지로 예측 진행 (털 제거 실패 또는 건너뜀)")
+                        print(f"[Diagnosis] [2/5] 원본 이미지로 예측 진행 (털 제거 실패 또는 건너뜀)")
                         content_type = "image/jpeg"
                     
-                    print(f"[Diagnosis] 이미지 크기: {len(image_bytes_for_predict)} bytes")
+                    print(f"[Diagnosis] [2/5] 이미지 크기: {len(image_bytes_for_predict)} bytes")
                     predict_response = requests.post(
                         f"{fastapi_url}/predict",
                         files={"file": (file_name, image_bytes_for_predict, content_type)},
                         timeout=300  # 5분 타임아웃
                     )
                     
-                    print(f"[Diagnosis] 예측 응답 상태 코드: {predict_response.status_code}")
+                    print(f"[Diagnosis] [2/5] 예측 응답 상태 코드: {predict_response.status_code}")
                     
                     if predict_response.status_code == 200:
                         prediction_data = predict_response.json()
-                        print(f"[Diagnosis] ========== AI 예측 완료 ==========")
-                        print(f"[Diagnosis] 예측 데이터: {prediction_data}")
-                        print(f"[Diagnosis] disease_name_ko: {prediction_data.get('disease_name_ko')}")
-                        print(f"[Diagnosis] disease_name_en: {prediction_data.get('disease_name_en')}")
-                        print(f"[Diagnosis] risk_level: {prediction_data.get('risk_level')}")
-                        print(f"[Diagnosis] class_probs: {prediction_data.get('class_probs')}")
+                        print(f"[Diagnosis] [2/5] 환부 분류 파이프라인 완료")
+                        print(f"[Diagnosis] [2/5] 예측 데이터: {prediction_data}")
+                        print(f"[Diagnosis] [2/5] disease_name_ko: {prediction_data.get('disease_name_ko')}")
+                        print(f"[Diagnosis] [2/5] disease_name_en: {prediction_data.get('disease_name_en')}")
+                        print(f"[Diagnosis] [2/5] risk_level: {prediction_data.get('risk_level')}")
+                        print(f"[Diagnosis] [2/5] class_probs: {prediction_data.get('class_probs')}")
                         
                         # DiseaseInfo에서 질병 찾기 또는 생성
                         disease_name_ko = prediction_data.get("disease_name_ko", "알 수 없음")
@@ -183,9 +183,9 @@ class PhotoUploadView(APIView):
                         )
                         
                         if created:
-                            print(f"[Diagnosis] ✅ 새로운 질병 정보 생성: {disease_name_ko} (ID: {disease.id})")
+                            print(f"[Diagnosis] [3/5] 새로운 질병 정보 생성: {disease_name_ko} (ID: {disease.id})")
                         else:
-                            print(f"[Diagnosis] ✅ 기존 질병 정보 사용: {disease_name_ko} (ID: {disease.id})")
+                            print(f"[Diagnosis] [3/5] 기존 질병 정보 사용: {disease_name_ko} (ID: {disease.id})")
                         
                         # GradCAM 이미지 저장 (있는 경우)
                         grad_cam_path = None
@@ -198,7 +198,7 @@ class PhotoUploadView(APIView):
                             grad_cam_path = ContentFile(grad_cam_bytes, name=grad_cam_filename)
                         
                         # Results 테이블에 저장
-                        print(f"[Diagnosis] Results 생성 시작: photo_id={photo_instance.id}, disease_id={disease.id}")
+                        print(f"[Diagnosis] [4/5] Results 생성 시작: photo_id={photo_instance.id}, disease_id={disease.id}")
                         result = Results.objects.create(
                             photo=photo_instance,
                             risk_level=prediction_data.get("risk_level", "중간"),
@@ -207,9 +207,10 @@ class PhotoUploadView(APIView):
                             disease=disease,
                         )
                         result_id = result.id  # Results ID 저장
-                        print(f"[Diagnosis] ✅ Results 저장 완료: Result ID {result.id}, Disease ID {result.disease.id}, Disease Name: {result.disease.name_ko}")
+                        print(f"[Diagnosis] [4/5] Results 저장 완료: Result ID {result.id}, Disease ID {result.disease.id}, Disease Name: {result.disease.name_ko}")
                         
-                        # 💡 FollowUpCheck 자동 생성 (환자의 담당 의사가 있는 경우)
+                        # FollowUpCheck 자동 생성 (환자의 담당 의사가 있는 경우)
+                        print(f"[Diagnosis] [5/5] FollowUpCheck 생성 시작")
                         patient_user = photo_instance.user
                         if patient_user.doctor:
                             try:
@@ -225,32 +226,34 @@ class PhotoUploadView(APIView):
                                     }
                                 )
                                 if created:
-                                    print(f"[Diagnosis] ✅ FollowUpCheck 자동 생성: FollowUpCheck ID {followup_check.id}, 의사 ID {patient_user.doctor.uid.id}")
+                                    print(f"[Diagnosis] [5/5] FollowUpCheck 자동 생성: FollowUpCheck ID {followup_check.id}, 의사 ID {patient_user.doctor.uid.id}")
                                 else:
-                                    print(f"[Diagnosis] ℹ️ FollowUpCheck 이미 존재: FollowUpCheck ID {followup_check.id}")
+                                    print(f"[Diagnosis] [5/5] FollowUpCheck 이미 존재: FollowUpCheck ID {followup_check.id}")
                             except Exception as e:
-                                print(f"[Diagnosis] ⚠️ FollowUpCheck 생성 실패: {e}")
+                                print(f"[Diagnosis] [5/5] FollowUpCheck 생성 실패: {e}")
                                 import traceback
                                 traceback.print_exc()
                         else:
-                            print(f"[Diagnosis] ℹ️ 환자에게 담당 의사가 없어 FollowUpCheck를 생성하지 않습니다.")
+                            print(f"[Diagnosis] [5/5] 환자에게 담당 의사가 없어 FollowUpCheck를 생성하지 않습니다.")
+                        
+                        print(f"[Diagnosis] ========== 전체 파이프라인 완료 ==========")
                     else:
-                        print(f"[Diagnosis] ❌ AI 예측 실패: 상태 코드 {predict_response.status_code}")
-                        print(f"[Diagnosis] 응답 내용: {predict_response.text[:500]}")
+                        print(f"[Diagnosis] [2/5] AI 예측 실패: 상태 코드 {predict_response.status_code}")
+                        print(f"[Diagnosis] [2/5] 응답 내용: {predict_response.text[:500]}")
                         # 예측 실패해도 Photos는 저장되어 있음
                 except requests.exceptions.RequestException as e:
-                    print(f"[Diagnosis] ❌ AI 예측 요청 실패: {str(e)}")
+                    print(f"[Diagnosis] [2/5] AI 예측 요청 실패: {str(e)}")
                     import traceback
                     if settings.DEBUG:
                         traceback.print_exc()
                 except Exception as e:
-                    print(f"[Diagnosis] ❌ AI 예측 처리 중 오류 발생: {str(e)}")
+                    print(f"[Diagnosis] [2/5] AI 예측 처리 중 오류 발생: {str(e)}")
                     import traceback
-                    print(f"[Diagnosis] 에러 상세:\n{traceback.format_exc()}")
+                    print(f"[Diagnosis] [2/5] 에러 상세:\n{traceback.format_exc()}")
                     if settings.DEBUG:
                         traceback.print_exc()
             else:
-                print(f"[Diagnosis] ⚠️ 이미지 파일이 없어 AI 예측을 건너뜁니다: Photo ID {photo_instance.id}")
+                print(f"[Diagnosis] 이미지 파일이 없어 AI 예측을 건너뜁니다: Photo ID {photo_instance.id}")
             
             # 저장 성공 후 ID를 포함한 응답 반환 (프론트엔드에서 결과 페이지로 이동하기 위해 필요)
             # serializer.data는 to_representation을 통해 이미지 URL이 절대 경로로 변환됨

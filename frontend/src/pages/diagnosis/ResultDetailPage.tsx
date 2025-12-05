@@ -165,6 +165,18 @@ const ResultDetailPage: React.FC = () => {
     }
 
     const fetchData = async () => {
+      const pageLoadStartTime = Date.now();
+      const pageLoadStartTimeStr = new Date().toLocaleString('ko-KR', { 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit', 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        hour12: false 
+      });
+      console.log(`[ResultDetailPage] 결과 페이지 로드 시작 시간: ${pageLoadStartTimeStr}`);
+      
       try {
         const token = localStorage.getItem('accessToken');
         const response = await axios.get<ResultDetail>(`/api/dashboard/records/${id}/`, {
@@ -172,11 +184,25 @@ const ResultDetailPage: React.FC = () => {
             Authorization: `Bearer ${token}`,
           },
         });
+        const pageLoadEndTime = Date.now();
+        const pageLoadDuration = ((pageLoadEndTime - pageLoadStartTime) / 1000).toFixed(2);
+        
         console.log('[ResultDetailPage] 받은 데이터:', response.data);
         console.log('[ResultDetailPage] disease:', response.data.disease);
         console.log('[ResultDetailPage] disease 존재 여부:', !!response.data.disease);
         console.log('[ResultDetailPage] class_probs:', response.data.class_probs);
         console.log('[ResultDetailPage] risk_level:', response.data.risk_level);
+        console.log(`[ResultDetailPage] 결과 페이지 로드 완료 시간: ${new Date().toLocaleString('ko-KR', { 
+          year: 'numeric', 
+          month: '2-digit', 
+          day: '2-digit', 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          second: '2-digit',
+          hour12: false 
+        })}`);
+        console.log(`[ResultDetailPage] 결과 페이지 로드 소요 시간: ${pageLoadDuration}초`);
+        
         setData(response.data);
       } catch (err: any) {
         console.error('Failed to fetch result detail:', err);

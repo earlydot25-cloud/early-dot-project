@@ -96,25 +96,25 @@ async def remove_hair(file: UploadFile = File(...)):
     환부 이미지에서 털 제거 처리
     ... (기존 로직 유지) ...
     """
-    logger.info(f"[FastAPI] /remove-hair 요청 받음: filename={file.filename}, content_type={file.content_type}")
+    logger.info(f"[FastAPI] [1/5] /remove-hair 요청 받음: filename={file.filename}, content_type={file.content_type}")
 
     if pipeline is None:
-        logger.error("[FastAPI] 파이프라인이 로드되지 않았습니다")
+        logger.error("[FastAPI] [1/5] 파이프라인이 로드되지 않았습니다")
         raise HTTPException(status_code=503, detail="파이프라인이 로드되지 않았습니다")
 
     # 파일 읽기
     try:
         image_bytes = await file.read()
-        logger.info(f"[FastAPI] 파일 읽기 완료: {len(image_bytes)} bytes")
+        logger.info(f"[FastAPI] [1/5] 파일 읽기 완료: {len(image_bytes)} bytes")
     except Exception as e:
-        logger.error(f"[FastAPI] 파일 읽기 실패: {e}", exc_info=True)
+        logger.error(f"[FastAPI] [1/5] 파일 읽기 실패: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=f"파일 읽기 실패: {str(e)}")
 
     # 파이프라인 처리
     try:
-        logger.info("[FastAPI] 파이프라인 처리 시작")
+        logger.info("[FastAPI] [1/5] 파이프라인 처리 시작")
         processed_bytes = await asyncio.to_thread(pipeline.process, image_bytes)
-        logger.info(f"[FastAPI] 파이프라인 처리 완료: {len(processed_bytes)} bytes")
+        logger.info(f"[FastAPI] [1/5] 파이프라인 처리 완료: {len(processed_bytes)} bytes")
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
@@ -129,7 +129,7 @@ async def remove_hair(file: UploadFile = File(...)):
         )
 
     # 결과 반환
-    logger.info("[FastAPI] 응답 반환")
+    logger.info("[FastAPI] [1/5] 응답 반환")
     return Response(
         content=processed_bytes,
         media_type="image/png",
@@ -143,25 +143,25 @@ async def predict(file: UploadFile = File(...)):
     AI 모델 예측 엔드포인트
     ... (기존 로직 유지) ...
     """
-    logger.info(f"[FastAPI] /predict 요청 받음: filename={file.filename}, content_type={file.content_type}")
+    logger.info(f"[FastAPI] [2/5] /predict 요청 받음: filename={file.filename}, content_type={file.content_type}")
 
     if prediction_pipeline is None:
-        logger.error("[FastAPI] 예측 파이프라인이 로드되지 않았습니다")
+        logger.error("[FastAPI] [2/5] 예측 파이프라인이 로드되지 않았습니다")
         raise HTTPException(status_code=503, detail="예측 파이프라인이 로드되지 않았습니다")
 
     # 파일 읽기
     try:
         image_bytes = await file.read()
-        logger.info(f"[FastAPI] 파일 읽기 완료: {len(image_bytes)} bytes")
+        logger.info(f"[FastAPI] [2/5] 파일 읽기 완료: {len(image_bytes)} bytes")
     except Exception as e:
-        logger.error(f"[FastAPI] 파일 읽기 실패: {e}", exc_info=True)
+        logger.error(f"[FastAPI] [2/5] 파일 읽기 실패: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=f"파일 읽기 실패: {str(e)}")
 
     # 예측 수행
     try:
-        logger.info("[FastAPI] 예측 시작")
+        logger.info("[FastAPI] [2/5] 예측 시작")
         prediction_result = await asyncio.to_thread(prediction_pipeline.predict, image_bytes)
-        logger.info(f"[FastAPI] 예측 완료: {prediction_result}")
+        logger.info(f"[FastAPI] [2/5] 예측 완료: {prediction_result}")
 
         # GradCAM 이미지를 base64로 인코딩 (있는 경우)
         grad_cam_base64 = None

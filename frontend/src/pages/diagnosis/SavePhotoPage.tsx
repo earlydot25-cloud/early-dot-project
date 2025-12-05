@@ -314,6 +314,19 @@ const SavePhotoPage: React.FC = () => {
   };
 
   const onSubmit = async () => {
+    // 시간 측정 시작
+    const startTime = Date.now();
+    const startTimeStr = new Date().toLocaleString('ko-KR', { 
+      year: 'numeric', 
+      month: '2-digit', 
+      day: '2-digit', 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      second: '2-digit',
+      hour12: false 
+    });
+    console.log(`[SavePhotoPage] 제출 버튼 클릭 시간: ${startTimeStr}`);
+    
     // 크롭된 파일이 있으면 우선 사용
     let finalFile: File | null = croppedFile || file;
     if (!finalFile && previewUrl) {
@@ -418,10 +431,23 @@ const SavePhotoPage: React.FC = () => {
         return;
       }
       const data = await res.json();
+      const uploadEndTime = Date.now();
+      const uploadDuration = ((uploadEndTime - startTime) / 1000).toFixed(2);
+      
       console.log('[SavePhotoPage] 업로드 성공 응답:', data);
       console.log('[SavePhotoPage] result_id:', data.result_id);
       console.log('[SavePhotoPage] photo_id:', data.photo_id);
       console.log('[SavePhotoPage] id (사용할 ID):', data.id);
+      console.log(`[SavePhotoPage] 업로드 완료 시간: ${new Date().toLocaleString('ko-KR', { 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit', 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        hour12: false 
+      })}`);
+      console.log(`[SavePhotoPage] 업로드 소요 시간: ${uploadDuration}초`);
       
       // 응답에서 id를 확인하거나 photo 객체의 id 사용
       // result_id가 있으면 result_id를 우선 사용 (AI 예측이 완료된 경우)
@@ -429,7 +455,21 @@ const SavePhotoPage: React.FC = () => {
       console.log('[SavePhotoPage] 최종 사용할 ID:', resultId);
       
       if (resultId) {
+        const navigationStartTime = Date.now();
         navigate(`/diagnosis/detail/${resultId}`, { replace: true });
+        
+        // 결과 페이지 로드 완료는 ResultDetailPage에서 측정
+        // 여기서는 네비게이션 시작 시간만 기록
+        console.log(`[SavePhotoPage] 결과 페이지 이동 시작 시간: ${new Date().toLocaleString('ko-KR', { 
+          year: 'numeric', 
+          month: '2-digit', 
+          day: '2-digit', 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          second: '2-digit',
+          hour12: false 
+        })}`);
+        console.log(`[SavePhotoPage] 제출 버튼 클릭부터 결과 페이지 이동까지 총 소요 시간: ${((navigationStartTime - startTime) / 1000).toFixed(2)}초`);
       } else {
         alert('업로드는 성공했지만 결과 페이지로 이동할 수 없습니다.');
       }
@@ -541,7 +581,7 @@ const SavePhotoPage: React.FC = () => {
                         />
                       </div>
                       <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full font-medium">
-                        ✓ 잘라내기 완료
+                        잘라내기 완료
                       </div>
                     </div>
                   ) : (
@@ -597,7 +637,7 @@ const SavePhotoPage: React.FC = () => {
                   disabled={!completedCrop}
                   className="flex-1 px-4 py-3 rounded-lg bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed shadow-md disabled:shadow-none"
                 >
-                  ✓ 사진 잘라내기
+                  사진 잘라내기
                 </button>
                 <button
                   onClick={handleCancelCrop}
@@ -615,7 +655,7 @@ const SavePhotoPage: React.FC = () => {
                   onClick={handleCancelCrop}
                   className="w-full px-4 py-2.5 rounded-lg border-2 border-blue-500 bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors"
                 >
-                  🔄 사진 다시 잘라내기
+                  사진 다시 잘라내기
                 </button>
               </div>
             )}
@@ -626,13 +666,13 @@ const SavePhotoPage: React.FC = () => {
                 onClick={handleRetake}
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors"
               >
-                📷 카메라 다시 촬영
+                카메라 다시 촬영
               </button>
               <button 
                 onClick={handleRefreshFields}
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-300 bg-gray-50 text-gray-600 text-sm font-medium hover:bg-gray-100 transition-colors"
               >
-                🔄 기입 내역 새로고침
+                기입 내역 새로고침
               </button>
             </div>
           </div>
