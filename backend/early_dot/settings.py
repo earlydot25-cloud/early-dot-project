@@ -62,7 +62,13 @@ DJANGO_ENV = env("DJANGO_ENV", default="local")
 
 
 # SECRET_KEY와 DEBUG를 환경 변수에서 가져옵니다.
-SECRET_KEY = env('DJANGO_SECRET_KEY')
+# 하위 호환성: Django_SECRET_KEY (구) 또는 DJANGO_SECRET_KEY (신) 모두 지원
+try:
+    SECRET_KEY = env('DJANGO_SECRET_KEY')
+except:
+    # Fallback to old variable name for backwards compatibility
+    SECRET_KEY = env('Django_SECRET_KEY')
+
 DEBUG = env('DEBUG')
 
 
