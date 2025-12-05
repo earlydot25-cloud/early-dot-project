@@ -604,7 +604,7 @@ class PredictionPipeline:
             korean_probs[korean_name] = prob
         return korean_probs
     
-    def predict(self, image_bytes: bytes) -> Dict:
+    def predict(self, image_bytes: bytes, generate_gradcam: bool = False) -> Dict:
         """
         이미지 예측 메서드
         
@@ -713,18 +713,21 @@ class PredictionPipeline:
             risk_level = self.get_risk_level(korean_class_probs)
             logger.info(f"[Prediction] [3/3] 위험도: {risk_level}")
             
-            # GradCAM 생성
+            # GradCAM 생성 (선택적)
             grad_cam_bytes = None
-            try:
-                grad_cam_bytes = self._generate_gradcam(
-                    image, 
-                    image_tensor, 
-                    max_class[1],  # 예측된 클래스 확률
-                    disease_name_ko
-                )
-                logger.info(f"[Prediction] [3/3] GradCAM 생성 완료: {len(grad_cam_bytes) if grad_cam_bytes else 0} bytes")
-            except Exception as e:
-                logger.error(f"[Prediction] [3/3] GradCAM 생성 실패: {e}", exc_info=True)
+            if generate_gradcam:
+                try:
+                    grad_cam_bytes = self._generate_gradcam(
+                        image, 
+                        image_tensor, 
+                        max_class[1],  # 예측된 클래스 확률
+                        disease_name_ko
+                    )
+                    logger.info(f"[Prediction] [3/3] GradCAM 생성 완료: {len(grad_cam_bytes) if grad_cam_bytes else 0} bytes")
+                except Exception as e:
+                    logger.error(f"[Prediction] [3/3] GradCAM 생성 실패: {e}", exc_info=True)
+            else:
+                logger.info(f"[Prediction] [3/3] GradCAM 생성 스킵 (generate_gradcam=False)")
             
             logger.info("[Prediction] ========== 환부 분류 파이프라인 완료 ==========")
             

@@ -138,10 +138,13 @@ async def remove_hair(file: UploadFile = File(...)):
 
 
 @app.post("/predict")
-async def predict(file: UploadFile = File(...)):
+async def predict(file: UploadFile = File(...), generate_gradcam: bool = False):
     """
     AI 모델 예측 엔드포인트
-    ... (기존 로직 유지) ...
+    
+    Args:
+        file: 업로드된 이미지 파일
+        generate_gradcam: GradCAM 생성 여부 (기본값: False, 속도 우선)
     """
     logger.info(f"[FastAPI] [2/5] /predict 요청 받음: filename={file.filename}, content_type={file.content_type}")
 
@@ -159,8 +162,12 @@ async def predict(file: UploadFile = File(...)):
 
     # 예측 수행
     try:
-        logger.info("[FastAPI] [2/5] 예측 시작")
-        prediction_result = await asyncio.to_thread(prediction_pipeline.predict, image_bytes)
+        logger.info(f"[FastAPI] [2/5] 예측 시작 (GradCAM: {generate_gradcam})")
+        prediction_result = await asyncio.to_thread(
+            prediction_pipeline.predict, 
+            image_bytes, 
+            generate_gradcam
+        )
         logger.info(f"[FastAPI] [2/5] 예측 완료: {prediction_result}")
 
         # GradCAM 이미지를 base64로 인코딩 (있는 경우)
