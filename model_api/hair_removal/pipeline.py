@@ -53,6 +53,7 @@ class HairRemovalPipeline:
         self.unet_threshold = 0.5
         self.bsrgan_model = None
         self.bsr_device = None
+        self.lama_model = None  # LaMa 모델 (메모리에 유지)
         
         # 설정
         self.IMG_SIZE = 512
@@ -97,12 +98,74 @@ class HairRemovalPipeline:
         else:
             print(f"[Pipeline] BSRGAN 가중치 또는 network 파일을 찾지 못했습니다")
         
-        # LaMa 경로 확인
-        if not self.lama_predict.exists():
-            raise FileNotFoundError(f"LaMa predict.py가 없습니다: {self.lama_predict}")
-        if not self.lama_weights_dir.exists():
-            raise FileNotFoundError(f"LaMa big-lama 가중치 폴더가 없습니다: {self.lama_weights_dir}")
-        print(f"[Pipeline] LaMa 경로 확인 완료")
+        # LaMa 모델 직접 로드 (subprocess 오버헤드 제거)
+        try:
+            print("[Pipeline] LaMa 모델 로딩 시작...")
+            self.lama_model = self._load_lama_model()
+            print(f"[Pipeline] LaMa 모델 로드 완료")
+        except Exception as e:
+            print(f"[Pipeline] LaMa 모델 로드 실패 (subprocess fallback 사용): {e}")
+            self.lama_model = None
+            # fallback: subprocess 사용
+            if not self.lama_predict.exists():
+                raise FileNotFoundError(f"LaMa predict.py가 없습니다: {self.lama_predict}")
+            if not self.lama_weights_dir.exists():
+                raise FileNotFoundError(f"LaMa big-lama 가중치 폴더가 없습니다: {self.lama_weights_dir}")
+            print(f"[Pipeline] LaMa subprocess 모드로 fallback")
+    
+    def _load_lama_model(self):
+        """LaMa 모델을 메모리에 직접 로드"""
+        import yaml
+        from omegaconf import OmegaConf
+        
+        # NumPy 2.0 호환성 패치
+        if not hasattr(np, 'float'):
+            np.float = float
+        if not hasattr(np, 'int'):
+            np.int = int
+        if not hasattr(np, 'bool'):
+            np.bool = bool
+        
+        # LaMa 모듈을 sys.path에 추가
+        if str(self.lama_dir) not in sys.path:
+            sys.path.insert(0, str(self.lama_dir))
+        
+        # LaMa 모듈 import
+        from saicinpainting.training.trainers import load_checkpoint
+        
+        # Config 로드
+        train_config_path = self.lama_weights_dir / 'config.yaml'
+        checkpoint_path = self.lama_weights_dir / 'models' / 'best.ckpt'
+        
+        if not train_config_path.exists():
+            raise FileNotFoundError(f"LaMa config.yaml 없음: {train_config_path}")
+        if not checkpoint_path.exists():
+            raise FileNotFoundError(f"LaMa checkpoint 없음: {checkpoint_path}")
+        
+        with open(train_config_path, 'r') as f:
+            train_config = OmegaConf.create(yaml.safe_load(f))
+        
+        train_config.training_model.predict_only = True
+        train_config.visualizer.kind = 'noop'
+        
+        # 모델 로드
+        # LaMa는 CPU에서 실행 (안정성 우선)
+        lama_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if self.device.type == 'mps':
+            lama_device = torch.device('cpu')  # MPS는 일부 연산 미지원
+        
+        print(f"[Pipeline] LaMa 체크포인트 로딩 중: {checkpoint_path}")
+        model = load_checkpoint(train_config, str(checkpoint_path), strict=False, map_location=lama_device)
+        model.freeze()
+        model.to(lama_device)
+        model.eval()
+        
+        print(f"[Pipeline] LaMa 모델 준비 완료 (device: {lama_device})")
+        
+        # 모델과 함께 device 정보도 저장
+        self.lama_device = lama_device
+        
+        return model
     
     def _predict_mask(self, bgr: np.ndarray) -> np.ndarray:
         """U-Net으로 털 마스크 예측"""
@@ -138,8 +201,64 @@ class HairRemovalPipeline:
         return mask_binary
     
     def _run_lama_inpaint(self, prep_img: np.ndarray, prep_mask: np.ndarray) -> np.ndarray:
-        """LaMa 인페인팅 실행"""
+        """
+        LaMa 인페인팅 실행
+        모델이 메모리에 로드되어 있으면 직접 호출, 아니면 subprocess fallback
+        """
         print(f"[LaMa] 인페인팅 시작 (이미지 크기: {prep_img.shape}, 마스크 크기: {prep_mask.shape})")
+        
+        # 최적화 1: 털이 거의 없으면 스킵
+        mask_ratio = np.sum(prep_mask > 0) / prep_mask.size
+        if mask_ratio < 0.001:  # 0.1% 미만
+            print(f"[LaMa] 털이 거의 없음 (마스크 비율: {mask_ratio:.4f}), LaMa 스킵")
+            return prep_img
+        
+        # 최적화 2: 직접 모델 호출 (subprocess 오버헤드 제거)
+        if self.lama_model is not None:
+            return self._run_lama_direct(prep_img, prep_mask)
+        else:
+            print("[LaMa] 직접 모델 없음, subprocess fallback 사용")
+            return self._run_lama_subprocess(prep_img, prep_mask)
+    
+    def _run_lama_direct(self, prep_img: np.ndarray, prep_mask: np.ndarray) -> np.ndarray:
+        """LaMa 모델을 직접 호출 (최적화된 버전)"""
+        import time
+        from saicinpainting.evaluation.utils import move_to_device
+        
+        start_time = time.time()
+        print(f"[LaMa Direct] 시작 (device: {self.lama_device})")
+        
+        # NumPy → Tensor 변환
+        # 이미지: BGR → RGB, [H,W,C] → [1,C,H,W], [0,255] → [0,1]
+        img_rgb = cv2.cvtColor(prep_img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        img_tensor = torch.from_numpy(img_rgb.transpose(2, 0, 1)).unsqueeze(0).to(self.lama_device)
+        
+        # 마스크: [H,W] → [1,1,H,W], [0,255] → [0,1]
+        mask_tensor = torch.from_numpy(prep_mask.astype(np.float32) / 255.0).unsqueeze(0).unsqueeze(0).to(self.lama_device)
+        
+        # 추론
+        with torch.no_grad():
+            batch = {'image': img_tensor, 'mask': mask_tensor}
+            batch = move_to_device(batch, self.lama_device)
+            batch['mask'] = (batch['mask'] > 0) * 1  # 이진화
+            
+            result = self.lama_model(batch)
+            inpainted_tensor = result['inpainted']
+        
+        # Tensor → NumPy 변환
+        # [1,C,H,W] → [H,W,C], [0,1] → [0,255], RGB → BGR
+        inpainted_np = inpainted_tensor[0].permute(1, 2, 0).detach().cpu().numpy()
+        inpainted_np = np.clip(inpainted_np * 255, 0, 255).astype(np.uint8)
+        result_bgr = cv2.cvtColor(inpainted_np, cv2.COLOR_RGB2BGR)
+        
+        elapsed = time.time() - start_time
+        print(f"[LaMa Direct] 완료 (소요 시간: {elapsed:.2f}초)")
+        
+        return result_bgr
+    
+    def _run_lama_subprocess(self, prep_img: np.ndarray, prep_mask: np.ndarray) -> np.ndarray:
+        """LaMa subprocess 실행 (fallback)"""
+        print(f"[LaMa Subprocess] 시작")
         
         with tempfile.TemporaryDirectory() as td:
             td_path = Path(td)
@@ -247,6 +366,8 @@ class HairRemovalPipeline:
         Returns:
             처리된 이미지 바이트
         """
+        print("[Pipeline] ========== 털 제거 파이프라인 시작 (총 4단계) ==========")
+        
         # 바이트를 numpy array로 변환
         try:
             nparr = np.frombuffer(image_bytes, np.uint8)
@@ -262,9 +383,9 @@ class HairRemovalPipeline:
         
         # Stage 1: 마스크 추출
         try:
-            print("[Pipeline] Stage 1: 마스크 추출 시작")
+            print("[Pipeline] [1/4] Stage 1: 마스크 추출 시작")
             mask_binary = self._predict_mask(bgr)
-            print("[Pipeline] Stage 1: 마스크 추출 완료")
+            print("[Pipeline] [1/4] Stage 1: 마스크 추출 완료")
         except Exception as e:
             print(f"[Pipeline] Stage 1 실패: {e}")
             import traceback
@@ -273,7 +394,7 @@ class HairRemovalPipeline:
         
         # Stage 2: 전처리 (BSRGAN + 정규화)
         try:
-            print("[Pipeline] Stage 2: 전처리 시작")
+            print("[Pipeline] [2/4] Stage 2: 전처리 시작 (해상도 및 선명도 향상)")
             prep_img, prep_mask, prep_meta = normalize_image_and_mask(
                 bgr,
                 mask_binary,
@@ -284,7 +405,7 @@ class HairRemovalPipeline:
                 edge_small=self.BSRGAN_EDGE_SMALL,
                 max_passes=self.BSRGAN_MAX_PASSES,
             )
-            print("[Pipeline] Stage 2: 전처리 완료")
+            print("[Pipeline] [2/4] Stage 2: 전처리 완료")
         except Exception as e:
             print(f"[Pipeline] Stage 2 실패: {e}")
             import traceback
@@ -293,9 +414,9 @@ class HairRemovalPipeline:
         
         # Stage 3: LaMa 인페인팅
         try:
-            print("[Pipeline] Stage 3: LaMa 인페인팅 시작")
+            print("[Pipeline] [3/4] Stage 3: 털 제거 (LaMa 인페인팅) 시작")
             hairless_bgr = self._run_lama_inpaint(prep_img, prep_mask)
-            print("[Pipeline] Stage 3: LaMa 인페인팅 완료")
+            print("[Pipeline] [3/4] Stage 3: 털 제거 완료")
         except Exception as e:
             print(f"[Pipeline] Stage 3 실패: {e}")
             import traceback
@@ -304,12 +425,12 @@ class HairRemovalPipeline:
         
         # Stage 4: 후처리
         try:
-            print("[Pipeline] Stage 4: 후처리 시작")
+            print("[Pipeline] [4/4] Stage 4: 후처리 시작")
             enhanced_bgr, enhance_meta = enhance_hairless_image(
                 hairless_bgr,
                 target_long_edge=self.POST_TARGET_LONG_EDGE,
             )
-            print("[Pipeline] Stage 4: 후처리 완료")
+            print("[Pipeline] [4/4] Stage 4: 후처리 완료")
         except Exception as e:
             print(f"[Pipeline] Stage 4 실패: {e}")
             import traceback
@@ -322,6 +443,7 @@ class HairRemovalPipeline:
             if not success:
                 raise RuntimeError("이미지 인코딩 실패")
             print(f"[Pipeline] 이미지 인코딩 완료 (크기: {len(encoded_img.tobytes())} bytes)")
+            print("[Pipeline] ========== 털 제거 파이프라인 완료 ==========")
             return encoded_img.tobytes()
         except Exception as e:
             print(f"[Pipeline] 이미지 인코딩 실패: {e}")

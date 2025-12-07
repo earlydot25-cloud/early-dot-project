@@ -19,7 +19,7 @@ class PhotoUploadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Photos
 
-        # 🌟 중요: React의 FormData.append()에서 사용하는 'key'와 일치해야 함
+        # 중요: React의 FormData.append()에서 사용하는 'key'와 일치해야 함
         # 'user'는 read_only이지만 fields에 포함해야 합니다.
 
         # 'capture_date'는 auto_now_add=True이므로 제외

@@ -19,3 +19,50 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* 폰트 크기 조절 시 form 요소들이 깨지지 않도록 고정 */
+select:not([style*="fontSize"]) {
+  font-size: 1rem !important;
+}
+
+select option {
+  font-size: 1rem !important;
+}
+
+input:not([style*="fontSize"]) {
+  font-size: 1rem !important;
+}
+
+textarea:not([style*="fontSize"]) {
+  font-size: 1rem !important;
+}
+
+button:not([style*="fontSize"]) {
+  font-size: inherit;
+}
+
+/* 키보드 접근성 개선 */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* 스킵 링크 (스크린 리더용) */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: #000;
+  color: #fff;
+  padding: 8px;
+  text-decoration: none;
+  z-index: 100;
+}
+
+.skip-link:focus {
+  top: 0;
+}

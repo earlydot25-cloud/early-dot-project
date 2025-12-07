@@ -5,21 +5,37 @@ AI 모델 예측 파이프라인
 from pathlib import Path
 from typing import Dict, Tuple, Optional, List
 import logging
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 logger = logging.getLogger(__name__)
 
+# gradcam_web_inference 모듈 import 시도
+try:
+    from gradcam_web_inference import generate_gradcam_overlay
+    HAS_GRADCAM_MODULE = True
+    logger.info("[Prediction] gradcam_web_inference 모듈 import 성공")
+except ImportError as e:
+    HAS_GRADCAM_MODULE = False
+    logger.warning(f"[Prediction] gradcam_web_inference 모듈을 import할 수 없습니다: {e}")
+    logger.warning("[Prediction] GradCAM 기능을 사용하려면 gradcam_web_inference.py가 필요합니다.")
+
 # 클래스 인덱스/영문명을 한국어 질병명으로 매핑하는 딕셔너리
 # 모델이 예측하는 8개 클래스
+# ⚠️ 중요: gradcam_web_inference.py의 CLASS_NAMES 순서와 일치해야 함
+# CLASS_NAMES = ['ak', 'bcc', 'bkl', 'df', 'mel', 'nv', 'scc', 'vasc'] (알파벳 순서)
 CLASS_TO_KOREAN = {
-    # 클래스 인덱스로 매핑 (8개 피부 질환 분류)
-    0: "흑색종",  # Melanoma (MEL)
-    1: "모반",  # Nevus (NV)
-    2: "기저세포암",  # Basal Cell Carcinoma (BCC)
-    3: "편평세포암",  # Squamous Cell Carcinoma (SCC)
-    4: "피부섬유종",  # Dermatofibroma (DF)
-    5: "양성 각화증",  # Benign Keratosis (BKL)
-    6: "혈관종",  # Vascular (VASC)
-    7: "정상",  # Normal (추정)
+    # 클래스 인덱스로 매핑 (8개 피부 질환 분류) - gradcam_web_inference.py 순서와 일치
+    0: "광선 각화증",  # Actinic Keratosis (AK) - 인덱스 0
+    1: "기저세포암",  # Basal Cell Carcinoma (BCC) - 인덱스 1
+    2: "양성 각화증",  # Benign Keratosis (BKL) - 인덱스 2
+    3: "피부섬유종",  # Dermatofibroma (DF) - 인덱스 3
+    4: "흑색종",  # Melanoma (MEL) - 인덱스 4
+    5: "모반",  # Nevus (NV) - 인덱스 5
+    6: "편평세포암",  # Squamous Cell Carcinoma (SCC) - 인덱스 6
+    7: "혈관종",  # Vascular (VASC) - 인덱스 7
     
     # 영문명으로 매핑
     "melanoma": "흑색종",
@@ -28,8 +44,8 @@ CLASS_TO_KOREAN = {
     "squamous_cell_carcinoma": "편평세포암",
     "dermatofibroma": "피부섬유종",
     "benign_keratosis": "양성 각화증",
+    "actinic_keratosis": "광선 각화증",
     "vascular": "혈관종",
-    "normal": "정상",
 }
 
 # 한국어 질병명을 영문명으로 매핑하는 딕셔너리
@@ -40,9 +56,13 @@ KOREAN_TO_ENGLISH = {
     "편평세포암": "Squamous Cell Carcinoma",
     "피부섬유종": "Dermatofibroma",
     "양성 각화증": "Benign Keratosis",
+    "광선 각화증": "Actinic Keratosis",
     "혈관종": "Vascular",
-    "정상": "Normal",
 }
+
+# ImageNet 정규화 상수
+MEAN = [0.485, 0.456, 0.406]
+STD = [0.229, 0.224, 0.225]
 
 
 class PredictionPipeline:
@@ -68,73 +88,82 @@ class PredictionPipeline:
     def _build_combined_model(self, state_dict, device):
         """
         combined_resnet50_effnetb4 모델 아키텍처 정의
-        ResNet50과 EfficientNet-B4를 결합한 앙상블 모델로 추정
+        gradcam_visualization.py의 EnsembleModel 구조를 그대로 사용
         """
         import torch
         import torch.nn as nn
         import torchvision.models as models
         
-        logger.info("[Prediction] combined_resnet50_effnetb4 모델 아키텍처 정의 시작")
+        logger.info("[Prediction] combined_resnet50_effnetb4 모델 아키텍처 정의 시작 (EnsembleModel 구조)")
         
         # state_dict 키 분석
         state_dict_keys = list(state_dict.keys())
         
-        # ResNet50과 EfficientNet-B4를 결합한 모델 정의
-        # 일반적인 앙상블 구조: 두 모델의 특징을 결합하여 분류
-        
-        class CombinedModel(nn.Module):
-            def __init__(self, num_classes=8):  # 기본 8개 클래스 (흑색종, 모반, 기저세포암, 편평세포암, 피부섬유종, 양성 각화증, 혈관종, 정상)
-                super(CombinedModel, self).__init__()
+        # gradcam_visualization.py의 EnsembleModel 구조를 그대로 사용
+        class EnsembleModel(nn.Module):
+            def __init__(self, num_classes=8):  # 기본 8개 클래스
+                super(EnsembleModel, self).__init__()
                 
-                # ResNet50 백본
-                resnet50 = models.resnet50(pretrained=False)
-                self.resnet_backbone = nn.Sequential(*list(resnet50.children())[:-1])  # 마지막 FC 제거
-                
-                # EfficientNet-B4 백본 (torchvision에 없으면 timm 사용 시도)
+                # ResNet50 (백본 A) - gradcam_visualization.py와 동일
                 try:
-                    import timm
-                    self.effnet_backbone = timm.create_model('efficientnet_b4', pretrained=False, num_classes=0)
-                except ImportError:
-                    # timm이 없으면 EfficientNet-B0로 대체 (구조 유사)
-                    logger.warning("[Prediction] timm이 없어 EfficientNet-B0로 대체합니다.")
-                    effnet = models.efficientnet_b0(pretrained=False)
-                    self.effnet_backbone = nn.Sequential(*list(effnet.children())[:-1])
+                    from torchvision.models import ResNet50_Weights
+                    self.model_A = models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
+                except:
+                    self.model_A = models.resnet50(pretrained=True)
+                self.model_A.fc = nn.Identity()
                 
-                # 특징 결합 및 분류기
-                # ResNet50 특징 차원: 2048, EfficientNet-B4 특징 차원: 1792 (B0는 1280)
-                resnet_feat_dim = 2048
-                effnet_feat_dim = 1792 if hasattr(self.effnet_backbone, 'num_features') else 1280
+                # EfficientNetB4 (백본 B) - gradcam_visualization.py와 동일
+                try:
+                    from torchvision.models import EfficientNet_B4_Weights
+                    self.model_B = models.efficientnet_b4(weights=EfficientNet_B4_Weights.IMAGENET1K_V1)
+                    num_ftrs_b = self.model_B.classifier[1].in_features
+                    self.model_B.classifier = nn.Identity()
+                except:
+                    try:
+                        import timm
+                        self.model_B = timm.create_model('efficientnet_b4', pretrained=True, num_classes=0)
+                        num_ftrs_b = 1792
+                    except ImportError:
+                        logger.warning("[Prediction] timm이 없어 EfficientNet-B0로 대체합니다.")
+                        self.model_B = models.efficientnet_b0(pretrained=True)
+                        num_ftrs_b = 1280
+                        self.model_B.classifier = nn.Identity()
                 
-                # 특징 결합
-                combined_dim = resnet_feat_dim + effnet_feat_dim
+                # 앙상블 분류기 - ResNet50 + EfficientNetB4 특징 결합
+                combined_features_size = 2048 + num_ftrs_b  # 2048 + 1792 = 3840
                 self.classifier = nn.Sequential(
-                    nn.Dropout(0.5),
-                    nn.Linear(combined_dim, 512),
+                    nn.Dropout(0.6),
+                    nn.Linear(combined_features_size, 512),  # 3840 -> 512
                     nn.ReLU(),
-                    nn.Dropout(0.3),
+                    nn.Dropout(0.4),
                     nn.Linear(512, num_classes)
                 )
             
             def forward(self, x):
-                # ResNet50 특징 추출
-                resnet_feat = self.resnet_backbone(x)
-                resnet_feat = resnet_feat.view(resnet_feat.size(0), -1)
+                # GradCAM을 위해 공간 특징을 보존하는 수동 forward
+                # ResNet50 forward
+                x_resnet = self.model_A.conv1(x)
+                x_resnet = self.model_A.bn1(x_resnet)
+                x_resnet = self.model_A.relu(x_resnet)
+                x_resnet = self.model_A.maxpool(x_resnet)
+                x_resnet = self.model_A.layer1(x_resnet)
+                x_resnet = self.model_A.layer2(x_resnet)
+                x_resnet = self.model_A.layer3(x_resnet)
+                x_resnet = self.model_A.layer4(x_resnet)  # [B, 2048, H, W] - 공간 특징
+                features_A = self.model_A.avgpool(x_resnet)  # [B, 2048, 1, 1]
+                features_A = torch.flatten(features_A, 1)  # [B, 2048]
                 
-                # EfficientNet 특징 추출
-                effnet_feat = self.effnet_backbone(x)
-                if isinstance(effnet_feat, tuple):
-                    effnet_feat = effnet_feat[0]
-                effnet_feat = effnet_feat.view(effnet_feat.size(0), -1)
+                # EfficientNetB4 forward
+                features_B = self.model_B.features(x)  # [B, 1792, H, W] - 공간 특징
+                features_B = self.model_B.avgpool(features_B)  # [B, 1792, 1, 1]
+                features_B = torch.flatten(features_B, 1)  # [B, 1792]
                 
                 # 특징 결합
-                combined_feat = torch.cat([resnet_feat, effnet_feat], dim=1)
-                
-                # 분류
-                output = self.classifier(combined_feat)
+                combined_features = torch.cat((features_A, features_B), dim=1)
+                output = self.classifier(combined_features)
                 return output
         
-        # 모델 생성
-        # state_dict 키를 보고 num_classes 추론
+        # 모델 생성 - EnsembleModel 사용
         num_classes = 8  # 기본값 (8개 클래스)
         # 마지막 classifier 레이어 찾기 (입력 차원이 512인 것)
         classifier_keys = [key for key in state_dict_keys if ('classifier' in key or 'fc' in key) and 'weight' in key]
@@ -156,17 +185,20 @@ class PredictionPipeline:
                     num_classes = weight_shape[0]
                     logger.info(f"[Prediction] state_dict에서 num_classes 추론 (마지막 레이어): {num_classes} (키: {last_key})")
         
-        model = CombinedModel(num_classes=num_classes)
+        model = EnsembleModel(num_classes=num_classes)
         
         # state_dict 로드 (strict=False로 일부 키가 맞지 않아도 로드)
         try:
+            # 먼저 ResNet 백본과 EfficientNet 백본 가중치는 그대로 로드
             model.load_state_dict(state_dict, strict=False)
-            logger.info("[Prediction] state_dict 로드 완료 (strict=False)")
+            
+            logger.info("[Prediction] state_dict 로드 완료 (strict=False, 앙상블 모델)")
         except Exception as e:
             logger.warning(f"[Prediction] state_dict 로드 중 일부 키 불일치 (무시): {e}")
             # 일부 키만 로드 시도
             model_dict = model.state_dict()
             pretrained_dict = {k: v for k, v in state_dict.items() if k in model_dict and model_dict[k].shape == v.shape}
+            
             model_dict.update(pretrained_dict)
             model.load_state_dict(model_dict)
             logger.info(f"[Prediction] {len(pretrained_dict)}/{len(state_dict)} 키 로드 완료")
@@ -368,12 +400,13 @@ class PredictionPipeline:
             korean_probs[korean_name] = prob
         return korean_probs
     
-    def predict(self, image_bytes: bytes) -> Dict:
+    def predict(self, image_bytes: bytes, generate_gradcam: bool = False) -> Dict:
         """
         이미지 예측 메서드
         
         Args:
             image_bytes: 예측할 이미지 바이트 데이터 (털 제거된 이미지)
+            generate_gradcam: GradCAM 생성 여부 (기본값: False)
             
         Returns:
             {
@@ -394,25 +427,27 @@ class PredictionPipeline:
         import io
         import numpy as np
         
-        logger.info(f"[Prediction] 예측 시작: 이미지 크기 {len(image_bytes)} bytes")
+        logger.info("[Prediction] ========== 환부 분류 파이프라인 시작 (총 3단계) ==========")
+        logger.info(f"[Prediction] [1/3] 예측 시작: 이미지 크기 {len(image_bytes)} bytes")
         
         try:
             # 이미지 바이트를 PIL Image로 변환
             image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
-            logger.info(f"[Prediction] 이미지 로드 완료: {image.size}")
+            logger.info(f"[Prediction] [1/3] 이미지 로드 완료: {image.size}")
             
-            # 이미지 전처리 (모델에 맞게 조정 필요)
-            # 일반적인 전처리: 리사이즈, 정규화, 텐서 변환
+            # 이미지 전처리 (512x512 입력 크기)
+            logger.info("[Prediction] [2/3] 이미지 전처리 시작")
             transform = transforms.Compose([
-                transforms.Resize((224, 224)),  # 모델 입력 크기에 맞게 조정
+                transforms.Resize((512, 512)),  # 모델 입력 크기: 512x512
                 transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # ImageNet 정규화
+                transforms.Normalize(mean=MEAN, std=STD)  # ImageNet 정규화
             ])
             
             image_tensor = transform(image).unsqueeze(0).to(self.device)
-            logger.info(f"[Prediction] 이미지 전처리 완료: {image_tensor.shape}")
+            logger.info(f"[Prediction] [2/3] 이미지 전처리 완료: {image_tensor.shape}")
             
             # 모델 예측
+            logger.info("[Prediction] [3/3] 모델 예측 시작")
             with torch.no_grad():
                 # 모델이 dict인 경우 실제 모델 객체 찾기
                 model_to_use = self.model
@@ -428,7 +463,7 @@ class PredictionPipeline:
                 
                 # 예측 수행
                 output = model_to_use(image_tensor)
-                logger.info(f"[Prediction] 모델 출력 형태: {output.shape if hasattr(output, 'shape') else type(output)}")
+                logger.info(f"[Prediction] [3/3] 모델 출력 형태: {output.shape if hasattr(output, 'shape') else type(output)}")
                 
                 # 출력 처리
                 if isinstance(output, (list, tuple)):
@@ -441,25 +476,25 @@ class PredictionPipeline:
                     probs = torch.softmax(output, dim=0)
                 
                 probs_np = probs.cpu().numpy()
-                logger.info(f"[Prediction] 확률 분포: {probs_np}")
+                logger.info(f"[Prediction] [3/3] 확률 분포: {probs_np}")
             
             # 클래스 인덱스를 확률로 변환
             # 모델은 8개 클래스만 분류함
             num_classes = len(probs_np)
-            logger.info(f"[Prediction] 예측된 클래스 수: {num_classes}")
+            logger.info(f"[Prediction] [3/3] 예측된 클래스 수: {num_classes}")
             
             # 모델 출력이 8개가 아니면 에러
             if num_classes != 8:
-                logger.error(f"[Prediction] 모델 출력이 8개가 아닙니다: {num_classes}개")
+                logger.error(f"[Prediction] [3/3] 모델 출력이 8개가 아닙니다: {num_classes}개")
                 raise ValueError(f"모델 출력이 8개 클래스가 아닙니다. 실제 출력: {num_classes}개")
             
             # 클래스 인덱스를 딕셔너리로 변환 (8개만)
             raw_class_probs = {i: float(probs_np[i]) for i in range(8)}
-            logger.info(f"[Prediction] 원시 확률 (8개): {raw_class_probs}")
+            logger.info(f"[Prediction] [3/3] 원시 확률 (8개): {raw_class_probs}")
             
             # 한국어로 변환
             korean_class_probs = self._convert_class_probs_to_korean(raw_class_probs)
-            logger.info(f"[Prediction] 한국어 변환된 확률: {korean_class_probs}")
+            logger.info(f"[Prediction] [3/3] 한국어 변환된 확률: {korean_class_probs}")
             
             # 가장 높은 확률의 질병 찾기
             if not korean_class_probs:
@@ -469,19 +504,32 @@ class PredictionPipeline:
             disease_name_ko = max_class[0]
             disease_name_en = self._map_to_english(disease_name_ko)
             
-            logger.info(f"[Prediction] 예측된 질병: {disease_name_ko} (확률: {max_class[1]:.4f})")
+            logger.info(f"[Prediction] [3/3] 예측된 질병: {disease_name_ko} (확률: {max_class[1]:.4f})")
             
             # 위험도 계산
             risk_level = self.get_risk_level(korean_class_probs)
-            logger.info(f"[Prediction] 위험도: {risk_level}")
+            logger.info(f"[Prediction] [3/3] 위험도: {risk_level}")
+            
+            # GradCAM 생성 (선택적)
+            grad_cam_bytes = None
+            if generate_gradcam:
+                try:
+                    grad_cam_bytes = self._generate_gradcam(original_image=image)
+                    logger.info(f"[Prediction] [3/3] GradCAM 생성 완료: {len(grad_cam_bytes) if grad_cam_bytes else 0} bytes")
+                except Exception as e:
+                    logger.error(f"[Prediction] [3/3] GradCAM 생성 실패: {e}", exc_info=True)
+            else:
+                logger.info(f"[Prediction] [3/3] GradCAM 생성 스킵 (generate_gradcam=False)")
+            
+            logger.info("[Prediction] ========== 환부 분류 파이프라인 완료 ==========")
             
             return {
                 "class_probs": korean_class_probs,  # 한국어 키로 변환된 확률
                 "risk_level": risk_level,
                 "disease_name_ko": disease_name_ko,
                 "disease_name_en": disease_name_en,
-                "grad_cam_bytes": None,  # TODO: GradCAM 구현
-                "vlm_analysis_text": None,  # TODO: VLM 분석 구현
+                "grad_cam_bytes": grad_cam_bytes,
+                "vlm_analysis_text": None,  # VLM 분석은 제거됨
             }
         except Exception as e:
             logger.error(f"[Prediction] 예측 중 오류 발생: {e}", exc_info=True)
@@ -496,24 +544,23 @@ class PredictionPipeline:
             class_probs: 각 질병별 확률 딕셔너리
             
         Returns:
-            위험도: "높음", "중간", "낮음", "정상"
+            위험도: "높음", "중간", "낮음"
         """
         if not class_probs:
-            return "정상"
+            return "낮음"
         
         # 가장 높은 확률의 질병 찾기
         max_disease, max_prob = max(class_probs.items(), key=lambda x: x[1])
         
-        # "정상"이 가장 높은 확률이면 위험도는 "정상"
-        if max_disease == "정상":
-            return "정상"
+        # 높은 위험 질병들 (악성 질환 및 전암성 병변)
+        # 흑색종, 기저세포암, 편평세포암, 광선 각화증
+        high_risk_diseases = ["흑색종", "기저세포암", "편평세포암", "광선 각화증"]
         
-        # 위험 질병들 (악성 질환)
-        high_risk_diseases = ["악성 흑색종", "기저세포암", "편평세포암"]
-        # 중간 위험 질병들 (양성 질환)
-        medium_risk_diseases = ["양성 모반", "지루각화증"]
+        # 낮은 위험 질병들 (양성 질환)
+        # 모반, 피부섬유종, 양성 각화증, 혈관종
+        low_risk_diseases = ["모반", "피부섬유종", "양성 각화증", "혈관종"]
         
-        # 위험 질병이 가장 높은 확률인 경우
+        # 높은 위험 질병이 가장 높은 확률인 경우
         if max_disease in high_risk_diseases:
             if max_prob >= 0.7:
                 return "높음"
@@ -522,12 +569,12 @@ class PredictionPipeline:
             else:
                 return "낮음"
         
-        # 중간 위험 질병이 가장 높은 확률인 경우
-        elif max_disease in medium_risk_diseases:
-            if max_prob >= 0.6:
-                return "중간"
-            else:
+        # 낮은 위험 질병이 가장 높은 확률인 경우
+        elif max_disease in low_risk_diseases:
+            if max_prob >= 0.7:
                 return "낮음"
+            else:
+                return "중간"  # 확신도가 낮으면 중간
         
         # 알 수 없는 질병인 경우 확률 기반으로 판단
         else:
@@ -535,8 +582,58 @@ class PredictionPipeline:
                 return "높음"
             elif max_prob >= 0.4:
                 return "중간"
-            elif max_prob >= 0.2:
-                return "낮음"
             else:
-                return "정상"
-
+                return "낮음"
+    
+    def _generate_gradcam(self, original_image) -> Optional[bytes]:
+        """
+        GradCAM 히트맵 생성 및 이미지 바이트로 반환
+        gradcam_web_inference.py의 generate_gradcam_overlay 함수를 사용
+        
+        Args:
+            original_image: 원본 PIL Image
+            
+        Returns:
+            GradCAM 이미지 바이트 또는 None
+        """
+        if not HAS_GRADCAM_MODULE:
+            logger.error("[GradCAM] gradcam_web_inference 모듈을 사용할 수 없습니다.")
+            logger.error("[GradCAM] 필요한 패키지가 설치되어 있는지 확인하세요: scipy, matplotlib")
+            return None
+        
+        try:
+            import io
+            from PIL import Image as PILImage
+            
+            logger.info("[GradCAM] GradCAM 생성 시작 (gradcam_web_inference 모듈 사용)")
+            
+            # 모델 경로 확인
+            model_path = self.models_dir / "ensemble_finetune_best_60epochst.pt"
+            if not model_path.exists():
+                logger.error(f"[GradCAM] 모델 파일을 찾을 수 없습니다: {model_path}")
+                return None
+            
+            # gradcam_web_inference의 generate_gradcam_overlay 함수 사용
+            overlay_image = generate_gradcam_overlay(
+                image_input=original_image,  # PIL Image 객체
+                model_path=str(model_path),  # 문자열 경로로 변환
+                target_class=None,  # 예측된 클래스 사용
+                image_size=512,
+                device=self.device
+            )
+            
+            # numpy array를 PIL Image로 변환
+            cam_pil = PILImage.fromarray(overlay_image)
+            
+            # 바이트로 변환
+            buffer = io.BytesIO()
+            cam_pil.save(buffer, format='PNG')
+            grad_cam_bytes = buffer.getvalue()
+            
+            logger.info(f"[GradCAM] 이미지 변환 완료: {len(grad_cam_bytes)} bytes")
+            
+            return grad_cam_bytes
+            
+        except Exception as e:
+            logger.error(f"[GradCAM] 생성 중 오류: {e}", exc_info=True)
+            return None

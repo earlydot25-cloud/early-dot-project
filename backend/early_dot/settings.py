@@ -49,7 +49,7 @@ env = environ.Env(
     DEBUG=(bool, False)
 )
 
-# 💡 .env 파일 경로: 프로젝트 루트 (backend의 상위)
+# .env 파일 경로: 프로젝트 루트 (backend의 상위)
 # BASE_DIR은 /app/early_dot이므로, 상위 디렉토리인 /app/.env를 찾습니다
 # docker-compose에서 env_file로 .env를 전달하므로, 환경변수는 이미 설정되어 있을 수 있습니다
 # 하지만 파일에서 직접 읽는 경우를 위해 경로를 설정합니다
@@ -63,6 +63,7 @@ DJANGO_ENV = env("DJANGO_ENV", default="local")
 
 # SECRET_KEY와 DEBUG를 환경 변수에서 가져옵니다.
 SECRET_KEY = env('DJANGO_SECRET_KEY')
+
 DEBUG = env('DEBUG')
 
 
@@ -79,7 +80,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',  # JWT 인증
     'corsheaders',        # CORS 설정을 위해 필요
 
-    # 💡 새로 만든 앱 4개 등록
+    # 새로 만든 앱 4개 등록
     'users',
     'diagnosis',
     'dashboard',
@@ -197,12 +198,12 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PERMISSION_CLASSES': [
         # 'rest_framework.permissions.IsAuthenticated', # 🚨 주석 처리 또는 제거
-        'rest_framework.permissions.AllowAny',  # 💡 임시로 AllowAny로 변경
+        'rest_framework.permissions.AllowAny',  # 임시로 AllowAny로 변경
     ]
 }
 
 # -------------------------------------------------------------------
-# 💡 리액트 FE + Docker 컨테이너 + Mac 로컬 네트워크 CORS 설정
+# 리액트 FE + Docker 컨테이너 + Mac 로컬 네트워크 CORS 설정
 # -------------------------------------------------------------------
 
 ALLOWED_HOSTS = [

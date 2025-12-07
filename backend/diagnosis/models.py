@@ -80,8 +80,7 @@ class DiseaseInfo(models.Model):
 class Photos(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
 
-    # :star2: 수정된 부분 :star2:
-    # 3개의 CharField 대신 ImageField를 사용합니다.
+    # 수정된 부분: 3개의 CharField 대신 ImageField를 사용합니다.
     # 'uploads/'는 settings.py의 MEDIA_ROOT 하위 폴더를 의미합니다.
     upload_storage_path = models.ImageField(upload_to=build_upload_path, blank=True, null=True)
 

@@ -22,6 +22,7 @@ export interface DoctorProfile {
   specialty: string;
   hospital: string;
   status: '승인 중' | '승인' | '거절'; // Doctors.status 필드
+  rejection_reason?: string | null; // 거절 사유
 }
 
 // 3. 환자 목록 타입 (PatientListItem)

@@ -297,6 +297,7 @@ const HistoryPage: React.FC = () => {
               value={sortOption}
               onChange={(e) => setSortOption(e.target.value as SortOption)}
               className="text-xs border border-gray-300 rounded-md px-1.5 py-1 bg-white focus:ring-1 focus:ring-blue-500 focus:outline-none w-auto max-w-[75px]"
+              style={{ fontSize: '12px' }}
             >
               <option value="최신순">최신순</option>
               <option value="심각도순">심각도순</option>
@@ -306,6 +307,7 @@ const HistoryPage: React.FC = () => {
               value={filterBodyPart}
               onChange={(e) => setFilterBodyPart(e.target.value)}
               className="text-xs border border-gray-300 rounded-md px-1.5 py-1 bg-white focus:ring-1 focus:ring-blue-500 focus:outline-none w-auto max-w-[90px] truncate"
+              style={{ fontSize: '12px' }}
             >
               {BODY_PARTS.map((part) => (
                 <option key={part} value={part === '전체' ? '전체' : part}>

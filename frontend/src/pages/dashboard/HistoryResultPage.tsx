@@ -665,6 +665,7 @@ const HistoryResultPage: React.FC = () => {
                   value={doctorRiskLevel}
                   onChange={(e) => setDoctorRiskLevel(e.target.value as RiskOption)}
                   className="w-full mt-1 text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-red-300"
+                  style={{ fontSize: '12px' }}
                 >
                   {RISK_OPTIONS.map(option => (
                     <option key={option} value={option}>

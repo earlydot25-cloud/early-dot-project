@@ -10,10 +10,10 @@ from django.db.models.functions import Concat
 from django.apps import apps
 from django.db import transaction
 
-# 💡 모델 경로가 diagnosis 앱과 doctors 앱에 있다고 가정합니다.
+# 모델 경로가 diagnosis 앱과 doctors 앱에 있다고 가정합니다.
 Photos = apps.get_model('diagnosis', 'Photos')
 Results = apps.get_model('diagnosis', 'Results')
-Doctors = apps.get_model('users', 'Doctors') # 💡 doctors 앱 경로 확인 필요
+Doctors = apps.get_model('users', 'Doctors') # doctors 앱 경로 확인 필요
 
 class Command(BaseCommand):
     help = '데이터베이스의 모든 미디어 경로 필드(storage_path, cert_path, grad_cam_path) 앞에 /media/ 접두사를 일괄 추가합니다.'

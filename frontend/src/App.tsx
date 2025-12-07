@@ -1,6 +1,7 @@
 import React, { useEffect, useState  } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
+import { ToastProvider } from './contexts/ToastContext';
 
 import BeforeLoginPage from './pages/BeforeLoginPage';
 import MainPage from './pages/dashboard/MainPage';
@@ -42,12 +43,13 @@ const useUserRole = (): { isDoctor: boolean, isLoaded: boolean } => {
     useEffect(() => {
         const determineRole = () => {
             const isDoctorString = localStorage.getItem('isDoctor'); // 'userRole' -> 'isDoctor' 키를 사용하도록 가정
+            const isStaffString = localStorage.getItem('isStaff'); // 슈퍼유저/관리자 체크용
 
             // isDoctor는 "1" 문자열일 때만 true가 됩니다.
             const newIsDoctor = (typeof window !== 'undefined' && isDoctorString === '1');
 
-            // 로그인 상태이고, isDoctorString 값이 존재하면 로드 완료로 간주합니다.
-            if (isAuthed() && isDoctorString !== null) {
+            // 로그인 상태이고, isDoctor 또는 isStaff 값이 존재하면 로드 완료로 간주합니다.
+            if (isAuthed() && (isDoctorString !== null || isStaffString !== null)) {
                  setIsDoctor(newIsDoctor);
                  setIsLoaded(true); // 로드 완료
             } else if (!isAuthed()) {
@@ -55,7 +57,7 @@ const useUserRole = (): { isDoctor: boolean, isLoaded: boolean } => {
                  setIsDoctor(false);
                  setIsLoaded(true);
             } else {
-                 // 로그인했지만 isDoctor 값이 아직 없으면 (초기 로드 경쟁 조건) 로드되지 않은 상태를 유지
+                 // 로그인했지만 isDoctor/isStaff 값이 아직 없으면 (초기 로드 경쟁 조건) 로드되지 않은 상태를 유지
                  setIsLoaded(false);
             }
         };
@@ -82,20 +84,27 @@ const useUserRole = (): { isDoctor: boolean, isLoaded: boolean } => {
 // 🟢 [수정됨] HomeRedirector 컴포넌트를 Navigate 컴포넌트로 변경
 // 역할에 따라 다른 경로로 리다이렉트합니다.
 const HomeRedirector: React.FC = () => {
-    // 🚨 수정: isLoaded를 사용하여 역할 정보 로드를 기다립니다.
     const { isDoctor, isLoaded } = useUserRole();
-
+    
+    // 로드 완료될 때까지 대기
     if (!isLoaded) {
-        // Local Storage에서 isDoctor 값이 로드될 때까지 아무것도 렌더링하지 않거나 (null),
-        // 간단한 로딩 스피너를 보여줄 수 있습니다. (여기서는 null을 사용)
         return null;
     }
 
-    // isDoctor 이면 '/dashboard/doctor/main'으로 리다이렉트
+    // 🎯 1순위: 슈퍼유저/관리자는 admin 페이지로 리다이렉트
+    const isStaff = localStorage.getItem('isStaff') === '1';
+    console.log('🔍 HomeRedirector 체크:', { isStaff, isDoctor, isLoaded });
+    if (isStaff) {
+        console.log('✅ 관리자 페이지로 리다이렉트');
+        return <Navigate to="/admin/main" replace />;
+    }
+
+    // 🎯 2순위: 의사는 의사 대시보드로 리다이렉트
     if (isDoctor) {
         return <Navigate to="/dashboard/doctor/main" replace />;
     }
-    // isDoctor가 아니면 '/dashboard/main' (환자 대시보드)으로 리다이렉트
+
+    // 🎯 3순위: 일반 사용자는 환자 대시보드로 리다이렉트
     return <Navigate to="/dashboard/main" replace />;
 };
 
@@ -120,9 +129,10 @@ console.log("-----------------------------------------------------------------")
   }, []);
 
   return (
-    <BrowserRouter>
-      <Layout>
-        <Routes>
+    <ToastProvider>
+      <BrowserRouter>
+        <Layout>
+          <Routes>
           {/* 0) 로그인 전 랜딩 */}
           <Route path="/" element={<BeforeLoginPage />} />
 
@@ -155,10 +165,12 @@ console.log("-----------------------------------------------------------------")
           <Route path="/diagnosis/detail/:id" element={<RequireAuth><ResultDetailPage /></RequireAuth>} />
           
           {/* 관리자 페이지 */}
+          <Route path="/admin/main" element={<RequireAuth><AdminDashboardPage /></RequireAuth>} />
           <Route path="/admin/dashboard" element={<RequireAuth><AdminDashboardPage /></RequireAuth>} />
-        </Routes>
-      </Layout>
-    </BrowserRouter>
+          </Routes>
+        </Layout>
+      </BrowserRouter>
+    </ToastProvider>
   );
 };
 

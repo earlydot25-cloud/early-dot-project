@@ -172,18 +172,18 @@ class Command(BaseCommand):
                 'recommendation': '정기적인 관찰을 권장합니다.',
             },
             {
-                'name_ko': '혈관 병변',
+                'name_ko': '광선 각화증',
+                'name_en': 'Actinic Keratosis',
+                'classification': '전암성',
+                'description': '햇빛 노출로 인한 전암성 병변으로, 피부암으로 발전할 수 있습니다.',
+                'recommendation': '즉시 병원 방문을 권장합니다.',
+            },
+            {
+                'name_ko': '혈관종',
                 'name_en': 'Vascular',
                 'classification': '양성',
                 'description': '혈관 관련 피부 병변입니다.',
                 'recommendation': '정기적인 관찰을 권장합니다.',
-            },
-            {
-                'name_ko': '정상',
-                'name_en': 'Normal',
-                'classification': '양성',
-                'description': '특별한 이상이 없는 정상 상태입니다.',
-                'recommendation': '건강을 유지하세요.',
             },
         ]
         

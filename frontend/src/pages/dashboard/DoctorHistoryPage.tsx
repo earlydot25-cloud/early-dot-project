@@ -579,6 +579,7 @@ const DoctorHistoryPage: React.FC = () => {
                 value={sortOption}
                 onChange={(e) => setSortOption(e.target.value as '소견 필요순' | '위험도순' | '이름순')}
                 className="text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                style={{ fontSize: '14px' }}
               >
                 <option value="소견 필요순">소견 필요순</option>
                 <option value="위험도순">위험도순</option>

@@ -15,6 +15,8 @@ import { useNavigate } from 'react-router-dom';
 import { FaCamera, FaChevronRight, FaChevronLeft, FaExclamationTriangle, FaCheckCircle, FaUserMd } from 'react-icons/fa';
 import type { IconBaseProps } from 'react-icons';
 import axios from 'axios';
+import EmptyState from '../../components/EmptyState';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 
 // 배포 환경에서는 /api 프록시 경로 사용
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
@@ -351,50 +353,59 @@ const MainPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'recent' | 'pending'>('recent');
   const [currentPage, setCurrentPage] = useState(0);
 
+  // ✨ 메인 데이터 로드 함수
+  const fetchMainData = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      // 개발 프록시가 세팅되어 있으면 상대 경로로 호출 가능
+      const API_URL = '/api/dashboard/main/';
+      const token = localStorage.getItem('accessToken');
+      console.log('Token being sent in MainPage:', token);
+
+      const res = await axios.get<MainDashboardData>(API_URL, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
+      });
+
+      setData(
+        (res.data as MainDashboardData) ?? {
+          summary: { total_count: 0, attention_count: 0 },
+          history: [],
+        }
+      );
+      setError(null);
+    } catch (err: any) {
+      // axios 버전/타입에 상관없이 안전하게 상태코드만 뽑기
+      const status = (err as any)?.response?.status as number | undefined;
+
+      if (status === 401) {
+        // 인증 안 됨 → 로그인으로
+        navigate('/login');
+        return;
+      }
+      if (status === 404 || status === 204) {
+        // 데이터 없음 → 정상 플로우(빈 상태)
+        setData({ summary: { total_count: 0, attention_count: 0 }, history: [] });
+        setError(null);
+        return;
+      }
+
+      setError('데이터를 불러오는 데 실패했습니다. 서버 상태를 확인하세요.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // ✨ 메인 데이터 로드
   useEffect(() => {
-    async function fetchMainData() {
-      try {
-        // 개발 프록시가 세팅되어 있으면 상대 경로로 호출 가능
-        const API_URL = '/api/dashboard/main/';
-        const token = localStorage.getItem('accessToken');
-        console.log('Token being sent in MainPage:', token);
-
-        const res = await axios.get<MainDashboardData>(API_URL, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
-        });
-
-        setData(
-          (res.data as MainDashboardData) ?? {
-            summary: { total_count: 0, attention_count: 0 },
-            history: [],
-          }
-        );
-        setError(null);
-      } catch (err: any) {
-        // axios 버전/타입에 상관없이 안전하게 상태코드만 뽑기
-        const status = (err as any)?.response?.status as number | undefined;
-
-        if (status === 401) {
-          // 인증 안 됨 → 로그인으로
-          navigate('/login');
-          return;
-        }
-        if (status === 404 || status === 204) {
-          // 데이터 없음 → 정상 플로우(빈 상태)
-          setData({ summary: { total_count: 0, attention_count: 0 }, history: [] });
-          setError(null);
-          return;
-        }
-
-        setError('데이터를 불러오는 데 실패했습니다. 서버 상태를 확인하세요.');
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
     fetchMainData();
   }, [navigate]);
+
+  // ✨ Pull-to-Refresh
+  usePullToRefresh({
+    onRefresh: fetchMainData,
+    disabled: isLoading,
+  });
 
   // 탭 변경 시 페이지 초기화
   useEffect(() => {
@@ -402,15 +413,38 @@ const MainPage: React.FC = () => {
   }, [activeTab]);
 
   // 로딩/에러 처리
-  if (isLoading) {
+  if (isLoading && !data) {
     return <div className="p-4 text-center text-lg">데이터를 불러오는 중...</div>;
   }
-  if (error) {
-    return <div className="p-4 text-center text-red-600 text-lg">{error}</div>;
+  if (error && !data) {
+    return (
+      <div className="p-4">
+        <EmptyState
+          icon={
+            <svg className="w-16 h-16 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          }
+          title="데이터를 불러올 수 없습니다"
+          description={error}
+          actionLabel="다시 시도"
+          onAction={fetchMainData}
+        />
+      </div>
+    );
   }
   if (!data) {
     // 이 케이스는 드뭄(네트워크 예외 등)
-    return <div className="p-4 text-center text-gray-600">표시할 데이터가 없습니다.</div>;
+    return (
+      <div className="p-4">
+        <EmptyState
+          title="표시할 데이터가 없습니다"
+          description="데이터를 불러오는 중 문제가 발생했습니다."
+          actionLabel="다시 시도"
+          onAction={fetchMainData}
+        />
+      </div>
+    );
   }
 
   // -----------------------------------
@@ -631,29 +665,20 @@ const MainPage: React.FC = () => {
                 )}
               </div>
             ) : (
-              <p className="text-gray-700 font-medium text-center py-4">
-                {activeTab === 'pending' ? '요청 중인 진단 내역이 없습니다.' : '진단 내역이 없습니다.'}
-              </p>
+              <EmptyState
+                title={activeTab === 'pending' ? '요청 중인 진단 내역이 없습니다' : '진단 내역이 없습니다'}
+                description={activeTab === 'pending' ? '현재 처리 대기 중인 진단 요청이 없습니다.' : '아직 저장된 진단 내역이 없습니다.'}
+              />
             )}
           </>
         ) : (
           /* 진단 내역이 없을 때 안내 메시지 */
-          <div className="text-center py-2">
-            {!isDoctor ? (
-              <div className="space-y-1">
-                <p className="text-gray-700 font-medium text-left">
-                  아직 진단 내역이 없습니다.
-                </p>
-                <p className="text-gray-600 text-left text-sm">
-                  위 버튼을 누르고 사진을 찍어서 확인해보세요!
-                </p>
-              </div>
-            ) : (
-              <p className="text-gray-700 font-medium">
-                조회 가능한 진단내역이 존재하지 않습니다.
-              </p>
-            )}
-          </div>
+          <EmptyState
+            title={!isDoctor ? '아직 진단 내역이 없습니다' : '조회 가능한 진단내역이 존재하지 않습니다'}
+            description={!isDoctor ? '위 버튼을 누르고 사진을 찍어서 확인해보세요!' : '환자들의 진단 내역이 없습니다.'}
+            actionLabel={!isDoctor ? '진단 시작하기' : undefined}
+            onAction={!isDoctor ? () => navigate('/diagnosis') : undefined}
+          />
         )}
       </section>
 

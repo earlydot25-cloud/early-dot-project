@@ -8,7 +8,7 @@ from .models import FollowUpCheck
 
 
 # -----------------------------------
-# 💡 0. 중첩 시리얼라이저 정의 (Photos, DiseaseInfo, Users 모델 사용)
+# 0. 중첩 시리얼라이저 정의 (Photos, DiseaseInfo, Users 모델 사용)
 # -----------------------------------
 class PhotosSerializer(serializers.ModelSerializer):
     """ResultMainSerializer에서 Photos 정보를 중첩하기 위한 시리얼라이저 (환자용)"""
@@ -79,7 +79,7 @@ class DiseaseInfoSerializer(serializers.ModelSerializer):
 class UserSimpleSerializer(serializers.ModelSerializer):
     """의사 대시보드에 필요한 환자의 간단 정보 시리얼라이저"""
 
-    # 💡 만 나이 계산을 위한 SerializerMethodField 추가
+    # 만 나이 계산을 위한 SerializerMethodField 추가
     calculated_age = serializers.SerializerMethodField()
 
     class Meta:

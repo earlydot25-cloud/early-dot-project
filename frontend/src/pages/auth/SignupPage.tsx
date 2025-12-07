@@ -226,6 +226,7 @@ export default function SignupPage() {
   /* 2) UI/제출 상태 */
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [showErrorModal, setShowErrorModal] = useState(false);
   const nav = useNavigate();
 
   /* 3) 파생값/검증 */
@@ -329,7 +330,11 @@ export default function SignupPage() {
 
       // (3) 실패면 에러 표시하고 종료(자동 로그인 금지)
       if (!result.ok) {
-        setErr(korError(result.errors));
+        const errorMessage = korError(result.errors);
+        setErr(errorMessage);
+        setShowErrorModal(true);
+        // 화면 상단으로 스크롤
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
@@ -345,7 +350,11 @@ export default function SignupPage() {
       localStorage.removeItem("user");
       nav("/login", { replace: true, state: { justSignedUp: true } });
     } catch (e: any) {
-      setErr(e?.message || "회원가입에 실패했습니다.");
+      const errorMessage = e?.message || "회원가입에 실패했습니다.";
+      setErr(errorMessage);
+      setShowErrorModal(true);
+      // 화면 상단으로 스크롤
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setBusy(false);
     }
@@ -525,6 +534,47 @@ export default function SignupPage() {
           </p>
         </div>
       </form>
+
+      {/* 에러 팝업 모달 */}
+      {showErrorModal && err && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-45 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowErrorModal(false)}
+        >
+          <div 
+            className="bg-white border rounded-lg shadow-lg p-6 w-full max-w-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="w-6 h-6 text-red-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">오류 발생</h3>
+            </div>
+            <p className="text-sm text-gray-700 whitespace-pre-line mb-6 leading-relaxed">
+              {err}
+            </p>
+            <button
+              onClick={() => {
+                setShowErrorModal(false);
+                setErr(null);
+              }}
+              className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+            >
+              확인
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

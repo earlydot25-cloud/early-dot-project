@@ -12,7 +12,7 @@ from users.models import Doctors
 from .serializers import DoctorApplicationSerializer
 
 
-# 💡 참고: 실제로는 DRF의 IsAdminUser나 커스텀 권한(IsManager)을 사용해야 합니다.
+# 참고: 실제로는 DRF의 IsAdminUser나 커스텀 권한(IsManager)을 사용해야 합니다.
 # 여기서는 일단 IsAuthenticated로 경로만 확보합니다.
 
 

@@ -20,7 +20,7 @@ SHELL ["conda", "run", "-n", "model_env", "/bin/bash", "-c"]
 
 # 4. Pip 패키지 설치
 # Conda 환경이 생성된 후, 해당 환경 내에서 Pip으로 의존성을 설치합니다.
-RUN pip install --no-cache-dir -r requirements_model.txt
+# RUN pip install -r requirements_model.txt  # 코드만 수정할 때는 주석 처리
 
 # 5. 프로젝트 전체 복사
 COPY . .
@@ -28,6 +28,6 @@ COPY . .
 # 포트 개방
 EXPOSE 8001
 
-# FastAPI 서버 CMD
-CMD ["conda", "run", "--no-capture-output", "-n", "model_env", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
+# FastAPI 서버 CMD (access 로그 비활성화하여 base64 응답 본문 출력 방지)
+CMD ["conda", "run", "--no-capture-output", "-n", "model_env", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--no-access-log"]
 
