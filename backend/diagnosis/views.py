@@ -28,12 +28,12 @@ class PhotoUploadView(APIView):
     # FormParser: 'body_part' 같은 폼 데이터를 처리
     parser_classes = (MultiPartParser, FormParser)
 
-    # 🌟 중요: 이 API는 로그인한 사용자만 호출할 수 있도록 설정
+    # 중요: 이 API는 로그인한 사용자만 호출할 수 있도록 설정
     # (만약 테스트 중이라 로그인이 필요 없다면 이 줄을 주석 처리)
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
-        # 🌟 중요: 'user' 필드를 request에서 자동으로 가져와 주입
+        # 중요: 'user' 필드를 request에서 자동으로 가져와 주입
         # 시리얼라이저는 'user'를 제외한 나머지 데이터를 받음
 
         # request.data는 프론트에서 보낸 FormData 객체를 담고 있습니다.
@@ -48,7 +48,16 @@ class PhotoUploadView(APIView):
             if settings.DEBUG:
                 print(f"[DEBUG] Validation errors: {json.dumps(serializer.errors, indent=2, ensure_ascii=False)}")
                 print(f"[DEBUG] Received data keys: {list(request.data.keys())}")
-                print(f"[DEBUG] Received data: {dict(request.data)}")
+                # request.data에 파일이 포함될 수 있으므로 크기만 표시
+                data_summary = {}
+                for key, value in request.data.items():
+                    if hasattr(value, 'size'):  # 파일인 경우
+                        data_summary[key] = f"<File: {value.size} bytes>"
+                    elif isinstance(value, (str, bytes)) and len(str(value)) > 100:
+                        data_summary[key] = f"<String: {len(str(value))} chars>"
+                    else:
+                        data_summary[key] = value
+                print(f"[DEBUG] Received data (요약): {data_summary}")
             return Response(
                 {"error": "Validation failed", "details": serializer.errors},
                 status=status.HTTP_400_BAD_REQUEST
@@ -150,9 +159,11 @@ class PhotoUploadView(APIView):
                         content_type = "image/jpeg"
                     
                     print(f"[Diagnosis] [2/5] 이미지 크기: {len(image_bytes_for_predict)} bytes")
+                    
                     predict_response = requests.post(
                         f"{fastapi_url}/predict",
                         files={"file": (file_name, image_bytes_for_predict, content_type)},
+                        params={"generate_gradcam": True},  # GradCAM 생성 활성화
                         timeout=300  # 5분 타임아웃
                     )
                     
@@ -161,11 +172,29 @@ class PhotoUploadView(APIView):
                     if predict_response.status_code == 200:
                         prediction_data = predict_response.json()
                         print(f"[Diagnosis] [2/5] 환부 분류 파이프라인 완료")
-                        print(f"[Diagnosis] [2/5] 예측 데이터: {prediction_data}")
+                        
+                        # 예측 데이터를 간결하게 로그 출력 (base64 이미지 데이터는 크기만 표시)
                         print(f"[Diagnosis] [2/5] disease_name_ko: {prediction_data.get('disease_name_ko')}")
                         print(f"[Diagnosis] [2/5] disease_name_en: {prediction_data.get('disease_name_en')}")
                         print(f"[Diagnosis] [2/5] risk_level: {prediction_data.get('risk_level')}")
-                        print(f"[Diagnosis] [2/5] class_probs: {prediction_data.get('class_probs')}")
+                        
+                        # 클래스 확률 (상위 3개만 표시)
+                        class_probs = prediction_data.get('class_probs')
+                        if class_probs and isinstance(class_probs, dict):
+                            sorted_probs = sorted(class_probs.items(), key=lambda x: x[1], reverse=True)[:3]
+                            prob_str = ", ".join([f"{k}: {v:.4f}" for k, v in sorted_probs])
+                            print(f"[Diagnosis] [2/5] 클래스 확률 (상위 3개): {prob_str}")
+                        else:
+                            print(f"[Diagnosis] [2/5] 클래스 확률: {type(class_probs).__name__} (크기: {len(str(class_probs))}자)" if class_probs else "[Diagnosis] [2/5] 클래스 확률: 없음")
+                        
+                        # GradCAM 이미지 크기만 표시
+                        grad_cam_bytes = prediction_data.get('grad_cam_bytes')
+                        if grad_cam_bytes:
+                            # base64 문자열의 크기 계산 (디코딩하지 않고 대략적인 크기 추정)
+                            grad_cam_size = len(grad_cam_bytes) * 3 // 4  # base64는 약 4:3 비율
+                            print(f"[Diagnosis] [2/5] GradCAM 이미지: {len(grad_cam_bytes)}자 (base64), 추정 바이너리 크기: 약 {grad_cam_size} bytes")
+                        else:
+                            print(f"[Diagnosis] [2/5] GradCAM 이미지: 없음")
                         
                         # DiseaseInfo에서 질병 찾기 또는 생성
                         disease_name_ko = prediction_data.get("disease_name_ko", "알 수 없음")
@@ -239,7 +268,11 @@ class PhotoUploadView(APIView):
                         print(f"[Diagnosis] ========== 전체 파이프라인 완료 ==========")
                     else:
                         print(f"[Diagnosis] [2/5] AI 예측 실패: 상태 코드 {predict_response.status_code}")
-                        print(f"[Diagnosis] [2/5] 응답 내용: {predict_response.text[:500]}")
+                        # 응답 내용도 크기만 표시 (긴 에러 메시지일 수 있음)
+                        response_text = predict_response.text
+                        print(f"[Diagnosis] [2/5] 응답 크기: {len(response_text)}자")
+                        if response_text:
+                            print(f"[Diagnosis] [2/5] 응답 내용 (처음 200자): {response_text[:200]}")
                         # 예측 실패해도 Photos는 저장되어 있음
                 except requests.exceptions.RequestException as e:
                     print(f"[Diagnosis] [2/5] AI 예측 요청 실패: {str(e)}")

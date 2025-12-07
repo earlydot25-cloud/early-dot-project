@@ -4,6 +4,9 @@ import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { useToast } from '../../contexts/ToastContext';
+import ImageZoomModal from '../../components/ImageZoomModal';
+import { ResultDetailSkeleton } from '../../components/SkeletonLoader';
 
 // ------------------- Interface -------------------
 interface Disease {
@@ -137,6 +140,7 @@ const getSymptomSeverity = (value: string): number => {
 const ResultDetailPage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { showSuccess, showError } = useToast();
 
   const [data, setData] = useState<ResultDetail | null>(null);
   const [showGradCam, setShowGradCam] = useState(false);
@@ -146,6 +150,7 @@ const ResultDetailPage: React.FC = () => {
   const [doctorRiskLevel, setDoctorRiskLevel] = useState<RiskOption>('소견 대기');
   const [isSavingFollowup, setIsSavingFollowup] = useState(false);
   const [followupMessage, setFollowupMessage] = useState<string | null>(null);
+  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
   const pdfRef = useRef<HTMLDivElement>(null);
 
   // 메인 페이지로 이동하는 함수 (의사 여부에 따라)
@@ -157,6 +162,11 @@ const ResultDetailPage: React.FC = () => {
       navigate('/dashboard/main');
     }
   };
+
+  // 페이지 진입 시 상단으로 스크롤
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [id]);
 
   useEffect(() => {
     if (!id) {
@@ -209,6 +219,10 @@ const ResultDetailPage: React.FC = () => {
         setData(null);
       } finally {
         setIsLoading(false);
+        // 데이터 로드 완료 후 상단으로 스크롤
+        setTimeout(() => {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }, 100);
       }
     };
 
@@ -261,9 +275,10 @@ const ResultDetailPage: React.FC = () => {
       }
       setDoctorNote(updatedFollowup.doctor_note || '');
       setFollowupMessage('전문의 소견이 저장되었습니다.');
+      showSuccess('전문의 소견이 저장되었습니다.');
     } catch (err: any) {
       console.error('Failed to save follow-up:', err);
-      alert(err.response?.data?.error || err.response?.data?.message || '소견 저장에 실패했습니다.');
+      showError(err.response?.data?.error || err.response?.data?.message || '소견 저장에 실패했습니다.');
     } finally {
       setIsSavingFollowup(false);
     }
@@ -314,18 +329,15 @@ const ResultDetailPage: React.FC = () => {
 
       const fileName = `${data.user.name}_${data.disease?.name_ko || '진단결과'}_${new Date().toISOString().split('T')[0]}.pdf`;
       pdf.save(fileName);
+      showSuccess('PDF 다운로드가 완료되었습니다.');
     } catch (error) {
       console.error('PDF 생성 실패:', error);
-      alert('PDF 다운로드에 실패했습니다.');
+      showError('PDF 다운로드에 실패했습니다.');
     }
   };
 
   if (isLoading) {
-    return (
-      <div className="w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto bg-gray-50 min-h-screen px-4 py-5">
-        <div className="text-center text-gray-500 mt-10">데이터 불러오는 중...</div>
-      </div>
-    );
+    return <ResultDetailSkeleton />;
   }
 
   if (!data) {
@@ -498,7 +510,11 @@ const ResultDetailPage: React.FC = () => {
             <img
               src={showGradCam && gradcamUrl ? gradcamUrl : (originalUrl || '')}
               alt={showGradCam && gradcamUrl ? 'GradCAM 분석' : '원본 이미지'}
-              className="w-full h-auto max-h-96 object-contain"
+              className="w-full h-auto max-h-96 object-contain cursor-zoom-in"
+              onClick={() => {
+                const imageUrl = showGradCam && gradcamUrl ? gradcamUrl : (originalUrl || '');
+                if (imageUrl) setZoomImageUrl(imageUrl);
+              }}
               onError={(e) => {
                 // GradCAM 이미지가 없거나 에러가 발생하면 원본 이미지로 대체
                 const target = e.target as HTMLImageElement;
@@ -631,6 +647,7 @@ const ResultDetailPage: React.FC = () => {
                   value={doctorRiskLevel}
                   onChange={(e) => setDoctorRiskLevel(e.target.value as RiskOption)}
                   className="w-full mt-1 text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-red-300"
+                  style={{ fontSize: '12px' }}
                 >
                   {RISK_OPTIONS.map(option => (
                     <option key={option} value={option}>
@@ -876,7 +893,8 @@ const ResultDetailPage: React.FC = () => {
                   <img
                     src={originalUrl}
                     alt="원본 이미지"
-                    className="w-full h-auto max-h-[240px] object-contain mx-auto"
+                    className="w-full h-auto max-h-[240px] object-contain mx-auto cursor-zoom-in"
+                    onClick={() => originalUrl && setZoomImageUrl(originalUrl)}
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em"%3E이미지 없음%3C/text%3E%3C/svg%3E';
                     }}
@@ -893,7 +911,8 @@ const ResultDetailPage: React.FC = () => {
                   <img
                     src={gradcamUrl}
                     alt="GradCAM 분석"
-                    className="w-full h-auto max-h-[240px] object-contain mx-auto"
+                    className="w-full h-auto max-h-[240px] object-contain mx-auto cursor-zoom-in"
+                    onClick={() => gradcamUrl && setZoomImageUrl(gradcamUrl)}
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em"%3E이미지 없음%3C/text%3E%3C/svg%3E';
                     }}
@@ -1086,6 +1105,15 @@ const ResultDetailPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* 이미지 확대 모달 */}
+      {zoomImageUrl && (
+        <ImageZoomModal
+          imageUrl={zoomImageUrl}
+          alt={showGradCam && gradcamUrl ? 'GradCAM 분석' : '원본 이미지'}
+          onClose={() => setZoomImageUrl(null)}
+        />
+      )}
     </div>
   );
 };

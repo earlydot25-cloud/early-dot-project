@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { fetchUserProfile } from '../../services/userServices';
 import ReactCrop, { Crop, PixelCrop, centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
+import { useToast } from '../../contexts/ToastContext';
+import ProgressIndicator, { ProgressStep } from '../../components/ProgressIndicator';
 
 // 백엔드 업로드 엔드포인트
 // 환경 변수가 있으면 사용, 없으면 상대 경로 사용 (프록시 또는 같은 도메인)
@@ -23,6 +25,7 @@ type NavState = {
 const SavePhotoPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation() as { state?: NavState };
+  const { showSuccess, showError, showInfo } = useToast();
 
   const incomingFile = location.state?.file;
   const incomingPreviewUrl = location.state?.previewUrl;
@@ -157,10 +160,10 @@ const SavePhotoPage: React.FC = () => {
       reader.readAsDataURL(croppedFile);
       
       setCroppedFile(croppedFile);
-      alert('사진이 잘라졌습니다.');
+      showSuccess('사진이 잘라졌습니다.');
     } catch (error) {
       console.error('사진 잘라내기 실패:', error);
-      alert('사진 잘라내기에 실패했습니다.');
+      showError('사진 잘라내기에 실패했습니다.');
     }
   };
 
@@ -351,11 +354,11 @@ const SavePhotoPage: React.FC = () => {
     }
 
     if (!finalFile) {
-      alert('업로드할 이미지가 없습니다. 다시 촬영하거나 갤러리에서 선택해주세요.');
+      showError('업로드할 이미지가 없습니다. 다시 촬영하거나 갤러리에서 선택해주세요.');
       return;
     }
     if (!fileName) {
-      alert('사진명을 입력해주세요.');
+      showError('사진명을 입력해주세요.');
       return;
     }
 
@@ -427,7 +430,7 @@ const SavePhotoPage: React.FC = () => {
         }
         console.error('업로드 실패 응답:', errText);
         setIsSubmitting(false);
-        alert(errMessage);
+        showError(errMessage);
         return;
       }
       const data = await res.json();
@@ -470,12 +473,13 @@ const SavePhotoPage: React.FC = () => {
           hour12: false 
         })}`);
         console.log(`[SavePhotoPage] 제출 버튼 클릭부터 결과 페이지 이동까지 총 소요 시간: ${((navigationStartTime - startTime) / 1000).toFixed(2)}초`);
+        showSuccess('진단 요청이 완료되었습니다. 결과를 확인하세요.');
       } else {
-        alert('업로드는 성공했지만 결과 페이지로 이동할 수 없습니다.');
+        showError('업로드는 성공했지만 결과 페이지로 이동할 수 없습니다.');
       }
     } catch (e: any) {
       console.error('업로드 중 예외:', e);
-      alert(`업로드 실패: ${e.message || '네트워크 오류가 발생했습니다.'}`);
+      showError(`업로드 실패: ${e.message || '네트워크 오류가 발생했습니다.'}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -484,41 +488,19 @@ const SavePhotoPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <div className="max-w-md mx-auto">
-        {/* 로딩 오버레이 - 펄스 애니메이션 (심장박동 효과) */}
+        {/* 로딩 오버레이 - 진행 상태 표시 */}
         {isSubmitting && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-8 shadow-xl max-w-[320px] w-full mx-4">
-              <div className="flex flex-col items-center">
-                {/* 펄스 애니메이션 (심장박동 효과) */}
-                <div className="relative mb-6" style={{ width: '80px', height: '80px' }}>
-                  {/* 외부 펄스 링 */}
-                  <div 
-                    className="absolute inset-0 rounded-full bg-blue-400 opacity-60"
-                    style={{
-                      animation: 'pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                    }}
-                  ></div>
-                  {/* 중간 펄스 링 */}
-                  <div 
-                    className="absolute inset-0 rounded-full bg-blue-500 opacity-40"
-                    style={{
-                      animation: 'pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                      animationDelay: '0.3s',
-                    }}
-                  ></div>
-                  {/* 중심 원 */}
-                  <div 
-                    className="absolute inset-0 rounded-full bg-blue-600 flex items-center justify-center"
-                    style={{
-                      animation: 'pulse-heart 1.5s ease-in-out infinite',
-                    }}
-                  >
-                    <div className="w-6 h-6 rounded-full bg-white"></div>
-                  </div>
-                </div>
-                <p className="text-gray-700 text-center text-base font-medium mb-1">사진을 분석하고 있습니다...</p>
-                <p className="text-gray-500 text-center text-sm">수초 ~ 수분 소요됩니다</p>
-              </div>
+            <div className="bg-white rounded-lg p-8 shadow-xl max-w-md w-full mx-4">
+              <ProgressIndicator
+                steps={[
+                  { label: '이미지 업로드', status: 'completed' },
+                  { label: '털 제거 처리', status: 'active' },
+                  { label: 'AI 분석', status: 'pending' },
+                  { label: '결과 생성', status: 'pending' },
+                ]}
+                currentStep={1}
+              />
             </div>
           </div>
         )}
@@ -765,6 +747,7 @@ const SavePhotoPage: React.FC = () => {
                       value={itch} 
                       onChange={(e) => setItch(e.target.value as any)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                      style={{ fontSize: '16px' }}
                     >
                       {SEVERITY.map(v => <option key={v} value={v}>{v}</option>)}
                     </select>
@@ -776,6 +759,7 @@ const SavePhotoPage: React.FC = () => {
                       value={pain} 
                       onChange={(e) => setPain(e.target.value as any)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                      style={{ fontSize: '16px' }}
                     >
                       {SEVERITY.map(v => <option key={v} value={v}>{v}</option>)}
                     </select>
@@ -787,6 +771,7 @@ const SavePhotoPage: React.FC = () => {
                       value={color} 
                       onChange={(e) => setColor(e.target.value as any)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                      style={{ fontSize: '16px' }}
                     >
                       {SEVERITY.map(v => <option key={v} value={v}>{v}</option>)}
                     </select>
@@ -798,6 +783,7 @@ const SavePhotoPage: React.FC = () => {
                       value={infection} 
                       onChange={(e) => setInfection(e.target.value as any)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                      style={{ fontSize: '16px' }}
                     >
                       {SEVERITY.map(v => <option key={v} value={v}>{v}</option>)}
                     </select>
@@ -809,6 +795,7 @@ const SavePhotoPage: React.FC = () => {
                       value={blood} 
                       onChange={(e) => setBlood(e.target.value as any)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                      style={{ fontSize: '16px' }}
                     >
                       {SEVERITY.map(v => <option key={v} value={v}>{v}</option>)}
                     </select>
@@ -820,6 +807,7 @@ const SavePhotoPage: React.FC = () => {
                       value={onset} 
                       onChange={(e) => setOnset(e.target.value as any)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                      style={{ fontSize: '16px' }}
                     >
                       {ONSET.map(v => <option key={v} value={v}>{v}</option>)}
                     </select>
@@ -838,6 +826,7 @@ const SavePhotoPage: React.FC = () => {
                       value={sex} 
                       onChange={(e) => setSex(e.target.value as any)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                      style={{ fontSize: '16px' }}
                     >
                       {SEX.map(v => <option key={v} value={v}>{v}</option>)}
                     </select>
@@ -883,6 +872,7 @@ const SavePhotoPage: React.FC = () => {
           <button 
             onClick={onSubmit}
             className="w-full py-4 rounded-xl bg-blue-600 text-white font-bold text-lg hover:bg-blue-700 transition-colors shadow-md"
+            style={{ fontSize: '18px' }}
           >
             제출하고 결과로 이동
           </button>

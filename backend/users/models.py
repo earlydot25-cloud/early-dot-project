@@ -83,7 +83,7 @@ class Users(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
 
-    # 🌟 'created_at' 필드 대신 'date_joined'를 생성 시간으로 통합
+    # 'created_at' 필드 대신 'date_joined'를 생성 시간으로 통합
     date_joined = models.DateTimeField(default=timezone.now)  # auto_now_add 대신 default 사용
 
     # 사용자 정의 필수 필드
@@ -96,7 +96,7 @@ class Users(AbstractBaseUser, PermissionsMixin):
     #family_history = models.CharField(max_length=10, blank=True, null=True)
     is_doctor = models.BooleanField(default=False)
 
-    # 🌟 doctor_uid 외래 키 (db_column 유지)
+    # doctor_uid 외래 키 (db_column 유지)
     doctor = models.ForeignKey(
         'Doctors',
         on_delete=models.SET_NULL,

@@ -8,9 +8,10 @@ channels:
 dependencies:
   - python=3.10
   - numpy
-  - pytorch
-  - torchvision
-  - torchaudio
+  # pytorch-cuda=11.8 제거 - Docker 빌드 환경에서 사용 불가
+  - pytorch::pytorch  # CUDA 지원 버전 (자동 감지)
+  - pytorch::torchvision
+  - pytorch::torchaudio
   - opencv
   - pip
   - pip:

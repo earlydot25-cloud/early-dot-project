@@ -56,7 +56,7 @@ class UserProfileView(APIView):
     # 내 정보 조회 (FE의 /profile 페이지에서 사용) - GET
     def get(self, request):
         """프로필 정보 조회 (GET)"""
-        # 💡 UserProfileSerializer를 사용하여 의사/환자 상세 정보 포함
+        # UserProfileSerializer를 사용하여 의사/환자 상세 정보 포함
         serializer = UserProfileSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -65,7 +65,7 @@ class UserProfileView(APIView):
         """프로필 정보 수정 (PATCH)"""
         user = request.user
 
-        # 💡 UserProfileUpdateSerializer 사용
+        # UserProfileUpdateSerializer 사용
         # (시리얼라이저 Import 필요)
         serializer = UserProfileUpdateSerializer(
             user,

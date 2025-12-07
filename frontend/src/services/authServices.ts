@@ -171,6 +171,8 @@ export type User = {
   name: string;
   is_doctor: boolean;
   doctor_uid: number | null;
+  is_staff?: boolean;
+  is_superuser?: boolean;
 };
 
 export async function login(params: { email: string; password: string }): Promise<Tokens> {
@@ -198,9 +200,10 @@ export async function refresh(refreshToken: string): Promise<Pick<Tokens, 'acces
   return http.post<Pick<Tokens, 'access'>>('/api/auth/refresh/', { refresh: refreshToken });
 }
 
-export async function me(): Promise<User> {
-  // /api/auth/profile/ 는 IsAuthenticated 보호 (백엔드에서 설정) :contentReference[oaicite:8]{index=8}
-  return http.get<User>('/api/auth/profile/');
+export async function me(): Promise<any> {
+  // /api/auth/profile/ 는 IsAuthenticated 보호 (백엔드에서 설정)
+  // UserProfileSerializer를 사용하므로 UserProfile 타입 데이터 반환
+  return http.get<any>('/api/auth/profile/');
 }
 
 export function saveTokens(tokens: Tokens) {
@@ -218,6 +221,7 @@ export function clearAuth() {
   localStorage.removeItem(STORAGE.user);
   localStorage.removeItem('userName');
   localStorage.removeItem('isDoctor');
+  localStorage.removeItem('isStaff');
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('auth:update'));
   }

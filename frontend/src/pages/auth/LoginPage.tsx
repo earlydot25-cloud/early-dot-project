@@ -56,7 +56,36 @@ const LoginPage: React.FC = () => {
           isDoctorStringValue = user.is_doctor ? '1' : '0'; // true면 "1", false면 "0"
       }
       localStorage.setItem('isDoctor', isDoctorStringValue);
+      
+      // 🎯 슈퍼유저/관리자 정보 저장
+      if (user && (user.is_staff || user.is_superuser)) {
+          console.log('✅ 슈퍼유저/관리자 감지:', { is_staff: user.is_staff, is_superuser: user.is_superuser });
+          localStorage.setItem('isStaff', '1');
+      } else {
+          console.log('👤 일반 사용자:', { is_staff: user?.is_staff, is_superuser: user?.is_superuser });
+          localStorage.setItem('isStaff', '0');
+      }
 
+      // 🎯 의사 승인/거절 상태 확인 및 팝업 표시
+      if (user?.is_doctor && user?.doctor_profile) {
+          const doctorStatus = user.doctor_profile.status;
+          const lastShownStatus = localStorage.getItem('lastDoctorStatusShown');
+          const userId = user.id;
+          const statusKey = `doctorStatus_${userId}_${doctorStatus}`;
+          
+          // 이전에 같은 상태의 팝업을 본 적이 없거나, 상태가 변경된 경우에만 팝업 표시
+          if (lastShownStatus !== statusKey && (doctorStatus === '승인' || doctorStatus === '거절')) {
+              if (doctorStatus === '승인') {
+                  alert('가입이 승인되었습니다. 이제 의사 활동을 이어가실 수 있습니다.');
+              } else if (doctorStatus === '거절') {
+                  const rejectionReason = user.doctor_profile.rejection_reason || '거절 사유가 없습니다.';
+                  alert(`가입이 거절되었습니다.\n\n거절 사유: ${rejectionReason}\n\n내 정보 페이지에서 자세한 내용을 확인하실 수 있습니다.`);
+              }
+              
+              // 팝업을 봤다는 것을 localStorage에 저장
+              localStorage.setItem('lastDoctorStatusShown', statusKey);
+          }
+      }
 
       // ✅ Nav가 즉시 갱신되도록 커스텀 이벤트를 쏜다
       window.dispatchEvent(new Event('auth:update'));

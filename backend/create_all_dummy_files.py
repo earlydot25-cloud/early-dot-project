@@ -41,7 +41,7 @@ def create_dummy_pdf_file(file_path):
 def create_dummy_files():
     print("--- 모든 더미 파일 생성 시작 ---")
 
-    # 💡 MEDIA_ROOT 경로를 BASE_DIR/media 로 명시적으로 설정
+    # MEDIA_ROOT 경로를 BASE_DIR/media 로 명시적으로 설정
     MEDIA_BASE_DIR = os.path.join(BASE_DIR, 'media')
     os.makedirs(MEDIA_BASE_DIR, exist_ok=True)  # media 폴더가 없을 경우 대비하여 생성
 

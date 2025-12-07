@@ -1,0 +1,25 @@
+# Git 관련
+.git/
+.gitignore
+.gitattributes
+
+# Python 캐시 (이미 루트에 있지만 명시)
+__pycache__/
+*.pyc
+*.pyo
+*.py[cod]
+*$py.class
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 문서 (불필요 - 이미지는 문서 없이 빌드 가능)
+*.md
+README*
+
+# 기타
+.DS_Store
+*.log

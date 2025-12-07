@@ -27,6 +27,8 @@ class UserSerializer(serializers.ModelSerializer):
             'family_history',
             'is_doctor',
             'doctor_uid',
+            'is_staff',
+            'is_superuser',
         )
 
 
@@ -136,6 +138,12 @@ class RegisterSerializer(serializers.ModelSerializer):
                     # 새 로직: Doctors.objects.filter(uid__id=n).first()
                     raise serializers.ValidationError(
                         {"referral_uid": ["유효하지 않은 의사 식별번호(User ID)입니다. 해당 ID를 가진 의사 프로필이 존재하지 않습니다."]})
+                
+                # 의사 승인 상태 확인: '승인' 상태가 아니면 에러 발생
+                if doctor_obj.status != '승인':
+                    raise serializers.ValidationError(
+                        {"referral_uid": ["유효하지 않은 의사 식별번호입니다. 해당 의사는 승인되지 않았거나 거절된 상태입니다."]})
+                
                 attrs["doctor"] = doctor_obj
             else:
                 attrs.pop("doctor", None)
@@ -213,7 +221,7 @@ class DoctorProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Doctors
-        fields = ['user_id', 'specialty', 'hospital', 'status']
+        fields = ['user_id', 'specialty', 'hospital', 'status', 'rejection_reason']
 
 
 # 2. PatientListItemSerializer (의사가 보는 환자 목록)
@@ -303,14 +311,18 @@ class UserProfileSerializer(serializers.ModelSerializer):
     assigned_doctor = serializers.SerializerMethodField(read_only=True)
     # 의사일 경우: 담당 환자 목록 (PatientListItemSerializer 사용)
     patients = serializers.SerializerMethodField(read_only=True)
+    
+    # 🎯 명시적으로 is_staff와 is_superuser 필드 추가 (PermissionsMixin 필드)
+    is_staff = serializers.BooleanField(read_only=True)
+    is_superuser = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = User
         # 'birth_date'는 User 모델에 있다고 가정. 없으면 제거 필요.
         fields = ['id', 'email', 'name', 'sex', 'age', 'birth_date', 'family_history', 'is_doctor',
-                  'doctor_profile', 'assigned_doctor', 'patients'
+                  'doctor_profile', 'assigned_doctor', 'patients', 'is_staff', 'is_superuser'
                   ]
-        read_only_fields = ['email', 'is_doctor', 'date_joined']
+        read_only_fields = ['email', 'is_doctor', 'date_joined', 'is_staff', 'is_superuser']
 
     def get_doctor_profile(self, obj: User):
         """사용자가 의사일 경우, 자신의 Doctors 프로필 정보를 반환"""

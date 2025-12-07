@@ -706,7 +706,7 @@ class UserDashboardMainView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # 💡 request.user를 사용합니다.
+        # request.user를 사용합니다.
         user = request.user
 
         # 1. 최근 진단 내역 (Top 5)
@@ -750,7 +750,7 @@ class DoctorDashboardMainView(APIView):
 
     def get(self, request):
         try:
-            # 1. 💡 request.user는 이미 인증된 Users 객체입니다.
+            # 1. request.user는 이미 인증된 Users 객체입니다.
             user = request.user
             print(f"[DoctorDashboardMainView] 요청 사용자: {user.email} (ID: {user.id}, is_doctor: {user.is_doctor})")
 

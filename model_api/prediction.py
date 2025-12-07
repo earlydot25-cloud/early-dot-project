@@ -12,18 +12,30 @@ import torch.nn.functional as F
 
 logger = logging.getLogger(__name__)
 
+# gradcam_web_inference 모듈 import 시도
+try:
+    from gradcam_web_inference import generate_gradcam_overlay
+    HAS_GRADCAM_MODULE = True
+    logger.info("[Prediction] gradcam_web_inference 모듈 import 성공")
+except ImportError as e:
+    HAS_GRADCAM_MODULE = False
+    logger.warning(f"[Prediction] gradcam_web_inference 모듈을 import할 수 없습니다: {e}")
+    logger.warning("[Prediction] GradCAM 기능을 사용하려면 gradcam_web_inference.py가 필요합니다.")
+
 # 클래스 인덱스/영문명을 한국어 질병명으로 매핑하는 딕셔너리
 # 모델이 예측하는 8개 클래스
+# ⚠️ 중요: gradcam_web_inference.py의 CLASS_NAMES 순서와 일치해야 함
+# CLASS_NAMES = ['ak', 'bcc', 'bkl', 'df', 'mel', 'nv', 'scc', 'vasc'] (알파벳 순서)
 CLASS_TO_KOREAN = {
-    # 클래스 인덱스로 매핑 (8개 피부 질환 분류)
-    0: "흑색종",  # Melanoma (MEL)
-    1: "모반",  # Nevus (NV)
-    2: "기저세포암",  # Basal Cell Carcinoma (BCC)
-    3: "편평세포암",  # Squamous Cell Carcinoma (SCC)
-    4: "피부섬유종",  # Dermatofibroma (DF)
-    5: "양성 각화증",  # Benign Keratosis (BKL)
-    6: "광선 각화증",  # Actinic Keratosis (AK)
-    7: "혈관종",  # Vascular (VASC)
+    # 클래스 인덱스로 매핑 (8개 피부 질환 분류) - gradcam_web_inference.py 순서와 일치
+    0: "광선 각화증",  # Actinic Keratosis (AK) - 인덱스 0
+    1: "기저세포암",  # Basal Cell Carcinoma (BCC) - 인덱스 1
+    2: "양성 각화증",  # Benign Keratosis (BKL) - 인덱스 2
+    3: "피부섬유종",  # Dermatofibroma (DF) - 인덱스 3
+    4: "흑색종",  # Melanoma (MEL) - 인덱스 4
+    5: "모반",  # Nevus (NV) - 인덱스 5
+    6: "편평세포암",  # Squamous Cell Carcinoma (SCC) - 인덱스 6
+    7: "혈관종",  # Vascular (VASC) - 인덱스 7
     
     # 영문명으로 매핑
     "melanoma": "흑색종",
@@ -48,237 +60,9 @@ KOREAN_TO_ENGLISH = {
     "혈관종": "Vascular",
 }
 
-# 한국어 질병명을 영문 약어로 매핑 (GradCAM 클래스별 임계값 사용)
-KOREAN_TO_ABBR = {
-    "흑색종": "mel",  # Melanoma
-    "모반": "nv",  # Nevus
-    "기저세포암": "bcc",  # Basal Cell Carcinoma
-    "편평세포암": "scc",  # Squamous Cell Carcinoma
-    "피부섬유종": "df",  # Dermatofibroma
-    "양성 각화증": "bkl",  # Benign Keratosis
-    "광선 각화증": "ak",  # Actinic Keratosis
-    "혈관종": "vasc",  # Vascular
-}
-
-# 클래스 인덱스를 영문 약어로 매핑
-CLASS_IDX_TO_ABBR = {
-    0: "mel",   # 흑색종
-    1: "nv",    # 모반
-    2: "bcc",   # 기저세포암
-    3: "scc",   # 편평세포암
-    4: "df",    # 피부섬유종
-    5: "bkl",   # 양성 각화증
-    6: "ak",    # 광선 각화증
-    7: "vasc",  # 혈관종
-}
-
 # ImageNet 정규화 상수
 MEAN = [0.485, 0.456, 0.406]
 STD = [0.229, 0.224, 0.225]
-
-
-class GradCAMPlusPlus:
-    """GradCAM++ 구현"""
-    def __init__(self, model, target_layer):
-        self.model = model
-        self.target_layer = target_layer
-        self.gradients = None
-        self.activations = None
-        
-        # 훅 등록
-        self.target_layer.register_forward_hook(self.save_activation)
-        self.target_layer.register_full_backward_hook(self.save_gradient)
-    
-    def save_activation(self, module, input, output):
-        # detach하지 않음 - 그래디언트가 흐를 수 있어야 함!
-        self.activations = output
-    
-    def save_gradient(self, module, grad_input, grad_output):
-        # 그래디언트 저장 (grad_output은 튜플)
-        if grad_output[0] is not None:
-            self.gradients = grad_output[0]
-        else:
-            self.gradients = None
-    
-    def __call__(self, input_tensor, target_category=None):
-        self.model.zero_grad()
-        self.gradients = None
-        self.activations = None
-        
-        # 그래디언트 계산 활성화
-        input_tensor.requires_grad_(True)
-        
-        output = self.model(input_tensor)
-        
-        if target_category is None:
-            target_category = torch.argmax(output, dim=1).item()
-        
-        # One-hot 인코딩
-        one_hot = torch.zeros_like(output)
-        one_hot[0, target_category] = 1
-        
-        # 역전파
-        output.backward(gradient=one_hot, retain_graph=False)
-        
-        if self.activations is None or self.gradients is None:
-            logger.warning(f"[GradCAM++] activations 또는 gradients가 None입니다")
-            return np.zeros((16, 16)), target_category, output.detach()
-        
-        activations = self.activations  # [B, C, H, W]
-        gradients = self.gradients  # [B, C, H, W]
-        
-        if len(gradients.shape) != 4 or len(activations.shape) != 4:
-            logger.warning(f"[GradCAM++] 예상치 못한 형태 - gradients: {gradients.shape}, activations: {activations.shape}")
-            return np.zeros((16, 16)), target_category, output.detach()
-        
-        # GradCAM++ 계산
-        # alpha = ReLU(gradients) / (활성화 합 + eps)
-        alpha_num = F.relu(gradients)  # [B, C, H, W]
-        alpha_den = torch.sum(activations, dim=[2, 3], keepdim=True) + 1e-10  # [B, C, 1, 1]
-        alpha = alpha_num / alpha_den  # [B, C, H, W]
-        
-        # 가중치 조합
-        weights = torch.sum(alpha * activations, dim=[2, 3], keepdim=True)  # [B, C, 1, 1]
-        heatmap = torch.sum(weights * activations, dim=1)  # [B, H, W]
-        heatmap = F.relu(heatmap[0])  # [H, W]
-        
-        # 정규화
-        max_val = torch.max(heatmap)
-        min_val = torch.min(heatmap)
-        
-        if max_val > 0:
-            # [0, 1]로 정규화
-            heatmap_normalized = (heatmap - min_val) / (max_val - min_val + 1e-8)
-            # 약한 활성화를 더 보이게 하기 위한 향상 적용
-            heatmap_normalized = torch.pow(heatmap_normalized, 0.8)
-            heatmap = heatmap_normalized
-        else:
-            heatmap = torch.zeros_like(heatmap)
-        
-        # numpy로 변환 및 GPU 메모리 정리
-        heatmap_np = heatmap.cpu().detach().numpy()
-        output_detached = output.detach()
-        
-        # 중간 텐서 정리
-        del heatmap, heatmap_normalized, weights, alpha, alpha_num, alpha_den, activations, gradients, one_hot, output
-        self.gradients = None
-        self.activations = None
-        
-        return heatmap_np, target_category, output_detached
-
-
-def denormalize_image(tensor):
-    """이미지 텐서 역정규화"""
-    mean = np.array(MEAN)
-    std = np.array(STD)
-    img = tensor.cpu().numpy().transpose((1, 2, 0))
-    img = std * img + mean
-    img = np.clip(img, 0, 1)
-    return img
-
-
-def show_cam_on_image(img_numpy, cam, alpha=0.6, use_adaptive_threshold=True, predicted_class_abbr=None):
-    """
-    개선된 시각화로 이미지에 CAM 히트맵 오버레이
-    
-    Args:
-        img_numpy: 원본 이미지 (H, W, 3) [0, 1] 범위
-        cam: 히트맵 값 (H, W) [0, 1] 범위
-        alpha: 오버레이 투명도 (0-1)
-        use_adaptive_threshold: True이면 히트맵 통계 기반 적응형 임계값 사용
-        predicted_class_abbr: 클래스별 임계값을 위한 클래스 약어 ('mel', 'ak', 'nv', etc.)
-    """
-    from scipy.ndimage import zoom
-    
-    H, W, _ = img_numpy.shape
-    
-    # 히트맵 리사이즈
-    if cam.shape[0] != H or cam.shape[1] != W:
-        zoom_factor_h = H / cam.shape[0]
-        zoom_factor_w = W / cam.shape[1]
-        cam_resized = zoom(cam, (zoom_factor_h, zoom_factor_w), order=3)
-    else:
-        cam_resized = cam.copy()
-    
-    # [0, 1] 정규화 확인
-    if cam_resized.max() > 1.0 or cam_resized.min() < 0.0:
-        cam_min = cam_resized.min()
-        cam_max = cam_resized.max()
-        if cam_max > cam_min:
-            cam_resized = (cam_resized - cam_min) / (cam_max - cam_min + 1e-8)
-        else:
-            cam_resized = np.zeros_like(cam_resized)
-    
-    # 클래스별 적응형 임계값
-    if use_adaptive_threshold and predicted_class_abbr:
-        mean_val = cam_resized.mean()
-        max_val = cam_resized.max()
-        
-        # 클래스별 임계값 파라미터
-        if predicted_class_abbr == 'mel':
-            percentile = 75
-            threshold_multiplier = 0.85
-            gamma = 0.85
-        elif predicted_class_abbr == 'ak':
-            percentile = 50
-            threshold_multiplier = 0.60
-            gamma = 0.70
-        elif predicted_class_abbr == 'df':
-            percentile = 85
-            threshold_multiplier = 0.92
-            gamma = 0.88
-        elif predicted_class_abbr == 'nv':
-            percentile = 90
-            threshold_multiplier = 0.98
-            gamma = 0.95
-        elif predicted_class_abbr == 'vasc':
-            percentile = 85
-            threshold_multiplier = 0.95
-            gamma = 0.90
-        elif predicted_class_abbr == 'bkl':
-            percentile = 75
-            threshold_multiplier = 0.85
-            gamma = 0.85
-        elif predicted_class_abbr == 'bcc':
-            percentile = 65
-            threshold_multiplier = 0.75
-            gamma = 0.80
-        elif predicted_class_abbr == 'scc':
-            percentile = 55
-            threshold_multiplier = 0.70
-            gamma = 0.75
-        else:
-            percentile = 65
-            threshold_multiplier = 0.75
-            gamma = 0.80
-        
-        if max_val > 0:
-            threshold = np.percentile(cam_resized, percentile)
-            cam_resized = np.maximum(cam_resized - threshold * threshold_multiplier, 0)
-            
-            if cam_resized.max() > 0:
-                cam_resized = cam_resized / cam_resized.max()
-                cam_resized = np.power(cam_resized, gamma)
-            else:
-                cam_resized = (cam_resized + threshold * threshold_multiplier) / (max_val + 1e-8)
-                cam_resized = np.clip(cam_resized, 0, 1)
-    
-    # 'jet' 컬러맵 사용
-    try:
-        import matplotlib.cm as cm
-        cam_for_colormap = np.clip(cam_resized, 0, 1)
-        heatmap = cm.jet(cam_for_colormap)[:, :, :3]  # [H, W, 3] [0, 1] 범위
-    except:
-        # 대체: 간단한 red 그라디언트
-        heatmap = np.zeros((H, W, 3))
-        heatmap[:, :, 0] = cam_resized  # Red channel
-    
-    # 원본 이미지에 오버레이
-    img_float = np.float32(img_numpy)
-    cam_overlay = np.float32(heatmap) * alpha + img_float * (1 - alpha)
-    cam_overlay = np.clip(cam_overlay, 0, 1)
-    
-    return np.uint8(255 * cam_overlay)
 
 
 class PredictionPipeline:
@@ -304,73 +88,82 @@ class PredictionPipeline:
     def _build_combined_model(self, state_dict, device):
         """
         combined_resnet50_effnetb4 모델 아키텍처 정의
-        ResNet50과 EfficientNet-B4를 결합한 앙상블 모델로 추정
+        gradcam_visualization.py의 EnsembleModel 구조를 그대로 사용
         """
         import torch
         import torch.nn as nn
         import torchvision.models as models
         
-        logger.info("[Prediction] combined_resnet50_effnetb4 모델 아키텍처 정의 시작")
+        logger.info("[Prediction] combined_resnet50_effnetb4 모델 아키텍처 정의 시작 (EnsembleModel 구조)")
         
         # state_dict 키 분석
         state_dict_keys = list(state_dict.keys())
         
-        # ResNet50과 EfficientNet-B4를 결합한 모델 정의
-        # 일반적인 앙상블 구조: 두 모델의 특징을 결합하여 분류
-        
-        class CombinedModel(nn.Module):
-            def __init__(self, num_classes=8):  # 기본 8개 클래스 (흑색종, 모반, 기저세포암, 편평세포암, 피부섬유종, 양성 각화증, 광선 각화증, 혈관종)
-                super(CombinedModel, self).__init__()
+        # gradcam_visualization.py의 EnsembleModel 구조를 그대로 사용
+        class EnsembleModel(nn.Module):
+            def __init__(self, num_classes=8):  # 기본 8개 클래스
+                super(EnsembleModel, self).__init__()
                 
-                # ResNet50 백본
-                resnet50 = models.resnet50(pretrained=False)
-                self.resnet_backbone = nn.Sequential(*list(resnet50.children())[:-1])  # 마지막 FC 제거
-                
-                # EfficientNet-B4 백본 (torchvision에 없으면 timm 사용 시도)
+                # ResNet50 (백본 A) - gradcam_visualization.py와 동일
                 try:
-                    import timm
-                    self.effnet_backbone = timm.create_model('efficientnet_b4', pretrained=False, num_classes=0)
-                except ImportError:
-                    # timm이 없으면 EfficientNet-B0로 대체 (구조 유사)
-                    logger.warning("[Prediction] timm이 없어 EfficientNet-B0로 대체합니다.")
-                    effnet = models.efficientnet_b0(pretrained=False)
-                    self.effnet_backbone = nn.Sequential(*list(effnet.children())[:-1])
+                    from torchvision.models import ResNet50_Weights
+                    self.model_A = models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
+                except:
+                    self.model_A = models.resnet50(pretrained=True)
+                self.model_A.fc = nn.Identity()
                 
-                # 특징 결합 및 분류기
-                # ResNet50 특징 차원: 2048, EfficientNet-B4 특징 차원: 1792 (B0는 1280)
-                resnet_feat_dim = 2048
-                effnet_feat_dim = 1792 if hasattr(self.effnet_backbone, 'num_features') else 1280
+                # EfficientNetB4 (백본 B) - gradcam_visualization.py와 동일
+                try:
+                    from torchvision.models import EfficientNet_B4_Weights
+                    self.model_B = models.efficientnet_b4(weights=EfficientNet_B4_Weights.IMAGENET1K_V1)
+                    num_ftrs_b = self.model_B.classifier[1].in_features
+                    self.model_B.classifier = nn.Identity()
+                except:
+                    try:
+                        import timm
+                        self.model_B = timm.create_model('efficientnet_b4', pretrained=True, num_classes=0)
+                        num_ftrs_b = 1792
+                    except ImportError:
+                        logger.warning("[Prediction] timm이 없어 EfficientNet-B0로 대체합니다.")
+                        self.model_B = models.efficientnet_b0(pretrained=True)
+                        num_ftrs_b = 1280
+                        self.model_B.classifier = nn.Identity()
                 
-                # 특징 결합
-                combined_dim = resnet_feat_dim + effnet_feat_dim
+                # 앙상블 분류기 - ResNet50 + EfficientNetB4 특징 결합
+                combined_features_size = 2048 + num_ftrs_b  # 2048 + 1792 = 3840
                 self.classifier = nn.Sequential(
-                    nn.Dropout(0.5),
-                    nn.Linear(combined_dim, 512),
+                    nn.Dropout(0.6),
+                    nn.Linear(combined_features_size, 512),  # 3840 -> 512
                     nn.ReLU(),
-                    nn.Dropout(0.3),
+                    nn.Dropout(0.4),
                     nn.Linear(512, num_classes)
                 )
             
             def forward(self, x):
-                # ResNet50 특징 추출
-                resnet_feat = self.resnet_backbone(x)
-                resnet_feat = resnet_feat.view(resnet_feat.size(0), -1)
+                # GradCAM을 위해 공간 특징을 보존하는 수동 forward
+                # ResNet50 forward
+                x_resnet = self.model_A.conv1(x)
+                x_resnet = self.model_A.bn1(x_resnet)
+                x_resnet = self.model_A.relu(x_resnet)
+                x_resnet = self.model_A.maxpool(x_resnet)
+                x_resnet = self.model_A.layer1(x_resnet)
+                x_resnet = self.model_A.layer2(x_resnet)
+                x_resnet = self.model_A.layer3(x_resnet)
+                x_resnet = self.model_A.layer4(x_resnet)  # [B, 2048, H, W] - 공간 특징
+                features_A = self.model_A.avgpool(x_resnet)  # [B, 2048, 1, 1]
+                features_A = torch.flatten(features_A, 1)  # [B, 2048]
                 
-                # EfficientNet 특징 추출
-                effnet_feat = self.effnet_backbone(x)
-                if isinstance(effnet_feat, tuple):
-                    effnet_feat = effnet_feat[0]
-                effnet_feat = effnet_feat.view(effnet_feat.size(0), -1)
+                # EfficientNetB4 forward
+                features_B = self.model_B.features(x)  # [B, 1792, H, W] - 공간 특징
+                features_B = self.model_B.avgpool(features_B)  # [B, 1792, 1, 1]
+                features_B = torch.flatten(features_B, 1)  # [B, 1792]
                 
                 # 특징 결합
-                combined_feat = torch.cat([resnet_feat, effnet_feat], dim=1)
-                
-                # 분류
-                output = self.classifier(combined_feat)
+                combined_features = torch.cat((features_A, features_B), dim=1)
+                output = self.classifier(combined_features)
                 return output
         
-        # 모델 생성
-        # state_dict 키를 보고 num_classes 추론
+        # 모델 생성 - EnsembleModel 사용
         num_classes = 8  # 기본값 (8개 클래스)
         # 마지막 classifier 레이어 찾기 (입력 차원이 512인 것)
         classifier_keys = [key for key in state_dict_keys if ('classifier' in key or 'fc' in key) and 'weight' in key]
@@ -392,17 +185,20 @@ class PredictionPipeline:
                     num_classes = weight_shape[0]
                     logger.info(f"[Prediction] state_dict에서 num_classes 추론 (마지막 레이어): {num_classes} (키: {last_key})")
         
-        model = CombinedModel(num_classes=num_classes)
+        model = EnsembleModel(num_classes=num_classes)
         
         # state_dict 로드 (strict=False로 일부 키가 맞지 않아도 로드)
         try:
+            # 먼저 ResNet 백본과 EfficientNet 백본 가중치는 그대로 로드
             model.load_state_dict(state_dict, strict=False)
-            logger.info("[Prediction] state_dict 로드 완료 (strict=False)")
+            
+            logger.info("[Prediction] state_dict 로드 완료 (strict=False, 앙상블 모델)")
         except Exception as e:
             logger.warning(f"[Prediction] state_dict 로드 중 일부 키 불일치 (무시): {e}")
             # 일부 키만 로드 시도
             model_dict = model.state_dict()
             pretrained_dict = {k: v for k, v in state_dict.items() if k in model_dict and model_dict[k].shape == v.shape}
+            
             model_dict.update(pretrained_dict)
             model.load_state_dict(model_dict)
             logger.info(f"[Prediction] {len(pretrained_dict)}/{len(state_dict)} 키 로드 완료")
@@ -610,6 +406,7 @@ class PredictionPipeline:
         
         Args:
             image_bytes: 예측할 이미지 바이트 데이터 (털 제거된 이미지)
+            generate_gradcam: GradCAM 생성 여부 (기본값: False)
             
         Returns:
             {
@@ -717,12 +514,7 @@ class PredictionPipeline:
             grad_cam_bytes = None
             if generate_gradcam:
                 try:
-                    grad_cam_bytes = self._generate_gradcam(
-                        image, 
-                        image_tensor, 
-                        max_class[1],  # 예측된 클래스 확률
-                        disease_name_ko
-                    )
+                    grad_cam_bytes = self._generate_gradcam(original_image=image)
                     logger.info(f"[Prediction] [3/3] GradCAM 생성 완료: {len(grad_cam_bytes) if grad_cam_bytes else 0} bytes")
                 except Exception as e:
                     logger.error(f"[Prediction] [3/3] GradCAM 생성 실패: {e}", exc_info=True)
@@ -793,71 +585,45 @@ class PredictionPipeline:
             else:
                 return "낮음"
     
-    def _generate_gradcam(self, original_image, image_tensor, pred_prob: float, disease_name_ko: str) -> Optional[bytes]:
+    def _generate_gradcam(self, original_image) -> Optional[bytes]:
         """
         GradCAM 히트맵 생성 및 이미지 바이트로 반환
+        gradcam_web_inference.py의 generate_gradcam_overlay 함수를 사용
         
         Args:
             original_image: 원본 PIL Image
-            image_tensor: 전처리된 이미지 텐서
-            pred_prob: 예측 확률
-            disease_name_ko: 예측된 질병명 (한국어)
             
         Returns:
             GradCAM 이미지 바이트 또는 None
         """
+        if not HAS_GRADCAM_MODULE:
+            logger.error("[GradCAM] gradcam_web_inference 모듈을 사용할 수 없습니다.")
+            logger.error("[GradCAM] 필요한 패키지가 설치되어 있는지 확인하세요: scipy, matplotlib")
+            return None
+        
         try:
             import io
             from PIL import Image as PILImage
             
-            logger.info("[GradCAM] GradCAM 생성 시작")
+            logger.info("[GradCAM] GradCAM 생성 시작 (gradcam_web_inference 모듈 사용)")
             
-            # 모델이 _build_combined_model로 생성된 경우, 타겟 레이어 찾기
-            if hasattr(self.model, 'resnet_backbone'):
-                # ResNet backbone이 있으면 마지막 레이어 사용
-                if hasattr(self.model.resnet_backbone, '__getitem__'):
-                    # Sequential로 감싸진 경우
-                    target_layer = self.model.resnet_backbone[-1]
-                else:
-                    target_layer = self.model.resnet_backbone
-            elif hasattr(self.model, 'model_A'):
-                # gradcam_visualization.py 스타일의 모델 구조
-                target_layer = self.model.model_A.layer4
-            else:
-                logger.warning("[GradCAM] 적합한 타겟 레이어를 찾을 수 없습니다")
+            # 모델 경로 확인
+            model_path = self.models_dir / "ensemble_finetune_best_60epochst.pt"
+            if not model_path.exists():
+                logger.error(f"[GradCAM] 모델 파일을 찾을 수 없습니다: {model_path}")
                 return None
             
-            # GradCAM++ 인스턴스 생성
-            gradcam_pp = GradCAMPlusPlus(self.model, target_layer)
-            
-            # 모델을 train 모드로 설정 (GradCAM을 위해 필요)
-            self.model.train()
-            
-            # GradCAM 계산
-            cam, pred_class, _ = gradcam_pp(image_tensor.clone(), target_category=None)
-            
-            # 모델을 다시 eval 모드로
-            self.model.eval()
-            
-            logger.info(f"[GradCAM] 히트맵 생성 완료: {cam.shape}")
-            
-            # 원본 이미지 역정규화
-            image_denorm = denormalize_image(image_tensor[0])
-            
-            # 클래스 약어 가져오기
-            disease_abbr = KOREAN_TO_ABBR.get(disease_name_ko, None)
-            
-            # CAM 오버레이
-            cam_img = show_cam_on_image(
-                image_denorm, 
-                cam, 
-                alpha=0.5, 
-                use_adaptive_threshold=True,
-                predicted_class_abbr=disease_abbr
+            # gradcam_web_inference의 generate_gradcam_overlay 함수 사용
+            overlay_image = generate_gradcam_overlay(
+                image_input=original_image,  # PIL Image 객체
+                model_path=str(model_path),  # 문자열 경로로 변환
+                target_class=None,  # 예측된 클래스 사용
+                image_size=512,
+                device=self.device
             )
             
-            # PIL Image로 변환
-            cam_pil = PILImage.fromarray(cam_img)
+            # numpy array를 PIL Image로 변환
+            cam_pil = PILImage.fromarray(overlay_image)
             
             # 바이트로 변환
             buffer = io.BytesIO()
@@ -871,4 +637,3 @@ class PredictionPipeline:
         except Exception as e:
             logger.error(f"[GradCAM] 생성 중 오류: {e}", exc_info=True)
             return None
-

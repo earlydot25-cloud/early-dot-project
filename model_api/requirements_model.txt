@@ -22,6 +22,7 @@ easydict==1.9
 yacs==0.1.8
 imageio==2.37.2
 matplotlib==3.10.7
+scipy
 tqdm==4.67.1
 PyYAML==6.0.3
 pytorch-lightning==1.2.9

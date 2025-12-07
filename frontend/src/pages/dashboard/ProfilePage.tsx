@@ -276,6 +276,20 @@ const handleAccountDelete = async () => {
         </span>
       </div>
 
+      {/* 거절 사유 표시 (거절 상태일 때만) */}
+      {doctorProfile?.status === '거절' && doctorProfile?.rejection_reason && (
+        <div className="py-2 border-b border-gray-100">
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-gray-600">거절 사유</span>
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-xs text-red-700 whitespace-pre-wrap">
+                {doctorProfile.rejection_reason}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <FormField
         label="전문의 분야"
         name="specialty"

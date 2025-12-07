@@ -16,7 +16,7 @@
 # backend/diagnosis/urls.py
 
 from django.urls import path
-# 🌟 중요: views.py에서 PhotoUploadView를 import 합니다.
+# 중요: views.py에서 PhotoUploadView를 import 합니다.
 from .views import PhotoUploadView
 
 # (만약 ModelPredictionView도 사용한다면 함께 import)
@@ -25,7 +25,7 @@ from .views import PhotoUploadView
 app_name = 'diagnosis'
 
 urlpatterns = [
-    # 🌟 중요: path('upload/', ...)
+    # 중요: path('upload/', ...)
     # React(프론트)에서 /api/diag/upload/ (가정) 주소로 POST 요청을 보낼 때,
     # PhotoUploadView(views.py의 클래스)가 실행되도록 연결합니다.
     path('upload/', PhotoUploadView.as_view(), name='photo-upload'),
