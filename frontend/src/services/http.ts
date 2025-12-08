@@ -45,6 +45,9 @@ function authHeader(): Record<string, string> {
 }
 
 async function request<T>(path: string, options: RequestInit = {}, retry = true): Promise<T> {
+  // API 요청 전에 토큰 만료 체크 및 자동 갱신
+  await refreshTokenIfNeeded();
+  
   // API_BASE가 빈 문자열이므로, URL은 '/api/...' 형태로 프록시를 타게 됩니다.
   const url = `${API_BASE}${path}`;
 
@@ -109,6 +112,36 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
   return data as T;
 }
 
+// JWT 토큰 디코딩 (payload만 추출)
+function decodeJWT(token: string): { exp?: number } | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload;
+  } catch (e) {
+    return null;
+  }
+}
+
+// 토큰 만료 시간 확인 (초 단위)
+function getTokenExpiration(token: string): number | null {
+  const decoded = decodeJWT(token);
+  return decoded?.exp || null;
+}
+
+// 토큰이 곧 만료되는지 확인 (만료 5분 전)
+function isTokenExpiringSoon(token: string): boolean {
+  const exp = getTokenExpiration(token);
+  if (!exp) return true; // 만료 시간을 알 수 없으면 갱신 시도
+  
+  const now = Math.floor(Date.now() / 1000);
+  const timeUntilExpiry = exp - now;
+  const fiveMinutes = 5 * 60; // 5분 (초)
+  
+  return timeUntilExpiry < fiveMinutes;
+}
+
 // refresh 토큰으로 access 재발급
 export async function tryRefresh(): Promise<boolean> {
   const refresh = localStorage.getItem(STORAGE.refresh);
@@ -125,6 +158,20 @@ export async function tryRefresh(): Promise<boolean> {
   if (!res.ok || !data?.access) return false;
   localStorage.setItem(STORAGE.access, data.access);
   return true;
+}
+
+// 토큰 만료 전 자동 갱신 (만료 5분 전에 갱신)
+export async function refreshTokenIfNeeded(): Promise<boolean> {
+  const accessToken = localStorage.getItem(STORAGE.access);
+  if (!accessToken) return false;
+  
+  // 토큰이 곧 만료되면 갱신
+  if (isTokenExpiringSoon(accessToken)) {
+    console.log('[Token Refresh] 토큰이 곧 만료되어 자동 갱신 시도');
+    return await tryRefresh();
+  }
+  
+  return true; // 아직 유효함
 }
 
 export const http = {

@@ -3,6 +3,9 @@ import axios from 'axios';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { useToast } from '../../contexts/ToastContext';
+import ImageZoomModal from '../../components/ImageZoomModal';
+import { formatDateTime } from '../../utils/dateUtils';
 
 // ------------------- Interface -------------------
 interface Disease {
@@ -164,7 +167,9 @@ const HistoryResultPage: React.FC = () => {
   const [doctorRiskLevel, setDoctorRiskLevel] = useState<RiskOption>('소견 대기');
   const [isSavingFollowup, setIsSavingFollowup] = useState(false);
   const [followupMessage, setFollowupMessage] = useState<string | null>(null);
+  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
   const pdfRef = useRef<HTMLDivElement>(null);
+  const { showSuccess, showError } = useToast();
 
   useEffect(() => {
     if (!resultId) {
@@ -241,6 +246,11 @@ const HistoryResultPage: React.FC = () => {
       }
       setDoctorNote(updatedFollowup.doctor_note || '');
       setFollowupMessage('전문의 소견이 저장되었습니다.');
+      
+      // 소견 저장 후 DoctorHistoryPage에 환자 목록 새로고침 이벤트 전달
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('doctor-opinion-saved'));
+      }
     } catch (err: any) {
       console.error('Failed to save follow-up:', err);
       alert(err.response?.data?.error || err.response?.data?.message || '소견 저장에 실패했습니다.');
@@ -257,21 +267,34 @@ const HistoryResultPage: React.FC = () => {
     );
   }
 
-  // URL에서 userId와 folderName 추출 (데이터 로드 전에도 사용 가능)
-  const searchParams = new URLSearchParams(location.search);
-  const userId = searchParams.get('user');
+  // URL에서 userId, folderName, resultId 추출 (의사용 URL 기반 라우팅)
   const pathParts = location.pathname.split('/');
-  const folderNameFromPath = pathParts[pathParts.length - 2]; // /dashboard/doctor/history/{folderName}/{resultId}
+  const isDoctorPath = location.pathname.includes('/doctor/');
+  
+  let userId: string | null = null;
+  let folderNameFromPath: string | null = null;
+  
+  if (isDoctorPath) {
+    // /dashboard/doctor/history/:userId/:folderName/:resultId 형식
+    const historyIndex = pathParts.indexOf('history');
+    if (historyIndex > -1 && pathParts.length > historyIndex + 3) {
+      userId = pathParts[historyIndex + 1];
+      folderNameFromPath = decodeURIComponent(pathParts[historyIndex + 2]);
+    } else if (historyIndex > -1 && pathParts.length > historyIndex + 2) {
+      // 기존 형식 호환: /dashboard/doctor/history/:folderName/:resultId?user=:userId
+      folderNameFromPath = decodeURIComponent(pathParts[historyIndex + 1]);
+      const searchParams = new URLSearchParams(location.search);
+      userId = searchParams.get('user');
+    }
+  }
 
-  // 뒤로가기 핸들러: 폴더 목록으로 이동
+  // 뒤로가기 핸들러: 이전 페이지(기록 목록)로 이동
   const handleBack = () => {
-    const isDoctorPath = location.pathname.includes('/doctor/');
-    if (isDoctorPath && folderNameFromPath && folderNameFromPath !== 'history') {
-      // 의사용: 폴더 목록으로 이동
-      const folderPath = `/dashboard/doctor/history/${folderNameFromPath}${userId ? `?user=${userId}` : ''}`;
-      navigate(folderPath);
+    if (isDoctorPath && userId && folderNameFromPath && folderNameFromPath !== 'history') {
+      // 의사용: 기록 목록 페이지로 이동
+      navigate(`/dashboard/doctor/history/${userId}/${encodeURIComponent(folderNameFromPath)}`);
     } else {
-      // 일반 사용자용 또는 폴더명이 없으면 이전 페이지로
+      // 기본: 브라우저 뒤로가기
       navigate(-1);
     }
   };
@@ -291,19 +314,30 @@ const HistoryResultPage: React.FC = () => {
   }
 
   // ✅ 안전한 URL 생성
-  const originalUrl = resolveMediaUrl(data.photo.upload_storage_path);
+  const originalUrl = data.photo && data.photo.upload_storage_path 
+    ? resolveMediaUrl(data.photo.upload_storage_path) 
+    : '';
   const gradcamUrl = data.grad_cam_path ? resolveMediaUrl(data.grad_cam_path) : '';
 
-  // ✅ 위험도 색상 스타일
-  const hasDoctorNote =
-    data.followup_check &&
-    data.followup_check.doctor_risk_level &&
+  // ✅ 위험도 판단
+  const hasDoctorNote = data.followup_check && 
+    data.followup_check.doctor_risk_level && 
     data.followup_check.doctor_risk_level !== '소견 대기';
+  
+  const aiRiskLevel = data.risk_level || '분석 대기';
+  const doctorRiskLevelFromData = data.followup_check?.doctor_risk_level || '';
+  
+  // 위험한 경우 판단: 보통 이상 (보통, 중간, 높음, 즉시 주의)
+  const isRiskHigh = aiRiskLevel === '높음' || aiRiskLevel === '즉시 주의' || 
+                     aiRiskLevel === '중간' || aiRiskLevel === '보통' ||
+                     doctorRiskLevelFromData === '즉시 주의' || doctorRiskLevelFromData === '경과 관찰';
+
   const finalRiskLevel = hasDoctorNote && data.followup_check
     ? data.followup_check.doctor_risk_level
-    : data.risk_level || '분석 대기';
+    : aiRiskLevel;
   const riskSource = hasDoctorNote ? '의사' : (data.disease ? 'AI' : '대기');
 
+  // 위험도 색상 스타일
   const riskColor =
     finalRiskLevel === '높음' || finalRiskLevel === '즉시 주의'
       ? 'text-red-600 bg-red-100 border-red-300'
@@ -312,6 +346,11 @@ const HistoryResultPage: React.FC = () => {
       : finalRiskLevel === '분석 대기'
       ? 'text-gray-600 bg-gray-100 border-gray-300'
       : 'text-green-600 bg-green-100 border-green-300';
+
+  // 모델 확신도 계산 (class_probs에서 최대값)
+  const modelConfidence = data.class_probs 
+    ? Math.max(...Object.values(data.class_probs).map(v => Number(v))) * 100 
+    : null;
 
   // location.state에서 전달된 정보 사용
   const userName = location.state?.userName || data.user.name;
@@ -326,7 +365,7 @@ const HistoryResultPage: React.FC = () => {
     ? (data.followup_check?.doctor_note || '소견이 등록되지 않았습니다.')
     : '전문의 소견이 아직 입력되지 않았습니다. (자동 기본값)';
   const doctorUpdatedDate = hasFollowup && data.followup_check?.last_updated_at
-    ? data.followup_check.last_updated_at.split('T')[0]
+    ? formatDateTime(data.followup_check.last_updated_at)
     : null;
 
   const handleDownloadPDF = async () => {
@@ -401,24 +440,25 @@ const HistoryResultPage: React.FC = () => {
         }
       }
 
-      const fileName = `${data.user.name}_${data.disease?.name_ko || '진단결과'}_${new Date().toISOString().split('T')[0]}.pdf`;
+      const fileName = `${data.user.name}_${data.disease?.name_ko || '진단결과'}_${formatDateTime(new Date().toISOString()).replace(' ', '_')}.pdf`;
       pdf.save(fileName);
+      showSuccess('PDF 다운로드가 완료되었습니다.');
     } catch (error) {
       console.error('PDF 생성 실패:', error);
-      alert('PDF 다운로드에 실패했습니다.');
+      showError('PDF 다운로드에 실패했습니다.');
     }
   };
 
   return (
-    <div className="w-full bg-white px-4 py-5">
-      {/* 상단 버튼들 */}
-      <div className="flex items-center justify-between mb-3">
-      <button
+    <div className="w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto bg-gray-50 min-h-screen px-4 py-5 pb-24">
+      {/* 헤더: 폴더명 - 파일명 */}
+      <div className="mb-4 flex items-center justify-between">
+        <button
           onClick={handleBack}
           className="text-sm font-bold text-gray-700 flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
-      >
-        ← 뒤로가기
-      </button>
+        >
+          ← 뒤로가기
+        </button>
         {data && (
           <button
             onClick={handleDownloadPDF}
@@ -431,91 +471,96 @@ const HistoryResultPage: React.FC = () => {
           </button>
         )}
       </div>
-
+      
       {/* 실제 화면 컨텐츠 */}
-      <div className="space-y-4">
-      {/* 상단 경로 */}
-      <p className="text-xs text-gray-500 mb-2">
-        {userName} &gt; {folderDisplay} &gt; {diseaseName}
-      </p>
+      <h1 className="text-lg font-bold text-gray-900 mb-4">
+        {data.photo?.folder_name || ''} - {data.photo?.file_name || ''}
+      </h1>
 
-      {/* 경고 문구 */}
-      {data.followup_check?.doctor_risk_level === '즉시 주의' && (
-        <div className="bg-red-100 border border-red-400 text-red-600 rounded-md p-3 text-sm font-semibold flex items-center gap-2">
-          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <span>주의: 전문의의 소견이 '즉시 주의' 상태입니다.</span>
+      {/* 주의 요망 배너 (위험한 경우만) */}
+      {isRiskHigh && (
+        <div className="bg-red-100 border-2 border-red-400 text-red-700 rounded-lg p-4 mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <p className="font-bold text-base">주의 요망</p>
+          </div>
+          <p className="text-sm">
+            {hasDoctorNote 
+              ? `전문의 최종 판정: ${doctorRiskLevelFromData}`
+              : `AI 위험도: ${aiRiskLevel} 이상`}
+          </p>
         </div>
       )}
 
-      {/* 이미지 섹션 */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-        <h3 className="text-sm font-semibold mb-3 text-gray-900">
-          {data.disease ? 'AI 예측 진단 및 이미지 분석' : '업로드된 이미지'}
-        </h3>
+      {/* AI 예측 진단 이미지 분석 */}
+      <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-gray-200">
+        <h3 className="text-sm font-semibold mb-3 text-gray-900">AI 예측 진단 이미지 분석</h3>
 
         {/* 탭 버튼 (항상 표시) */}
-        {data.disease && (
-          <div 
-            className="flex justify-around mb-3 border-b border-gray-200" 
+        <div 
+          className="flex justify-around mb-3 border-b border-gray-200" 
+          style={{ 
+            display: 'flex', 
+            width: '100%', 
+            minHeight: '44px',
+            alignItems: 'center',
+            position: 'relative',
+            zIndex: 1
+          }}
+        >
+          <button
+            className={`text-sm font-semibold pb-2 flex-1 ${
+              !showGradCam
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-500'
+            }`}
+            onClick={() => setShowGradCam(false)}
             style={{ 
-              display: 'flex', 
-              width: '100%', 
-              minHeight: '44px',
+              display: 'flex',
+              justifyContent: 'center',
               alignItems: 'center',
-              position: 'relative',
-              zIndex: 1
+              visibility: 'visible', 
+              opacity: 1,
+              minHeight: '40px',
+              cursor: 'pointer'
             }}
           >
-            <button
-              className={`text-sm font-semibold pb-2 flex-1 ${
-                !showGradCam
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-500'
-              }`}
-              onClick={() => setShowGradCam(false)}
-              style={{ 
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                visibility: 'visible', 
-                opacity: 1,
-                minHeight: '40px',
-                cursor: 'pointer'
-              }}
-            >
-              원본 환부 이미지
-            </button>
-            <button
-              className={`text-sm font-semibold pb-2 flex-1 ${
-                showGradCam
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-500'
-              }`}
-              onClick={() => setShowGradCam(true)}
-              style={{ 
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                visibility: 'visible', 
-                opacity: 1,
-                minHeight: '40px',
-                cursor: 'pointer'
-              }}
-            >
-              AI GradCAM 분석
-            </button>
-          </div>
-        )}
+            털 제거 이미지
+          </button>
+          <button
+            className={`text-sm font-semibold pb-2 flex-1 ${
+              showGradCam
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-500'
+            }`}
+            onClick={() => setShowGradCam(true)}
+            style={{ 
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              visibility: 'visible', 
+              opacity: 1,
+              minHeight: '40px',
+              cursor: 'pointer'
+            }}
+          >
+            AI GradCAM 분석
+          </button>
+        </div>
 
-        {/* 단일 이미지 표시 */}
+        {/* 이미지 표시 */}
         <div className="w-full bg-gray-100 rounded-lg overflow-hidden text-center" style={{ minHeight: '200px' }}>
           {originalUrl || gradcamUrl ? (
             <img
               src={showGradCam && gradcamUrl ? gradcamUrl : (originalUrl || '')}
               alt={showGradCam && gradcamUrl ? 'GradCAM 분석' : '원본 이미지'}
-              className="w-full h-auto max-h-96 object-contain"
+              className="w-full h-auto max-h-96 object-contain cursor-zoom-in"
+              onClick={() => {
+                const imageUrl = showGradCam && gradcamUrl ? gradcamUrl : (originalUrl || '');
+                if (imageUrl) setZoomImageUrl(imageUrl);
+              }}
               onError={(e) => {
                 // GradCAM 이미지가 없거나 에러가 발생하면 원본 이미지로 대체
                 const target = e.target as HTMLImageElement;
@@ -532,59 +577,79 @@ const HistoryResultPage: React.FC = () => {
             </div>
           )}
           <p className="text-gray-500 text-xs mt-2 pb-1">
-            {showGradCam && gradcamUrl ? 'AI GradCAM 분석' : '원본 환부 이미지'}
+            {showGradCam && gradcamUrl ? 'AI GradCAM 분석' : '털 제거 이미지'}
           </p>
         </div>
-
       </div>
 
-      {/* AI 예측 진단명과 AI 위험도 */}
+      {/* AI 예측 진단명 */}
       {data.disease && (
-        <>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-xs text-blue-600 font-semibold mb-1">AI 예측 진단명</p>
-            <p className="font-bold text-base text-gray-900 mb-1">
-              {data.disease.name_en}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-3">
+          <p className="text-xs text-blue-600 font-semibold mb-1">AI 예측 진단명</p>
+          <p className="font-bold text-base text-gray-900 mb-1">
+            {data.disease.name_en}
+          </p>
+          <p className="text-sm text-gray-900">
+            ({data.disease.name_ko})
+          </p>
+        </div>
+      )}
+
+      {/* AI 위험도 */}
+      {data.disease && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+          <p className="text-xs text-red-600 font-semibold mb-1">AI 위험도: {aiRiskLevel}</p>
+          {modelConfidence !== null && (
+            <p className="text-xs text-gray-900">
+              모델 확신도: {modelConfidence.toFixed(1)}%
             </p>
-            <p className="text-sm text-gray-900">
-              ({data.disease.name_ko})
-            </p>
-          </div>
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-xs text-red-600 font-semibold mb-1">AI 위험도: {data.risk_level || '분석 대기'}</p>
-            {data.class_probs && (
-              <p className="text-xs text-gray-900">
-                모델 확신도: {(Math.max(...Object.values(data.class_probs).map(v => Number(v))) * 100).toFixed(1)}%
-              </p>
-            )}
-          </div>
-          {/* 의사 위험도 표시 (doctor_uid가 있는 경우) */}
-          {data.doctor_uid !== null && data.doctor_uid !== undefined && data.followup_check && (
-            <div className={`border rounded-lg p-4 ${
-              (data.followup_check.current_status === '요청중' || data.followup_check.doctor_risk_level === '소견 대기')
-                ? 'bg-gray-50 border-gray-200'
-                : data.followup_check.doctor_risk_level === '즉시 주의'
-                ? 'bg-red-50 border-red-200'
-                : data.followup_check.doctor_risk_level === '경과 관찰'
-                ? 'bg-orange-50 border-orange-200'
-                : 'bg-green-50 border-green-200'
-            }`}>
-              <p className={`text-xs font-semibold mb-1 ${
-                (data.followup_check.current_status === '요청중' || data.followup_check.doctor_risk_level === '소견 대기')
-                  ? 'text-gray-600'
-                  : data.followup_check.doctor_risk_level === '즉시 주의'
-                  ? 'text-red-600'
-                  : data.followup_check.doctor_risk_level === '경과 관찰'
-                  ? 'text-orange-600'
-                  : 'text-green-600'
-              }`}>
-                의사 위험도: {(data.followup_check.current_status === '요청중' || data.followup_check.doctor_risk_level === '소견 대기') 
-                  ? '소견 대기' 
-                  : (data.followup_check.doctor_risk_level || '소견 대기')}
-              </p>
-            </div>
           )}
-        </>
+        </div>
+      )}
+
+      {/* 분석 대기 상태 */}
+      {!data.disease && (
+        <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-gray-200">
+          <p className="text-sm font-semibold text-gray-900 mb-1">진단 상태</p>
+          <p className="text-xs text-gray-600">
+            AI 분석이 진행 중입니다. 잠시 후 다시 확인해주세요.
+          </p>
+        </div>
+      )}
+
+      {/* AI 진단 결과 (상세 확률 정보) */}
+      {data.disease && data.class_probs && (
+        <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-gray-200">
+          <p className="text-sm font-semibold mb-3 text-gray-900">AI 진단 결과</p>
+          
+          {/* 각 질병별 확률 */}
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-xs font-semibold text-gray-700 mb-2">질병별 예측 확률</p>
+            <div className="space-y-1.5">
+              {Object.entries(data.class_probs)
+                .sort(([, a], [, b]) => (b as number) - (a as number))
+                .map(([disease, prob]) => (
+                  <div key={disease} className="flex justify-between items-center">
+                    <span className="text-xs text-gray-700">{disease}</span>
+                    <span className="text-xs font-semibold text-gray-900">
+                      {((prob as number) * 100).toFixed(2)}%
+                    </span>
+                  </div>
+                ))}
+            </div>
+          </div>
+
+          {/* 요약 메시지 */}
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <p className="text-xs text-gray-700 leading-relaxed">
+              <span className="font-semibold">{Object.entries(data.class_probs)
+                .sort(([, a], [, b]) => (b as number) - (a as number))[0][0]}</span>
+              {' '}가 {((Object.entries(data.class_probs)
+                .sort(([, a], [, b]) => (b as number) - (a as number))[0][1] as number) * 100).toFixed(1)}% 확률로 예측되며,{' '}
+              <span className="font-semibold">{data.risk_level}</span>으로 위험도가 예상됩니다.
+            </p>
+          </div>
+        </div>
       )}
 
       {/* 분석 대기 상태 (Results가 없을 때) */}
@@ -597,75 +662,81 @@ const HistoryResultPage: React.FC = () => {
         </div>
       )}
 
-      {/* 전문의 최종 소견 (doctor_uid가 있는 경우에만 표시) */}
-      {data.disease && data.doctor_uid !== null && data.doctor_uid !== undefined && (
-        <div className="bg-red-50 border border-red-300 rounded-lg p-4 shadow-sm">
+      {/* 전문의 최종 소견 */}
+      {data.disease && (
+        <div className="bg-red-50 border border-red-300 rounded-lg p-4 shadow-sm mb-4">
           <p className="text-sm font-bold text-red-600 mb-2">전문의 최종 소견</p>
-          <p className="text-xs text-gray-700 mb-2 whitespace-pre-wrap">
-            {doctorNoteDisplay}
-          </p>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-gray-600">
-              최종 판정: <span className="font-semibold">{doctorRiskDisplay}</span>
-            </span>
-            {doctorUpdatedDate ? (
-              <span className="text-xs text-gray-500">
-                업데이트일: {doctorUpdatedDate}
-              </span>
-            ) : (
-              <span className="text-[11px] text-gray-400">
-                전문의 검토 전 (기본값)
-              </span>
-            )}
-          </div>
-
-          {!hasFollowup && !isDoctor && (
-            <div className="mt-3">
-              <p className="text-xs text-gray-700 mb-2">
-                전문의 소견이 아직 신청되지 않았습니다.
+          
+          {data.followup_check ? (
+            <>
+              <p className="text-xs text-gray-700 mb-2 whitespace-pre-wrap">
+                {data.followup_check.doctor_note || '소견이 등록되지 않았습니다.'}
               </p>
-              <button
-                onClick={async () => {
-                  try {
-                    const token = localStorage.getItem('accessToken');
-                    await axios.post(
-                      `/api/dashboard/records/${data.id}/request-followup/`,
-                      {},
-                      {
-                        headers: {
-                          Authorization: `Bearer ${token}`,
-                        },
-                      }
-                    );
-                    alert('전문의 소견 신청이 완료되었습니다.');
-                    window.location.reload();
-                  } catch (err: any) {
-                    console.error('Failed to request follow-up:', err);
-                    alert(err.response?.data?.error || err.response?.data?.message || '전문의 소견 신청에 실패했습니다.');
-                  }
-                }}
-                className="w-full py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition duration-150"
-              >
-                전문의 소견 신청하기
-              </button>
-        </div>
-      )}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-gray-600">
+                  최종 판정: <span className="font-semibold">{data.followup_check.doctor_risk_level}</span>
+                </span>
+                {data.followup_check.last_updated_at && (
+                  <span className="text-xs text-gray-500">
+                    업데이트일: {formatDateTime(data.followup_check.last_updated_at)}
+                  </span>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-gray-700 mb-2 whitespace-pre-wrap">
+                전문의 소견이 아직 입력되지 않았습니다.
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-gray-600">
+                  최종 판정: <span className="font-semibold">-</span>
+                </span>
+              </div>
+            </>
+          )}
 
+          {/* 의사 소견 작성 섹션 (의사일 때 항상 표시) */}
           {isDoctor && (
-            <div className="mt-4 bg-white rounded-lg border border-red-200 p-3 space-y-2">
-              <p className="text-xs font-semibold text-red-600">전문의 소견 작성</p>
-              {!hasFollowup && (
-                <p className="text-[11px] text-gray-500">
-                  아직 환자가 소견을 신청하지 않았습니다. 바로 아래에서 소견을 작성하고 저장할 수 있습니다.
-                </p>
+            <div className={`${!isDoctor ? 'mt-4' : ''} bg-white rounded-lg border border-red-200 p-3 space-y-3`}>
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <p className="text-sm font-bold text-red-600">전문의 소견 작성</p>
+              </div>
+              
+              {/* 기존 소견이 있는 경우 표시 */}
+              {hasFollowup && (
+                <div className="bg-gray-50 border border-gray-200 rounded-md p-3 mb-3">
+                  <p className="text-xs font-semibold text-gray-700 mb-1">현재 소견</p>
+                  <p className="text-xs text-gray-600 mb-2 whitespace-pre-wrap">
+                    {data.followup_check?.doctor_note || '소견이 등록되지 않았습니다.'}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    최종 판정: <span className="font-semibold">{data.followup_check?.doctor_risk_level || '소견 대기'}</span>
+                    {doctorUpdatedDate && ` | 업데이트일: ${doctorUpdatedDate}`}
+                  </p>
+                </div>
               )}
+              
+              {/* 환자가 소견을 신청하지 않은 경우 (환자 전용) */}
+              {!hasFollowup && !isDoctor && (
+                <div className="bg-blue-50 border border-blue-200 rounded-md p-2 mb-2">
+                  <p className="text-xs text-blue-700">
+                    �� 환자가 아직 소견을 신청하지 않았지만, 바로 소견을 작성하고 저장할 수 있습니다.
+                </p>
+                </div>
+              )}
+              
               <div>
-                <label className="text-xs font-semibold text-gray-700">최종 판정</label>
+                <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                  최종 판정 <span className="text-red-500">*</span>
+                </label>
                 <select
                   value={doctorRiskLevel}
                   onChange={(e) => setDoctorRiskLevel(e.target.value as RiskOption)}
-                  className="w-full mt-1 text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-red-300"
-                  style={{ fontSize: '12px' }}
+                  className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-red-300 focus:border-red-500"
                 >
                   {RISK_OPTIONS.map(option => (
                     <option key={option} value={option}>
@@ -674,25 +745,51 @@ const HistoryResultPage: React.FC = () => {
                   ))}
                 </select>
               </div>
+              
               <div>
-                <label className="text-xs font-semibold text-gray-700">소견 내용</label>
+                <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                  소견 내용 <span className="text-red-500">*</span>
+                </label>
                 <textarea
                   value={doctorNote}
                   onChange={(e) => setDoctorNote(e.target.value)}
-                  rows={4}
-                  className="w-full mt-1 text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-red-300"
-                  placeholder="환부 상태, 권장 조치 등을 입력하세요."
+                  rows={5}
+                  className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-red-300 focus:border-red-500 resize-none"
+                  placeholder="환부 상태, 권장 조치, 추가 검사 필요 여부 등을 상세히 입력하세요."
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  {doctorNote.length}자 / 최소 10자 이상 권장
+                </p>
               </div>
+              
               <button
                 onClick={handleSaveFollowup}
-                disabled={isSavingFollowup}
-                className="w-full py-2 bg-red-600 text-white text-sm font-semibold rounded-md hover:bg-red-700 transition disabled:opacity-60"
+                disabled={isSavingFollowup || !doctorNote.trim() || doctorNote.trim().length < 10}
+                className="w-full py-3 bg-red-600 text-white text-sm font-bold rounded-md hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
               >
-                {isSavingFollowup ? '저장 중...' : '전문의 소견 저장하기'}
+                {isSavingFollowup ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    저장 중...
+                  </span>
+                ) : (
+                  '전문의 소견 저장하기'
+                )}
               </button>
+              
               {followupMessage && (
-                <p className="text-[11px] text-green-600 text-center">{followupMessage}</p>
+                <div className="bg-green-50 border border-green-200 rounded-md p-2">
+                  <p className="text-xs text-green-700 text-center font-medium">{followupMessage}</p>
+                </div>
+              )}
+              
+              {(!doctorNote.trim() || doctorNote.trim().length < 10) && (
+                <p className="text-xs text-red-600 text-center">
+                  소견 내용을 최소 10자 이상 입력해주세요.
+                </p>
               )}
             </div>
           )}
@@ -804,6 +901,36 @@ const HistoryResultPage: React.FC = () => {
         </div>
       </div>
 
+      {/* 처리 히스토리 */}
+      <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-gray-200">
+        <div className="flex items-center gap-2 mb-3">
+          <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-sm font-semibold text-gray-900">처리 히스토리</p>
+        </div>
+        <div className="space-y-0">
+          <div className="flex justify-between py-2 border-b border-gray-100">
+            <span className="text-xs text-gray-600">최초 기록일</span>
+            <span className="text-xs text-gray-900 font-medium">
+              {data.photo.capture_date
+                ? formatDateTime(data.photo.capture_date)
+                : data.analysis_date
+                ? formatDateTime(data.analysis_date)
+                : '정보 없음'}
+            </span>
+          </div>
+          {data.followup_check?.last_updated_at && (
+            <div className="flex justify-between py-2">
+              <span className="text-xs text-gray-600">전문의 최종 확인일</span>
+              <span className="text-xs text-gray-900 font-medium">
+                {formatDateTime(data.followup_check.last_updated_at)}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* 질환 상세 정보 (Results가 있을 때만) */}
       {data.disease && data.disease.description && (
         <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-gray-200">
@@ -829,7 +956,6 @@ const HistoryResultPage: React.FC = () => {
           )}
         </div>
       )}
-      </div>
 
       {/* PDF 생성용 컨테이너 - A4 크기에 최적화 (화면 밖에 위치) */}
       <div 
@@ -852,7 +978,7 @@ const HistoryResultPage: React.FC = () => {
             {userName} &gt; {folderDisplay} &gt; {diseaseName}
           </p>
           <p className="text-xs text-gray-500">
-            생성일: {new Date().toLocaleDateString('ko-KR')}
+            생성일: {formatDateTime(new Date().toISOString())}
           </p>
         </div>
 
@@ -874,7 +1000,7 @@ const HistoryResultPage: React.FC = () => {
             {/* 원본 이미지 */}
             {originalUrl && (
               <div className="flex-1">
-                <h4 className="text-sm font-semibold text-gray-700 mb-1.5 text-center">원본 환부 이미지</h4>
+                <h4 className="text-sm font-semibold text-gray-700 mb-1.5 text-center">털 제거 이미지</h4>
                 <div className="w-full bg-gray-100 rounded-lg overflow-hidden text-center">
                   <img
                     src={originalUrl}
@@ -1083,6 +1209,15 @@ const HistoryResultPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* 이미지 확대 모달 */}
+      {zoomImageUrl && (
+        <ImageZoomModal
+          imageUrl={zoomImageUrl}
+          alt={showGradCam && gradcamUrl ? 'GradCAM 분석' : '원본 이미지'}
+          onClose={() => setZoomImageUrl(null)}
+        />
+      )}
     </div>
   );
 };

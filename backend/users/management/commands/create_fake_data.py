@@ -36,6 +36,18 @@ class Command(BaseCommand):
             help='생성할 환자 수 (기본값: 10)',
         )
         parser.add_argument(
+            '--num-mapped-patients',
+            type=int,
+            default=10,
+            help='의사에게 매핑된 환자 수 (기본값: 10)',
+        )
+        parser.add_argument(
+            '--num-unmapped-patients',
+            type=int,
+            default=10,
+            help='의사에게 매핑 안된 환자 수 (기본값: 10)',
+        )
+        parser.add_argument(
             '--num-normal-users',
             type=int,
             default=5,
@@ -72,6 +84,18 @@ class Command(BaseCommand):
         doctors = self.create_doctors(options['num_doctors'])
         
         # 환자 생성 (의사와 연결)
+        # 옵션이 지정된 경우 매핑된/안된 환자 수를 따름
+        if options.get('num_mapped_patients') or options.get('num_unmapped_patients'):
+            mapped_patients = self.create_mapped_patients(
+                options.get('num_mapped_patients', 0), 
+                doctors
+            )
+            unmapped_patients = self.create_unmapped_patients(
+                options.get('num_unmapped_patients', 0)
+            )
+            patients = mapped_patients + unmapped_patients
+        else:
+            # 기존 방식 (하위 호환성)
         patients = self.create_patients(options['num_patients'], doctors)
         
         # 일반 사용자 생성 (의사와 연결 안 됨)
@@ -245,6 +269,9 @@ class Command(BaseCommand):
                 birth_date = date(birth_year, birth_month, birth_day)
                 family_history = random.choice(['Y', 'N'])
                 
+                # 첫 번째 의사는 무조건 승인 상태로 설정 (시연용)
+                status = '승인' if i == 0 else random.choice(statuses)
+                
                 # 의사 사용자 생성
                 user = Users.objects.create_user(
                     email=email,
@@ -263,19 +290,20 @@ class Command(BaseCommand):
                     name=name,
                     specialty=random.choice(specialties),
                     hospital=random.choice(hospitals),
-                    status=random.choice(statuses),
+                    status=status,
                 )
                 
                 # 의사 인증서 파일 생성
                 self.create_doctor_cert_file(doctor)
                 
                 doctors.append(doctor)
-                self.stdout.write(f'  생성: {email} (비밀번호: {password})')
+                status_info = f" (상태: {status})" if status == '승인' else f" (상태: {status})"
+                self.stdout.write(f'  생성: {email} (비밀번호: {password}){status_info}')
         
         return doctors
     
     def create_patients(self, num_patients, doctors):
-        """환자 데이터 생성 (의사와 연결)"""
+        """환자 데이터 생성 (의사와 연결) - 기존 방식 (하위 호환성)"""
         self.stdout.write(f'\n환자 {num_patients}명 생성 중...')
         
         patients = []
@@ -311,6 +339,93 @@ class Command(BaseCommand):
                 patients.append(user)
                 doctor_info = f" (담당의: {doctor.name})" if doctor else " (담당의 없음)"
                 self.stdout.write(f'  생성: {email} (비밀번호: {password}){doctor_info}')
+        
+        return patients
+    
+    def create_mapped_patients(self, num_patients, doctors):
+        """의사에게 매핑된 환자 데이터 생성 (모두 첫 번째 승인된 의사에게 매핑)"""
+        self.stdout.write(f'\n의사 매핑된 환자 {num_patients}명 생성 중...')
+        
+        # 첫 번째 승인된 의사 찾기 (없으면 첫 번째 의사)
+        approved_doctor = None
+        for doctor in doctors:
+            if doctor.status == '승인':
+                approved_doctor = doctor
+                break
+        
+        if not approved_doctor and doctors:
+            approved_doctor = doctors[0]
+            self.stdout.write(self.style.WARNING(f'  경고: 승인된 의사가 없어 첫 번째 의사({approved_doctor.name})를 사용합니다.'))
+        
+        if not approved_doctor:
+            self.stdout.write(self.style.ERROR('  오류: 의사가 없어 매핑된 환자를 생성할 수 없습니다.'))
+            return []
+        
+        patients = []
+        with transaction.atomic():
+            for i in range(num_patients):
+                email = f'mapped_patient{i+1}@example.com'
+                password = f'mapped_patient{i+1}'
+                sex = random.choice(['M', 'F'])
+                name = self.generate_korean_name(sex)
+                age = random.randint(20, 70)
+                birth_year = date.today().year - age
+                birth_month = random.randint(1, 12)
+                birth_day = random.randint(1, 28)
+                birth_date = date(birth_year, birth_month, birth_day)
+                family_history = random.choice(['Y', 'N'])
+                
+                # 환자 사용자 생성 (모두 같은 의사에게 매핑)
+                user = Users.objects.create_user(
+                    email=email,
+                    password=password,
+                    name=name,
+                    sex=sex,
+                    birth_date=birth_date,
+                    age=age,
+                    family_history=family_history,
+                    is_doctor=False,
+                    doctor=approved_doctor,
+                )
+                
+                patients.append(user)
+                self.stdout.write(f'  생성: {email} (비밀번호: {password}) (담당의: {approved_doctor.name})')
+        
+        return patients
+    
+    def create_unmapped_patients(self, num_patients):
+        """의사에게 매핑 안된 환자 데이터 생성"""
+        self.stdout.write(f'\n의사 매핑 안된 환자 {num_patients}명 생성 중...')
+        
+        patients = []
+        with transaction.atomic():
+            for i in range(num_patients):
+                email = f'unmapped_patient{i+1}@example.com'
+                password = f'unmapped_patient{i+1}'
+                sex = random.choice(['M', 'F'])
+                name = self.generate_korean_name(sex)
+                age = random.randint(20, 70)
+                birth_year = date.today().year - age
+                birth_month = random.randint(1, 12)
+                birth_day = random.randint(1, 28)
+                birth_date = date(birth_year, birth_month, birth_day)
+                family_history = random.choice(['Y', 'N'])
+                
+                # 환자 사용자 생성 (의사 매핑 없음)
+                user = Users.objects.create_user(
+                    email=email,
+                    password=password,
+                    name=name,
+                    sex=sex,
+                    birth_date=birth_date,
+                    age=age,
+                    family_history=family_history,
+                    is_doctor=False,
+                    doctor=None,  # 명시적으로 None
+                )
+                
+                patients.append(user)
+                self.stdout.write(f'  생성: {email} (비밀번호: {password}) (담당의 없음)')
         
         return patients
     

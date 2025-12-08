@@ -7,6 +7,7 @@ import html2canvas from 'html2canvas';
 import { useToast } from '../../contexts/ToastContext';
 import ImageZoomModal from '../../components/ImageZoomModal';
 import { ResultDetailSkeleton } from '../../components/SkeletonLoader';
+import { formatDateTime } from '../../utils/dateUtils';
 
 // ------------------- Interface -------------------
 interface Disease {
@@ -327,7 +328,7 @@ const ResultDetailPage: React.FC = () => {
         heightLeft -= (pageHeight - 10); // 하단 여백 고려
       }
 
-      const fileName = `${data.user.name}_${data.disease?.name_ko || '진단결과'}_${new Date().toISOString().split('T')[0]}.pdf`;
+      const fileName = `${data.user.name}_${data.disease?.name_ko || '진단결과'}_${formatDateTime(new Date().toISOString()).replace(' ', '_')}.pdf`;
       pdf.save(fileName);
       showSuccess('PDF 다운로드가 완료되었습니다.');
     } catch (error) {
@@ -430,6 +431,18 @@ const ResultDetailPage: React.FC = () => {
       <h1 className="text-lg font-bold text-gray-900 mb-4">
         {data.photo?.folder_name || ''} - {data.photo?.file_name || ''}
       </h1>
+
+      {/* 전문의 소견 작성 대기중 배지 (환자용, 소견이 없을 때만) */}
+      {!isDoctor && !hasDoctorNote && (
+        <div className="mb-4">
+          <span className="inline-flex items-center gap-1 px-3 py-2 bg-red-100 text-red-700 text-sm font-semibold rounded-full">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            전문의 소견 작성 대기중
+          </span>
+        </div>
+      )}
 
       {/* 주의 요망 배너 (위험한 경우만) */}
       {isRiskHigh && (
@@ -622,7 +635,7 @@ const ResultDetailPage: React.FC = () => {
                 </span>
                 {data.followup_check.last_updated_at && (
                   <span className="text-xs text-gray-500">
-                    업데이트일: {data.followup_check.last_updated_at.split('T')[0]}
+                    업데이트일: {formatDateTime(data.followup_check.last_updated_at)}
                   </span>
                 )}
               </div>
@@ -799,9 +812,9 @@ const ResultDetailPage: React.FC = () => {
             <span className="text-xs text-gray-600">최초 기록일</span>
             <span className="text-xs text-gray-900 font-medium">
               {data.photo.capture_date
-                ? new Date(data.photo.capture_date).toISOString().split('T')[0]
+                ? formatDateTime(data.photo.capture_date)
                 : data.analysis_date
-                ? new Date(data.analysis_date).toISOString().split('T')[0]
+                ? formatDateTime(data.analysis_date)
                 : '정보 없음'}
             </span>
           </div>
@@ -809,7 +822,7 @@ const ResultDetailPage: React.FC = () => {
             <div className="flex justify-between py-2">
               <span className="text-xs text-gray-600">전문의 최종 확인일</span>
               <span className="text-xs text-gray-900 font-medium">
-                {new Date(data.followup_check.last_updated_at).toISOString().split('T')[0]}
+                {formatDateTime(data.followup_check.last_updated_at)}
               </span>
             </div>
           )}
@@ -863,7 +876,7 @@ const ResultDetailPage: React.FC = () => {
             {data.photo.folder_name} - {data.photo.file_name}
           </p>
           <p className="text-xs text-gray-500">
-            생성일: {new Date().toLocaleDateString('ko-KR')}
+            생성일: {formatDateTime(new Date().toISOString())}
           </p>
         </div>
 
@@ -964,7 +977,7 @@ const ResultDetailPage: React.FC = () => {
                   </span>
                   {data.followup_check.last_updated_at && (
                     <span className="text-sm text-gray-500">
-                      업데이트일: {data.followup_check.last_updated_at.split('T')[0]}
+                      업데이트일: {formatDateTime(data.followup_check.last_updated_at)}
                     </span>
                   )}
                 </div>
