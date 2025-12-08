@@ -90,6 +90,8 @@ class FoldersListView(APIView):
                 }
                 
                 max_priority = -2
+                needs_opinion_count = 0  # 소견 작성 필요 개수
+                
                 for folder_result in folder_results:
                     # 의사 소견 우선, 없으면 AI 위험도
                     risk = None
@@ -109,6 +111,20 @@ class FoldersListView(APIView):
                     if priority > max_priority:
                         max_priority = priority
                         max_risk_level = risk
+                    
+                    # 소견 작성 필요 개수 계산
+                    try:
+                        followup = getattr(folder_result, 'followup_check', None)
+                        # 소견이 없거나, 소견 대기 상태이거나, doctor_note가 없으면 소견 작성 필요
+                        if not followup or \
+                           not followup.doctor_risk_level or \
+                           followup.doctor_risk_level == '소견 대기' or \
+                           not followup.doctor_note or \
+                           not followup.doctor_note.strip():
+                            needs_opinion_count += 1
+                    except Exception:
+                        # followup_check가 없으면 소견 작성 필요
+                        needs_opinion_count += 1
                 
                 result.append({
                     'folder_name': folder['folder_name'],
@@ -116,6 +132,7 @@ class FoldersListView(APIView):
                     'capture_date': folder['latest_date'].isoformat() if folder['latest_date'] else None,
                     'upload_storage_path': image_url,
                     'max_risk_level': max_risk_level,  # 추가: 최고 위험도
+                    'needs_opinion_count': needs_opinion_count,  # 추가: 소견 작성 필요 개수
                 })
         
         return Response(result, status=status.HTTP_200_OK)
@@ -668,6 +685,29 @@ class PatientsListView(APIView):
                 if patient_sex is None:
                     patient_sex = getattr(patient, 'sex', None)
                 
+                # 소견 작성 필요 개수 계산
+                needs_opinion_count = 0
+                for result in patient_results:
+                    try:
+                        followup = getattr(result, 'followup_check', None)
+                        # 소견이 없거나, 소견 대기 상태이거나, doctor_note가 없으면 소견 작성 필요
+                        if not followup or \
+                           not followup.doctor_risk_level or \
+                           followup.doctor_risk_level == '소견 대기' or \
+                           not followup.doctor_note or \
+                           not followup.doctor_note.strip():
+                            needs_opinion_count += 1
+                    except Exception:
+                        # followup_check가 없으면 소견 작성 필요
+                        needs_opinion_count += 1
+                
+                # 마지막 소견 작성 시간
+                latest_note_updated_at = None
+                if latest_followup_with_note and hasattr(latest_followup_with_note, 'last_updated_at'):
+                    latest_note_updated_at = latest_followup_with_note.last_updated_at
+                elif latest_followup and hasattr(latest_followup, 'last_updated_at'):
+                    latest_note_updated_at = latest_followup.last_updated_at
+                
                 patients_dict[patient_id] = {
                     'id': patient.id,
                     'name': patient.name or patient.email,
@@ -675,9 +715,11 @@ class PatientsListView(APIView):
                     'age': patient_age,
                     'ai_risk_level': latest_ai_risk,
                     'latest_note': latest_followup.doctor_note if latest_followup and latest_followup.doctor_note and latest_followup.doctor_note.strip() else None,
+                    'latest_note_updated_at': latest_note_updated_at.isoformat() if latest_note_updated_at else None,
                     'has_attention': latest_followup and latest_followup.doctor_risk_level == '즉시 주의' if latest_followup else False,
                     'doctor_risk_level': latest_followup.doctor_risk_level if latest_followup and latest_followup.doctor_risk_level else None,
                     'needs_review': latest_followup is None or (latest_followup.doctor_risk_level == '소견 대기' if latest_followup else True),
+                    'needs_opinion_count': needs_opinion_count,  # 소견 작성 필요 개수 추가
                 }
             
             # 최신 소견을 이미 설정했으므로, 최고 위험도 계산 로직 제거
@@ -863,8 +905,9 @@ class DoctorDashboardMainView(APIView):
                 )
 
             # 2. 요약 정보 계산
-            total_assigned_count = Results.objects.filter(
-                photo__user__doctor=doctor_record
+            total_assigned_count = Users.objects.filter(
+                doctor=doctor_record,
+                is_doctor=False  # 의사가 아닌 환자만 카운트
             ).count()
             
             # 즉시 주의 건수 (의사 소견이 '즉시 주의'인 경우)

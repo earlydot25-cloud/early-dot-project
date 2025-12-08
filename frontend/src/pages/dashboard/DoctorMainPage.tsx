@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { FaChevronRight, FaChevronLeft, FaExclamationTriangle, FaCheckCircle, FaUserMd, FaMars, FaVenus } from 'react-icons/fa';
 import type { IconBaseProps } from 'react-icons';
 import axios from 'axios';
+import { formatDateTime } from '../../utils/dateUtils';
 
 // 배포 환경에서는 /api 프록시 경로 사용
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
@@ -165,10 +166,26 @@ const PatientCard: React.FC<PatientCardProps> = ({ data, isPagination = false })
 
   const isAttentionNeeded = finalRiskLevel === '즉시 주의' || finalRiskLevel === '높음';
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toISOString().split('T')[0];
+  // 상태 배지 색상 매핑
+  const aiLevel = data.risk_level || '분석 대기';
+  const aiColorMap: Record<string, string> = {
+    '즉시 주의': 'bg-red-100 text-red-700',
+    높음: 'bg-red-100 text-red-700',
+    보통: 'bg-orange-100 text-orange-700',
+    중간: 'bg-orange-100 text-orange-700',
+    '경과 관찰': 'bg-orange-100 text-orange-700',
+    정상: 'bg-green-100 text-green-700',
+    낮음: 'bg-green-100 text-green-700',
   };
+  const aiPillColor = aiColorMap[aiLevel] || 'bg-gray-100 text-gray-700';
+  const doctorPillColor =
+    finalRiskLevel === '즉시 주의'
+      ? 'bg-red-100 text-red-700'
+      : finalRiskLevel === '경과 관찰'
+      ? 'bg-orange-100 text-orange-700'
+      : finalRiskLevel === '정상'
+      ? 'bg-green-100 text-green-700'
+      : 'bg-gray-100 text-gray-700';
 
   // 증상 태그 생성 (신체부위는 제외)
   const symptomTags = [];
@@ -227,7 +244,7 @@ const PatientCard: React.FC<PatientCardProps> = ({ data, isPagination = false })
 
     return (
     <div className={`p-4 border rounded-lg shadow-sm bg-white mb-4 border-gray-200`}>
-      <div className="flex gap-4">
+      <div className="flex gap-4 items-start">
         {/* 왼쪽: 환부 이미지 */}
         <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100 border border-gray-200">
                             {data.photo && data.photo.upload_storage_path ? (
@@ -267,38 +284,32 @@ const PatientCard: React.FC<PatientCardProps> = ({ data, isPagination = false })
                 </div>
 
         {/* 오른쪽: 위험도 및 버튼 */}
-        <div className="flex flex-col items-end flex-shrink-0">
-          <div className="text-center mb-3">
-            <div className="text-xs mb-1">
-              <span className="text-gray-500">- AI -</span>
-              <p className={`font-semibold ${data.risk_level === '높음' ? 'text-red-600' : data.risk_level === '보통' ? 'text-orange-600' : 'text-green-600'}`}>
-                {data.risk_level}
-              </p>
-                    </div>
-                    {hasDoctorNote && (
-              <div className="text-xs mt-2">
-                <span className="text-gray-500">- 의사 -</span>
-                <p className={`font-semibold ${finalRiskLevel === '즉시 주의' ? 'text-red-600' : 'text-orange-600'}`}>
-                  {finalRiskLevel}
-                </p>
-                        </div>
-                    )}
+        <div className="flex flex-col items-center flex-shrink-0 gap-2">
+          <div className="flex flex-col items-center gap-1 w-full min-w-[120px]">
+            <span className={`inline-flex justify-center items-center px-3 py-1 rounded-full text-xs font-semibold w-full ${aiPillColor}`}>
+              AI: {data.risk_level || '분석 대기'}
+            </span>
+            {hasDoctorNote && (
+              <span className={`inline-flex justify-center items-center px-3 py-1 rounded-full text-xs font-semibold w-full ${doctorPillColor}`}>
+                의사: {finalRiskLevel || '소견 대기'}
+              </span>
+            )}
           </div>
 
-                    <button
+          <button
             onClick={handleViewOpinion}
-            className="py-1.5 px-3 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition duration-150"
-                    >
+            className="py-2 px-4 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition duration-150 shadow-sm w-full min-w-[120px]"
+          >
             소견 열람
-                    </button>
-                </div>
-            </div>
+          </button>
+        </div>
+      </div>
 
       {/* 날짜 정보 (선 위) */}
       <div className="mt-3 mb-3">
         <div className={`text-xs text-gray-600 space-y-1 ${isPagination ? 'pl-8' : ''}`}>
-          <p>최초 생성 일자: {formatDate(data.photo.capture_date)}</p>
-          <p>마지막 수정 일자: {formatDate(data.analysis_date)}</p>
+          <p>최초 생성 일자: {formatDateTime(data.photo.capture_date)}</p>
+          <p>마지막 수정 일자: {formatDateTime(data.analysis_date)}</p>
         </div>
             </div>
 

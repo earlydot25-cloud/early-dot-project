@@ -17,6 +17,7 @@ import type { IconBaseProps } from 'react-icons';
 import axios from 'axios';
 import EmptyState from '../../components/EmptyState';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { formatDateTime } from '../../utils/dateUtils';
 
 // 배포 환경에서는 /api 프록시 경로 사용
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
@@ -173,11 +174,6 @@ const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data, isDoctorView = fals
 
   const isAttentionNeeded = finalRiskLevel === '높음' || finalRiskLevel === '즉시 주의';
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toISOString().split('T')[0];
-  };
-
   const buttonText = isDoctorView
     ? hasDoctorNote
       ? '소견 작성/보기'
@@ -189,9 +185,33 @@ const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data, isDoctorView = fals
   // 요청 중 상태 확인
   const isRequestPending = data.followup_check?.current_status === '요청중';
 
+  // 환자용 표시: AI/의사 상태 배지
+  const doctorStatus = data.followup_check?.doctor_risk_level;
+  const hasDoctorStatus = !!doctorStatus && doctorStatus !== '소견 대기';
+  const doctorDisplay = hasDoctorStatus ? doctorStatus : '요청중';
+  const doctorPillColor =
+    doctorStatus === '즉시 주의'
+      ? 'bg-red-100 text-red-700'
+      : doctorStatus === '경과 관찰'
+      ? 'bg-orange-100 text-orange-700'
+      : doctorStatus === '정상'
+      ? 'bg-green-100 text-green-700'
+      : 'bg-gray-100 text-gray-600';
+  const aiLevel = data.risk_level || '분석 대기';
+  const aiColorMap: Record<string, string> = {
+    '즉시 주의': 'bg-red-100 text-red-700',
+    높음: 'bg-red-100 text-red-700',
+    보통: 'bg-orange-100 text-orange-700',
+    중간: 'bg-orange-100 text-orange-700',
+    '경과 관찰': 'bg-orange-100 text-orange-700',
+    정상: 'bg-green-100 text-green-700',
+    낮음: 'bg-green-100 text-green-700',
+  };
+  const aiPillColor = aiColorMap[aiLevel] || 'bg-gray-100 text-gray-700';
+
   return (
     <div className={`p-4 border rounded-lg shadow-sm bg-white mb-4 border-gray-200`}>
-      <div className="flex gap-4">
+      <div className="flex gap-4 items-start">
         {/* 왼쪽: 환부 이미지 */}
         <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100 border border-gray-200">
           {data.photo && data.photo.upload_storage_path ? (
@@ -223,47 +243,36 @@ const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data, isDoctorView = fals
             {data.photo.body_part && (
               <div className="flex items-center justify-between">
                 <p className="text-sm text-gray-600">위치: {data.photo.body_part}</p>
-                {isRequestPending && (
-                  <div className="bg-sky-100 text-sky-700 text-xs font-semibold px-2 py-1 rounded text-right">
-                    요청 중
-                  </div>
-                )}
               </div>
             )}
+
           </div>
         </div>
 
         {/* 오른쪽: 위험도 및 버튼 */}
-        <div className="flex flex-col items-end flex-shrink-0">
-          <div className="text-center mb-3">
-            <div className="text-xs mb-1">
-              <span className="text-gray-500">- AI -</span>
-              <p className={`font-semibold ${data.risk_level === '높음' ? 'text-red-600' : data.risk_level === '보통' ? 'text-orange-600' : 'text-green-600'}`}>
-                {data.risk_level}
-              </p>
-            </div>
-            {shouldShowDoctorRisk && (
-              <div className="text-xs mt-2">
-                <span className="text-gray-500">- 의사 -</span>
-                <p className={`font-semibold ${
-                  isWaitingForOpinion 
-                    ? 'text-gray-600' 
-                    : finalRiskLevel === '즉시 주의' 
-                    ? 'text-red-600' 
-                    : finalRiskLevel === '경과 관찰'
-                    ? 'text-orange-600'
-                    : 'text-green-600'
-                }`}>
-                  {isWaitingForOpinion ? '소견 대기' : (data.followup_check?.doctor_risk_level || '소견 대기')}
-                </p>
-              </div>
-            )}
+        <div className="flex flex-col items-center flex-shrink-0 gap-2">
+          {/* 상단: AI / 의사 리스크 pill 정렬 (가운데) */}
+          <div className="flex flex-col items-center gap-1 w-full min-w-[120px]">
+            <span className={`inline-flex justify-center items-center px-3 py-1 rounded-full text-xs font-semibold w-full ${aiPillColor}`}>
+              AI: {data.risk_level || '분석 대기'}
+            </span>
+            <span className={`inline-flex justify-center items-center px-3 py-1 rounded-full text-xs font-semibold w-full ${doctorPillColor}`}>
+              의사: {doctorDisplay}
+            </span>
           </div>
 
+          {/* 요청 중 배지 (버튼 크기와 동일 폭) */}
+          {isRequestPending && (
+            <span className="inline-flex justify-center items-center px-3 py-2 rounded-lg text-sm font-semibold bg-gray-200 text-gray-700 w-full min-w-[120px]">
+              요청 중
+            </span>
+          )}
+
+          {/* 결과 열람 버튼 (가운데) */}
           {buttonText !== '요청 처리 대기' && (
             <button
               onClick={handleViewResult}
-              className="py-1.5 px-3 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition duration-150"
+              className="py-2 px-4 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition duration-150 shadow-sm w-full min-w-[120px]"
             >
               {buttonText}
             </button>
@@ -275,8 +284,8 @@ const DiagnosisCard: React.FC<DiagnosisCardProps> = ({ data, isDoctorView = fals
       <div className="mt-3 mb-3">
         <div className="text-xs text-gray-600 space-y-1 pl-8">
           <p>저장 폴더: {data.photo.folder_name}</p>
-          <p>최초 생성 일자: {formatDate(data.photo.capture_date)}</p>
-          <p>마지막 수정 일자: {formatDate(data.analysis_date)}</p>
+          <p>최초 생성 일자: {formatDateTime(data.photo.capture_date)}</p>
+          <p>마지막 수정 일자: {formatDateTime(data.analysis_date)}</p>
         </div>
       </div>
 
@@ -319,7 +328,17 @@ const ABCDEItem: React.FC<{
   description: string;
 }> = ({ letter, title, description }) => {
   return (
-    <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow hover:border-blue-300">
+    <div 
+      className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm"
+      style={{ 
+        touchAction: 'pan-y', // ✅ 스크롤 허용, Pull-to-Refresh 방지
+        userSelect: 'none', // ✅ 텍스트 선택 방지
+        WebkitUserSelect: 'none', // ✅ iOS Safari 텍스트 선택 방지
+      }}
+      tabIndex={-1} // ✅ 포커스 불가능하게 설정
+      onMouseDown={(e) => e.preventDefault()} // ✅ 마우스 다운 이벤트 방지
+      onTouchStart={(e) => e.preventDefault()} // ✅ 터치 시작 이벤트 방지
+    >
       <div className="flex items-start gap-3">
         {/* 왼쪽: 알파벳 배지 */}
         <div className="flex-shrink-0 w-10 h-10 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-center">
@@ -683,7 +702,15 @@ const MainPage: React.FC = () => {
       </section>
 
       {/* 3. ABCDE 기법 설명 */}
-      <section className="pt-4 border-t border-gray-200 bg-gradient-to-b from-blue-50/30 to-white rounded-lg p-4">
+      <section 
+        className="pt-4 border-t border-gray-200 bg-gradient-to-b from-blue-50/30 to-white rounded-lg p-4"
+        style={{ 
+          touchAction: 'pan-y', // ✅ 전체 섹션에 스크롤 허용
+          userSelect: 'none', // ✅ 텍스트 선택 방지
+          WebkitUserSelect: 'none', // ✅ iOS Safari 텍스트 선택 방지
+        }}
+        tabIndex={-1} // ✅ 포커스 불가능하게 설정
+      >
         <div className="mb-4">
           <div className="flex flex-col gap-4 mb-3">
             {/* 텍스트 영역 - 위쪽 */}

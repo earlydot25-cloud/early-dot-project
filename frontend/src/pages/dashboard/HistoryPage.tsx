@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { formatDateTime } from '../../utils/dateUtils';
 
 // 배포 환경에서는 /api 프록시 경로를 직접 사용하므로 기본값은 빈 문자열
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
@@ -74,6 +75,7 @@ interface Folder {
   capture_date: string | null;
   upload_storage_path: string;
   max_risk_level?: string; // 최고 위험도 (심각도순 정렬용)
+  needs_opinion_count?: number; // 소견 작성 필요 개수
 }
 
 // 신체 부위 목록 (BodySelectionPage와 동일)
@@ -453,13 +455,25 @@ const HistoryPage: React.FC = () => {
                   <p className="text-left">
                     <span className="font-bold text-gray-900">위치:</span> {folder.body_part || '정보 없음'}
                   </p>
+                  {folder.capture_date && (
                   <p className="text-left">
                     <span className="font-bold text-gray-900">최근 수정:</span>{' '}
-                    {folder.capture_date
-                      ? folder.capture_date.split('T')[0]
-                      : '날짜 정보 없음'}
+                      {formatDateTime(folder.capture_date)}
                   </p>
+                  )}
                 </div>
+                
+                {/* 소견 작성 필요 개수 배지 */}
+                {folder.needs_opinion_count !== undefined && folder.needs_opinion_count > 0 && (
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      소견 작성 필요 {folder.needs_opinion_count}건
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="text-gray-400 text-sm">{'>'}</div>
             </div>

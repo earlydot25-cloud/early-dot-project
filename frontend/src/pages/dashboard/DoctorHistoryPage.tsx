@@ -1,10 +1,11 @@
 // frontend/src/pages/dashboard/DoctorHistoryPage.tsx
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { FaMars, FaVenus } from 'react-icons/fa';
 import type { IconBaseProps } from 'react-icons';
 import { removePatient } from '../../services/userServices';
+import { formatDateTime } from '../../utils/dateUtils';
 
 // 메인 페이지와 동일한 아이콘 컴포넌트
 type IconCmp = React.FC<IconBaseProps>;
@@ -120,9 +121,11 @@ interface Patient {
   age?: number; // 연령
   ai_risk_level?: string; // AI 위험도
   latest_note?: string;
+  latest_note_updated_at?: string; // 마지막 소견 작성 시간
   has_attention?: boolean; // 주의가 필요한 환자 여부
   doctor_risk_level?: string; // 의사가 선정한 위험도
   needs_review?: boolean; // 소견 미작성 여부
+  needs_opinion_count?: number; // 소견 작성 필요 개수
 }
 
 interface Folder {
@@ -131,6 +134,8 @@ interface Folder {
   capture_date: string | null;
   upload_storage_path: string;
   patient_id?: number;
+  // 폴더 내 소견 작성 필요한 결과 수
+  needs_opinion_count?: number;
 }
 
 interface RecordItem {
@@ -147,18 +152,31 @@ interface RecordItem {
   };
   followup_check?: {
     doctor_risk_level: string;
-  };
+    doctor_note?: string;
+  } | null;
+  // 소견 작성 필요 여부를 쉽게 판단할 수 있도록 추가
+  needs_opinion?: boolean;
 }
 
 const DoctorHistoryPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams<{ userId?: string; folderName?: string }>();
+  
+  // URL 파라미터에서 userId와 folderName 추출
+  const urlUserId = params.userId ? Number(params.userId) : null;
+  const urlFolderName = params.folderName ? decodeURIComponent(params.folderName) : null;
+  
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [records, setRecords] = useState<RecordItem[]>([]);
+  const [currentFolderName, setCurrentFolderName] = useState<string | null>(null); // 현재 보고 있는 폴더명 저장
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState<'소견 필요순' | '위험도순' | '이름순'>('소견 필요순');
-  const [viewMode, setViewMode] = useState<'patients' | 'folders' | 'records'>('patients');
+  
+  // URL 기반으로 viewMode 결정
+  const viewMode: 'patients' | 'folders' | 'records' = urlFolderName ? 'records' : (urlUserId ? 'folders' : 'patients');
   const [activeTab, setActiveTab] = useState<'all' | 'immediate' | 'observation' | 'normal'>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -215,7 +233,253 @@ const DoctorHistoryPage: React.FC = () => {
     fetchPatients();
   }, []);
 
-  // ✅ 폴더 목록 불러오기 (환자 선택 시)
+  // ✅ URL 파라미터 기반으로 selectedPatientId와 currentFolderName 동기화
+  useEffect(() => {
+    if (urlUserId && !isNaN(urlUserId)) {
+      setSelectedPatientId(urlUserId);
+    } else {
+      setSelectedPatientId(null);
+    }
+    
+    if (urlFolderName) {
+      setCurrentFolderName(urlFolderName);
+    } else {
+      setCurrentFolderName(null);
+    }
+  }, [urlUserId, urlFolderName]);
+
+  // ✅ URL 기반으로 진단 기록 목록 불러오기
+  const fetchRecords = useCallback(async (patientId: number, folderName: string) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      console.log('[DoctorHistoryPage] 진단 기록 요청: patient_id=', patientId, 'folder=', folderName);
+      const response = await axios.get<RecordItem[]>('/api/dashboard/records/', {
+        params: { user: patientId, folder: folderName },
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      console.log('[DoctorHistoryPage] 진단 기록 응답:', response.data);
+      
+      // 소견 작성 필요 여부 계산
+      const recordsWithOpinionFlag = response.data.map(record => ({
+        ...record,
+        needs_opinion: !record.followup_check || 
+                       !record.followup_check.doctor_risk_level || 
+                       record.followup_check.doctor_risk_level === '소견 대기' ||
+                       !record.followup_check.doctor_note
+      }));
+      
+      setRecords(recordsWithOpinionFlag);
+    } catch (err: any) {
+      console.error('Failed to fetch records:', err);
+      console.error('Error details:', err.response?.data || err.message);
+      setRecords([]);
+    }
+  }, []);
+
+  // ✅ 페이지 포커스 시 데이터 새로고침 (소견 작성 후 돌아왔을 때)
+  useEffect(() => {
+    const handleFocus = () => {
+      // 진단내역 페이지가 포커스를 받았을 때 현재 뷰 모드에 맞게 새로고침
+      if (viewMode === 'patients') {
+        const fetchPatients = async () => {
+          try {
+            const token = localStorage.getItem('accessToken');
+            const response = await axios.get<Patient[]>('/api/dashboard/patients/', {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            });
+            setPatients(response.data);
+          } catch (err: any) {
+            console.error('Failed to refresh patients:', err);
+          }
+        };
+        fetchPatients();
+      } else if (viewMode === 'records' && urlUserId && urlFolderName && !isNaN(urlUserId)) {
+        // 기록 목록 뷰 모드일 때 기록 목록 새로고침
+        fetchRecords(urlUserId, urlFolderName);
+      } else if (viewMode === 'folders' && urlUserId && !isNaN(urlUserId)) {
+        // 폴더 목록 뷰 모드일 때 폴더 목록 새로고침
+        const refreshFolders = async () => {
+          try {
+            const token = localStorage.getItem('accessToken');
+            const response = await axios.get<Folder[]>('/api/dashboard/folders/', {
+              params: { user: urlUserId },
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            });
+            
+            const foldersWithOpinionCount = await Promise.all(
+              response.data.map(async (folder) => {
+                try {
+                  const recordsResponse = await axios.get<RecordItem[]>('/api/dashboard/records/', {
+                    params: { user: urlUserId, folder: folder.folder_name },
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                    },
+                  });
+                  
+                  const needsOpinionCount = recordsResponse.data.filter(record => 
+                    !record.followup_check || 
+                    !record.followup_check.doctor_risk_level || 
+                    record.followup_check.doctor_risk_level === '소견 대기' ||
+                    !record.followup_check.doctor_note
+                  ).length;
+                  
+                  return {
+                    ...folder,
+                    needs_opinion_count: needsOpinionCount
+                  };
+                } catch (err) {
+                  console.error(`Failed to fetch records for folder ${folder.folder_name}:`, err);
+                  return {
+                    ...folder,
+                    needs_opinion_count: 0
+                  };
+                }
+              })
+            );
+            
+            setFolders(foldersWithOpinionCount);
+          } catch (err: any) {
+            console.error('Failed to refresh folders:', err);
+          }
+        };
+        refreshFolders();
+      }
+    };
+
+    // 소견 저장 이벤트 리스너 추가
+    const handleOpinionSaved = () => {
+      console.log('[DoctorHistoryPage] 소견 저장 이벤트 감지, 환자 목록 새로고침');
+      const fetchPatients = async () => {
+        try {
+          const token = localStorage.getItem('accessToken');
+          const response = await axios.get<Patient[]>('/api/dashboard/patients/', {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          console.log('[DoctorHistoryPage] 환자 목록 새로고침 완료:', response.data);
+          setPatients(response.data);
+          
+          // 폴더나 기록 목록도 새로고침 (현재 선택된 환자가 있는 경우)
+          if (selectedPatientId) {
+            // 폴더 목록 새로고침
+            const fetchFolders = async () => {
+              try {
+                const token = localStorage.getItem('accessToken');
+                const response = await axios.get<Folder[]>('/api/dashboard/folders/', {
+                  params: { user: selectedPatientId },
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                  },
+                });
+                
+                const foldersWithOpinionCount = await Promise.all(
+                  response.data.map(async (folder) => {
+                    try {
+                      const recordsResponse = await axios.get<RecordItem[]>('/api/dashboard/records/', {
+                        params: { user: selectedPatientId, folder: folder.folder_name },
+                        headers: {
+                          Authorization: `Bearer ${token}`,
+                        },
+                      });
+                      
+                      const needsOpinionCount = recordsResponse.data.filter(record => 
+                        !record.followup_check || 
+                        !record.followup_check.doctor_risk_level || 
+                        record.followup_check.doctor_risk_level === '소견 대기' ||
+                        !record.followup_check.doctor_note
+                      ).length;
+                      
+                      return {
+                        ...folder,
+                        needs_opinion_count: needsOpinionCount
+                      };
+                    } catch (err) {
+                      console.error(`Failed to fetch records for folder ${folder.folder_name}:`, err);
+                      return {
+                        ...folder,
+                        needs_opinion_count: 0
+                      };
+                    }
+                  })
+                );
+                
+                setFolders(foldersWithOpinionCount);
+              } catch (err: any) {
+                console.error('Failed to refresh folders:', err);
+              }
+            };
+            
+            if (viewMode === 'folders') {
+              fetchFolders();
+            } else if (viewMode === 'records' && urlUserId && urlFolderName && !isNaN(urlUserId)) {
+              // 현재 폴더의 기록 목록 새로고침
+              fetchRecords(urlUserId, urlFolderName);
+            }
+          }
+        } catch (err: any) {
+          console.error('Failed to refresh patients:', err);
+        }
+      };
+      fetchPatients();
+    };
+
+    // 기록 목록 새로고침 이벤트 리스너 추가 (URL 기반)
+    const handleRecordsRefresh = async (event: Event) => {
+      const customEvent = event as CustomEvent<{ folderName?: string; userId?: string }>;
+      const { folderName, userId: eventUserId } = customEvent.detail || {};
+      
+      console.log('[DoctorHistoryPage] 기록 목록 새로고침 이벤트 감지:', { folderName, eventUserId, urlUserId, urlFolderName, viewMode });
+      
+      // 기록 목록이 표시 중이고, URL 파라미터와 일치하는 경우에만 새로고침
+      if (viewMode === 'records' && folderName && eventUserId && urlUserId === Number(eventUserId) && folderName === urlFolderName) {
+        fetchRecords(Number(eventUserId), folderName);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('doctor-opinion-saved', handleOpinionSaved);
+    window.addEventListener('doctor-records-refresh', handleRecordsRefresh);
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('doctor-opinion-saved', handleOpinionSaved);
+      window.removeEventListener('doctor-records-refresh', handleRecordsRefresh);
+    };
+  }, [viewMode, urlUserId, urlFolderName, selectedPatientId, folders, fetchRecords]);
+
+  // ✅ 뷰 모드 변경 시 스크롤 최상단으로 이동
+  useEffect(() => {
+    const scrollToTop = () => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      const mainContent = document.querySelector('.main-content');
+      if (mainContent) {
+        (mainContent as HTMLElement).scrollTop = 0;
+      }
+    };
+    
+    // 뷰 모드가 변경될 때마다 스크롤 초기화
+    scrollToTop();
+    const timeoutId = setTimeout(scrollToTop, 0);
+    const timeoutId2 = setTimeout(scrollToTop, 50);
+    const timeoutId3 = setTimeout(scrollToTop, 100);
+    
+    return () => {
+      clearTimeout(timeoutId);
+      clearTimeout(timeoutId2);
+      clearTimeout(timeoutId3);
+    };
+  }, [viewMode, selectedPatientId]);
+
+  // ✅ 폴더 목록 불러오기 (환자 선택 시) - 수정
   useEffect(() => {
     if (!selectedPatientId) {
       setFolders([]);
@@ -233,8 +497,40 @@ const DoctorHistoryPage: React.FC = () => {
           },
         });
         console.log('[DoctorHistoryPage] 폴더 목록 응답:', response.data);
-        setFolders(response.data);
-        setViewMode('folders');
+        
+        // 각 폴더의 소견 작성 필요 결과 수 계산
+        const foldersWithOpinionCount = await Promise.all(
+          response.data.map(async (folder) => {
+            try {
+              const recordsResponse = await axios.get<RecordItem[]>('/api/dashboard/records/', {
+                params: { user: selectedPatientId, folder: folder.folder_name },
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              });
+              
+              const needsOpinionCount = recordsResponse.data.filter(record => 
+                !record.followup_check || 
+                !record.followup_check.doctor_risk_level || 
+                record.followup_check.doctor_risk_level === '소견 대기' ||
+                !record.followup_check.doctor_note
+              ).length;
+              
+              return {
+                ...folder,
+                needs_opinion_count: needsOpinionCount
+              };
+            } catch (err) {
+              console.error(`Failed to fetch records for folder ${folder.folder_name}:`, err);
+              return {
+                ...folder,
+                needs_opinion_count: 0
+              };
+            }
+          })
+        );
+        
+        setFolders(foldersWithOpinionCount);
       } catch (err: any) {
         console.error('Failed to fetch folders:', err);
         console.error('Error details:', err.response?.data || err.message);
@@ -245,28 +541,28 @@ const DoctorHistoryPage: React.FC = () => {
     fetchFolders();
   }, [selectedPatientId]);
 
-  // ✅ 파일(진단 기록) 목록 불러오기 (폴더 선택 시)
-  const handleFolderClick = async (folderName: string) => {
+  // ✅ 파일(진단 기록) 목록 불러오기 (폴더 선택 시) - URL 기반으로 변경
+  const handleFolderClick = (folderName: string) => {
     if (!selectedPatientId) return;
+    // URL로 이동 (기록 목록 페이지)
+    navigate(`/dashboard/doctor/history/${selectedPatientId}/${encodeURIComponent(folderName)}`);
+  };
 
-    try {
-      const token = localStorage.getItem('accessToken');
-      console.log('[DoctorHistoryPage] 진단 기록 요청: patient_id=', selectedPatientId, 'folder=', folderName);
-      const response = await axios.get<RecordItem[]>('/api/dashboard/records/', {
-        params: { user: selectedPatientId, folder: folderName },
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      console.log('[DoctorHistoryPage] 진단 기록 응답:', response.data);
-      setRecords(response.data);
-      setViewMode('records');
-    } catch (err: any) {
-      console.error('Failed to fetch records:', err);
-      console.error('Error details:', err.response?.data || err.message);
+  // ✅ URL 파라미터가 있을 때 진단 기록 목록 자동 로드
+  useEffect(() => {
+    if (urlUserId && urlFolderName && !isNaN(urlUserId)) {
+      fetchRecords(urlUserId, urlFolderName);
+    } else {
       setRecords([]);
     }
-  };
+  }, [urlUserId, urlFolderName, fetchRecords]);
+
+  // ✅ URL 변경 시 기록 목록 자동 새로고침 (뒤로가기 등)
+  useEffect(() => {
+    if (urlUserId && urlFolderName && !isNaN(urlUserId)) {
+      fetchRecords(urlUserId, urlFolderName);
+    }
+  }, [location.pathname, urlUserId, urlFolderName, fetchRecords]);
 
   // ✅ 환자 정렬 (소견 필요순, 위험도순, 이름순)
   const normalizedPatients = useMemo(
@@ -338,29 +634,19 @@ const DoctorHistoryPage: React.FC = () => {
     return sorted;
   }, [normalizedPatients, sortOption]);
 
-  // ✅ 탭에 따른 필터링
+  // ✅ 탭 필터링 로직 수정
   const tabFilteredPatients = useMemo(() => {
     if (activeTab === 'immediate') {
-      // 즉시 주의 환자
-      return sortedPatients.filter(p => 
-        p.doctor_risk_level === '즉시 주의' ||
-        p.has_attention ||
-        (p.latest_note && p.latest_note.includes('즉시 주의'))
-      );
+      // 즉시 주의 환자: doctor_risk_level이 '즉시 주의'인 경우
+      return sortedPatients.filter(p => p.doctor_risk_level === '즉시 주의');
     } else if (activeTab === 'observation') {
       // 경과 관찰 환자
       return sortedPatients.filter(p => p.doctor_risk_level === '경과 관찰');
     } else if (activeTab === 'normal') {
       // 정상 환자: doctor_risk_level이 '정상'인 경우
-      const normalPatients = sortedPatients.filter(p => {
-        const riskLevel = p.doctor_risk_level;
-        console.log(`[Filter] Patient ${p.name}: doctor_risk_level = "${riskLevel}" (type: ${typeof riskLevel})`);
-        return riskLevel === '정상';
-      });
-      console.log(`[Filter] Normal tab: Found ${normalPatients.length} patients with '정상' risk level`);
-      return normalPatients;
+      return sortedPatients.filter(p => p.doctor_risk_level === '정상');
     }
-    // 전체 보기
+    // 전체 보기 - 모든 환자 표시 (소견 작성 여부와 관계없이)
     return sortedPatients;
   }, [sortedPatients, activeTab]);
 
@@ -464,15 +750,17 @@ const DoctorHistoryPage: React.FC = () => {
     }
   };
 
-  // ✅ 뒤로가기 핸들러
+  // ✅ 뒤로가기 핸들러 - URL 기반으로 변경
   const handleBack = () => {
-    if (viewMode === 'records') {
-      setViewMode('folders');
-      setRecords([]);
-    } else if (viewMode === 'folders') {
-      setViewMode('patients');
-      setSelectedPatientId(null);
-      setFolders([]);
+    if (viewMode === 'records' && urlUserId) {
+      // 기록 목록 → 폴더 목록
+      navigate(`/dashboard/doctor/history/${urlUserId}`);
+    } else if (viewMode === 'folders' && urlUserId) {
+      // 폴더 목록 → 환자 목록
+      navigate('/dashboard/doctor/history');
+    } else {
+      // 기본: 브라우저 뒤로가기
+      navigate(-1);
     }
   };
 
@@ -657,7 +945,8 @@ const DoctorHistoryPage: React.FC = () => {
                 if (!riskLevel) return 'bg-gray-200 text-gray-700';
                 if (riskLevel === '즉시 주의' || riskLevel === '높음' || riskLevel === '매우 높음') return 'bg-red-100 text-red-700';
                 if (riskLevel === '경과 관찰' || riskLevel === '보통' || riskLevel === '중간') return 'bg-orange-100 text-orange-700';
-                if (riskLevel === '정상' || riskLevel === '낮음') return 'bg-gray-200 text-gray-700'; // 낮음은 회색
+                if (riskLevel === '정상') return 'bg-green-100 text-green-700'; // 정상은 밝은 초록색
+                if (riskLevel === '낮음') return 'bg-gray-200 text-gray-700'; // 낮음은 회색
                 return 'bg-blue-100 text-blue-700';
               };
 
@@ -679,6 +968,7 @@ const DoctorHistoryPage: React.FC = () => {
                 if (!riskLevel) return 'text-gray-600';
                 if (riskLevel === '높음') return 'text-red-600';
                 if (riskLevel === '보통' || riskLevel === '중간') return 'text-orange-600';
+                if (riskLevel === '정상' || riskLevel === '낮음') return 'text-green-600'; // 정상/낮음은 초록색
                 return 'text-green-600';
               };
 
@@ -694,7 +984,8 @@ const DoctorHistoryPage: React.FC = () => {
                   togglePatientSelection(patient.id);
                 } else {
                   console.log('Card clicked, patient ID:', patient.id, 'needs_review:', patient.needs_review);
-                  setSelectedPatientId(patient.id);
+                  // URL로 이동 (폴더 목록 페이지)
+                  navigate(`/dashboard/doctor/history/${patient.id}`);
                 }
               };
 
@@ -797,13 +1088,29 @@ const DoctorHistoryPage: React.FC = () => {
                             의사: {patient.doctor_risk_level}
                           </span>
                         )}
+                        {/* 소견 작성 필요 개수 강조 표시 (마지막 순서) */}
+                        {(patient.needs_opinion_count || 0) > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                            소견 작성 필요 {patient.needs_opinion_count}건
+                          </span>
+                        )}
                       </div>
                     </div>
                     {/* 의사 소견 표시: latest_note가 있을 때만 표시 */}
                     {patient.latest_note && (
-                      <p className="text-sm text-gray-600 mt-2 pt-2 border-t border-gray-100 line-clamp-2">
-                        {patient.latest_note}
-                      </p>
+                      <div className="text-sm text-gray-600 mt-2 pt-2 border-t border-gray-100">
+                        <p className="line-clamp-2 mb-1">
+                          {patient.latest_note}
+                        </p>
+                        {patient.latest_note_updated_at && (
+                          <p className="text-xs text-gray-500">
+                            작성일: {formatDateTime(patient.latest_note_updated_at)}
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
                   {/* 화살표 아이콘 (조회 모드일 때만 표시) */}
@@ -829,25 +1136,39 @@ const DoctorHistoryPage: React.FC = () => {
       {viewMode === 'folders' && (
         <div className="space-y-3">
           {folders.length > 0 ? (
-            folders.map((folder, index) => (
+            folders.map((folder, index) => {
+              const hasNeedsOpinion = (folder.needs_opinion_count || 0) > 0;
+              
+              return (
               <div
                 key={index}
                 onClick={() => handleFolderClick(folder.folder_name)}
-                className="flex items-center bg-white border rounded-lg shadow-sm p-4 hover:shadow-md hover:border-blue-300 cursor-pointer transition-all border-gray-200"
+                  className={`flex items-center bg-white border rounded-lg shadow-sm p-4 hover:shadow-md hover:border-blue-300 cursor-pointer transition-all ${
+                    hasNeedsOpinion ? 'border-l-4 border-l-red-500' : 'border-gray-200'
+                  }`}
               >
                 <div className="flex-1 text-left">
-                  <h3 className="text-lg font-bold text-gray-900 mb-2">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="text-lg font-bold text-gray-900">
                     {folder.folder_name}
                   </h3>
+                      {/* 소견 작성 필요 배지 */}
+                      {hasNeedsOpinion && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
+                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                          소견 작성 필요 {folder.needs_opinion_count}건
+                        </span>
+                      )}
+                    </div>
                   <div className="text-sm text-gray-600 space-y-1 mt-2 pt-2 border-t border-gray-100">
                     <p>
                       <span className="font-semibold text-gray-900">위치:</span> {folder.body_part || '정보 없음'}
                     </p>
                     <p>
                       <span className="font-semibold text-gray-900">최근 수정:</span>{' '}
-                      {folder.capture_date
-                        ? folder.capture_date.split('T')[0]
-                        : '날짜 정보 없음'}
+                        {formatDateTime(folder.capture_date)}
                     </p>
                   </div>
                 </div>
@@ -857,7 +1178,8 @@ const DoctorHistoryPage: React.FC = () => {
                   </svg>
                 </div>
               </div>
-            ))
+              );
+            })
           ) : (
             <div className="p-8 bg-white rounded-lg shadow-sm border border-gray-200 text-center text-gray-500">
               폴더가 없습니다.
@@ -877,6 +1199,13 @@ const DoctorHistoryPage: React.FC = () => {
                 ? record.followup_check!.doctor_risk_level
                 : record.risk_level;
               const riskSource = hasDoctorNote ? '의사' : 'AI';
+              
+              // 소견 작성 필요 여부
+              const needsOpinion = record.needs_opinion || 
+                !record.followup_check || 
+                !record.followup_check.doctor_risk_level || 
+                record.followup_check.doctor_risk_level === '소견 대기' ||
+                !record.followup_check.doctor_note;
 
               // 위험도에 따른 색상
               const getRiskColor = (level: string) => {
@@ -889,19 +1218,9 @@ const DoctorHistoryPage: React.FC = () => {
               return (
                 <div
                   key={record.id}
-                  onClick={() =>
-                    navigate(
-                      `/dashboard/doctor/history/${record.photo.folder_name}/${record.id}?user=${selectedPatientId}`,
-                      {
-                        state: {
-                          userName: patients.find(p => p.id === selectedPatientId)?.name,
-                          folderDisplay: record.photo.folder_name,
-                          diseaseName: record.disease?.name_ko,
-                        },
-                      }
-                    )
-                  }
-                  className="flex items-center bg-white border rounded-lg shadow-sm p-4 hover:shadow-md hover:border-blue-300 cursor-pointer transition-all border-gray-200"
+                  className={`flex items-center bg-white border rounded-lg shadow-sm p-4 hover:shadow-md hover:border-blue-300 transition-all ${
+                    needsOpinion ? 'border-l-4 border-l-red-500 bg-red-50/30' : 'border-gray-200'
+                  }`}
                 >
                   {/* 왼쪽: 사진 썸네일 */}
                   <div className="flex-shrink-0 w-20 h-20">
@@ -913,19 +1232,17 @@ const DoctorHistoryPage: React.FC = () => {
 
                   {/* 가운데: 텍스트 정보 */}
                   <div className="flex-1 text-left ml-3">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-sm font-semibold text-gray-900">
                       {record.disease?.name_ko || '진단명 없음'}
                     </h3>
+                    </div>
                     <p className="text-xs text-gray-500 mb-1">
                       {riskSource} 위험도: <span className={getRiskColor(riskLevel)}>{riskLevel}</span>
                     </p>
                     <p className="text-xs text-gray-500">
                       저장 날짜:{' '}
-                      {record.photo.capture_date
-                        ? record.photo.capture_date.split('T')[0]
-                        : record.analysis_date
-                        ? record.analysis_date.split('T')[0]
-                        : '정보 없음'}
+                      {formatDateTime(record.photo.capture_date || record.analysis_date)}
                     </p>
                     {record.photo.body_part && (
                       <p className="text-xs text-gray-500">
@@ -934,11 +1251,42 @@ const DoctorHistoryPage: React.FC = () => {
                     )}
                   </div>
 
-                  {/* 오른쪽: 화살표 */}
-                  <div className="text-gray-400 ml-3">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
+                  {/* 오른쪽: 소견 작성 필요 배지 및 소견 작성 및 열람 버튼 */}
+                  <div className="flex flex-col items-center gap-2 ml-3">
+                    {/* 소견 작성 필요 배지 (위쪽) */}
+                    {needsOpinion && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 text-xs font-semibold rounded-full whitespace-nowrap">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        소견 작성 필요
+                      </span>
+                    )}
+                    {/* 소견 작성 및 열람 버튼 (아래쪽, 항상 표시) */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (selectedPatientId) {
+                          navigate(
+                            `/dashboard/doctor/history/${selectedPatientId}/${encodeURIComponent(record.photo.folder_name)}/${record.id}`,
+                            {
+                              state: {
+                                userName: patients.find(p => p.id === selectedPatientId)?.name,
+                                folderDisplay: record.photo.folder_name,
+                                diseaseName: record.disease?.name_ko,
+                              },
+                            }
+                          );
+                        }
+                      }}
+                      className={`px-3 py-1.5 text-white text-xs font-semibold rounded-md transition-colors shadow-sm whitespace-nowrap ${
+                        needsOpinion 
+                          ? 'bg-red-600 hover:bg-red-700' 
+                          : 'bg-blue-600 hover:bg-blue-700'
+                      }`}
+                    >
+                      소견 작성 및 열람
+                    </button>
                   </div>
                 </div>
               );

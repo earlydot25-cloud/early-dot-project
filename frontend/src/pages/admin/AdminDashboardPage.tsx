@@ -6,6 +6,7 @@ import { FaDownload, FaCheck, FaTimes, FaUserMd, FaSpinner } from 'react-icons/f
 import type { IconBaseProps } from 'react-icons';
 import { getDoctorList, approveDoctor, rejectDoctor, getCertDownloadUrl, type DoctorApplication, getDoctorUid, getDoctorEmail } from '../../services/adminServices';
 import { http } from '../../services/http';
+import { formatDateTime } from '../../utils/dateUtils';
 
 // 아이콘 안전 래퍼
 type IconCmp = React.FC<IconBaseProps>;
@@ -176,13 +177,9 @@ const AdminDashboardPage: React.FC = () => {
     }
   };
 
+  // formatDate 함수 수정
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ko-KR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    return formatDateTime(dateString);
   };
 
   const getStatusBadgeColor = (status: string) => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaMars, FaVenus } from 'react-icons/fa';
 import type { IconBaseProps } from 'react-icons';
@@ -10,11 +10,48 @@ import {
 } from '../../types/UserTypes';
 import { fetchUserProfile, updateProfile, deleteAccount } from '../../services/userServices';
 import { clearAuth } from '../../services/authServices';
+import { useToast } from '../../contexts/ToastContext';
 
 // 성별 아이콘 컴포넌트
 type IconCmp = React.FC<IconBaseProps>;
 const MarsIcon: IconCmp = (props: IconBaseProps) => <FaMars {...props} />;
 const VenusIcon: IconCmp = (props: IconBaseProps) => <FaVenus {...props} />;
+
+// FormField 컴포넌트를 외부로 분리하여 메모이제이션
+interface FormFieldProps {
+  label: string;
+  name: string;
+  value: string | number;
+  isEditable: boolean;
+  type?: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}
+
+const FormField: React.FC<FormFieldProps> = React.memo(({ label, name, value, isEditable, type = 'text', onChange }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  
+  return (
+    <div className="flex justify-between items-center py-3 border-b border-gray-100 last:border-b-0">
+      <span className="text-sm text-gray-700 font-medium min-w-[100px]">{label}</span>
+      {isEditable ? (
+        <input
+          ref={inputRef}
+          type={type}
+          name={name}
+          value={value}
+          onChange={onChange}
+          className="flex-1 ml-4 text-sm text-gray-900 font-medium px-3 py-2 border-2 border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-blue-50 text-right transition-all duration-200"
+          autoComplete="off"
+          placeholder={label}
+        />
+      ) : (
+        <span className="text-sm text-gray-900 font-medium text-right flex-1 ml-4">{String(value) || '-'}</span>
+      )}
+    </div>
+  );
+});
+
+FormField.displayName = 'FormField';
 
 interface MyPageProps {}
 
@@ -24,6 +61,7 @@ const MyPage: React.FC<MyPageProps> = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const navigate = useNavigate();
+  const { showSuccess, showError } = useToast();
 
   // formData 타입을 명확히 지정하거나 (UserProfile과 필드 확장) 'any' 대신 Record<string, any> 사용
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -73,7 +111,7 @@ const MyPage: React.FC<MyPageProps> = () => {
     loadProfile();
   }, []);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
 
     // 의사 전용 필드 처리 (doctor_profile 객체 내부)
@@ -95,10 +133,14 @@ const MyPage: React.FC<MyPageProps> = () => {
     } else {
       setFormData((prev: Record<string, any>) => ({ ...prev, [name]: value }));
     }
-  };
+  }, [isDoctor]);
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // 수정 전 이름 저장 (변경 여부 확인용)
+    const previousName = profile?.name || '';
+    
     try {
       // 💡 UserProfileUpdatePayload 타입을 사용하거나 명확히 정의된 객체 사용
       const updatePayload: Record<string, any> = {
@@ -106,10 +148,6 @@ const MyPage: React.FC<MyPageProps> = () => {
         sex: formData.sex,
         age: formData.age ? Number(formData.age) : undefined, // 나이는 숫자로 변환
         birth_date: formData.birth_date || undefined,
-        // birth_date는 백엔드 시리얼라이저에 없으므로 (UserProfileUpdateSerializer),
-        // age와 name으로 대체되어 계산되는 경우 제외하고는 제거하는 것이 좋습니다.
-        // 백엔드 시리얼라이저(UserProfileUpdateSerializer) 필드에 맞게 birth_date 제거
-        // birth_date: formData.birth_date,
         family_history: formData.family_history,
 
         // 추가 필드 (백엔드에 있다면)
@@ -130,7 +168,6 @@ const MyPage: React.FC<MyPageProps> = () => {
 
       // 성공 후 프로필 다시 로드
       const updatedProfile: UserProfile = await fetchUserProfile();
-      // 💡 setProfile(updatedProfile)은 이제 UserProfile | null 타입과 호환됩니다.
       setProfile(updatedProfile);
 
       // 폼 데이터 재초기화
@@ -144,13 +181,33 @@ const MyPage: React.FC<MyPageProps> = () => {
           assigned_doctor: updatedProfile.assigned_doctor || {},
       });
 
+      // 이름이 변경되었는지 확인
+      const nameChanged = previousName !== updatedProfile.name;
+      
+      // 이름이 변경되었으면 localStorage 업데이트
+      if (nameChanged) {
+        localStorage.setItem('userName', updatedProfile.name);
+        // auth:update 이벤트 발생시켜 다른 컴포넌트에서도 반영되도록
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('auth:update'));
+        }
+      }
+
       // 수정 모드 종료
       setIsEditing(false);
-      // alert('정보가 성공적으로 수정되었습니다.');
+      
+      // 성공 메시지 표시
+      if (nameChanged) {
+        showSuccess(`정보가 성공적으로 수정되었습니다. 이름이 "${updatedProfile.name}"(으)로 변경되었습니다.`);
+      } else {
+        showSuccess('정보가 성공적으로 수정되었습니다.');
+      }
+      
       console.log('정보가 성공적으로 수정되었습니다.');
     } catch (error) {
-      // alert(error instanceof Error ? error.message : '정보 수정에 실패했습니다.');
       console.error('Update failed:', error);
+      const errorMessage = error instanceof Error ? error.message : '정보 수정에 실패했습니다.';
+      showError(errorMessage);
     }
   };
 
@@ -194,25 +251,6 @@ const handleAccountDelete = async () => {
   const assignedDoctor = profile.assigned_doctor;
   const isDoctorApproved = doctorProfile && doctorProfile.status === '승인';
 
-  // 폼 필드 헬퍼 컴포넌트
-  const FormField: React.FC<{ label: string; name: string; value: string | number; isEditable: boolean; type?: string }> =
-    ({ label, name, value, isEditable, type = 'text' }) => (
-    <div className="flex justify-between py-2 border-b border-gray-100 last:border-b-0">
-      <span className="text-xs text-gray-600">{label}</span>
-      {isEditable && isEditing ? (
-        <input
-          type={type}
-          name={name}
-          value={value}
-          onChange={handleInputChange}
-          className="flex-1 ml-2 text-xs text-gray-900 font-medium p-1.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-right"
-        />
-      ) : (
-        <span className="text-xs text-gray-900 font-medium text-right">{String(value)}</span>
-      )}
-    </div>
-  );
-
   const PatientSpecificFields: React.FC = () => {
     // doctor_id가 없는 경우 담당의사 정보 섹션을 표시하지 않음
     if (!assignedDoctorExists) {
@@ -235,6 +273,7 @@ const handleAccountDelete = async () => {
             name="assigned_doctor_name"
             value={formData.assigned_doctor_name || ''}
             isEditable={isEditing}
+            onChange={handleInputChange}
         />
         <FormField
             label="전문의 분야"
@@ -242,12 +281,14 @@ const handleAccountDelete = async () => {
             // 💡 assignedDoctor는 AssignedDoctorInfo 타입 (UserTypes.ts에서 정의)
             value={doctor.specialty || '미등록'}
             isEditable={false}
+            onChange={handleInputChange}
         />
         <FormField
             label="소속 병원"
             name="assigned_doctor_hospital"
             value={doctor.hospital || '미등록'}
             isEditable={false}
+            onChange={handleInputChange}
         />
       </div>
     );
@@ -263,13 +304,13 @@ const handleAccountDelete = async () => {
         <h3 className="text-base font-bold text-gray-900">전문의 정보</h3>
       </div>
 
-      <div className="flex justify-between py-2 border-b border-gray-100">
-        <span className="text-xs text-gray-600">의사 승인 여부</span>
+      <div className="flex justify-between items-center py-3 border-b border-gray-100">
+        <span className="text-sm text-gray-700 font-medium">의사 승인 여부</span>
         <span
-            className={`text-xs font-medium px-2 py-1 rounded-full ${
-                doctorProfile?.status === '승인' ? 'bg-green-100 text-green-700' :
-                doctorProfile?.status === '승인 중' ? 'bg-yellow-100 text-yellow-700' :
-                'bg-red-100 text-red-700'
+            className={`text-sm font-semibold px-3 py-1.5 rounded-full ${
+                doctorProfile?.status === '승인' ? 'bg-green-100 text-green-700 border-2 border-green-300' :
+                doctorProfile?.status === '승인 중' ? 'bg-yellow-100 text-yellow-700 border-2 border-yellow-300' :
+                'bg-red-100 text-red-700 border-2 border-red-300'
             }`}
         >
             {doctorProfile?.status || '미등록'}
@@ -278,11 +319,11 @@ const handleAccountDelete = async () => {
 
       {/* 거절 사유 표시 (거절 상태일 때만) */}
       {doctorProfile?.status === '거절' && doctorProfile?.rejection_reason && (
-        <div className="py-2 border-b border-gray-100">
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-gray-600">거절 사유</span>
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-xs text-red-700 whitespace-pre-wrap">
+        <div className="py-3 border-b border-gray-100">
+          <div className="flex flex-col gap-2">
+            <span className="text-sm text-gray-700 font-medium">거절 사유</span>
+            <div className="p-4 bg-red-50 border-2 border-red-200 rounded-lg">
+              <p className="text-sm text-red-700 whitespace-pre-wrap leading-relaxed">
                 {doctorProfile.rejection_reason}
               </p>
             </div>
@@ -295,12 +336,14 @@ const handleAccountDelete = async () => {
         name="specialty"
         value={formData.doctor_profile?.specialty || ''}
         isEditable={isEditing}
+        onChange={handleInputChange}
       />
       <FormField
         label="소속 병원"
         name="hospital"
         value={formData.doctor_profile?.hospital || ''}
         isEditable={isEditing}
+        onChange={handleInputChange}
       />
     </div>
   );
@@ -416,30 +459,42 @@ const handleAccountDelete = async () => {
 
       <div className="space-y-4">
         {/* 회원 정보 수정 폼 */}
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4">
-          <div className="flex items-center gap-2 mb-4">
+        <div className={`bg-white border-2 rounded-lg shadow-sm p-5 transition-all duration-200 ${
+          isEditing ? 'border-blue-400 shadow-md' : 'border-gray-200'
+        }`}>
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2">
             <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
-            <h2 className="text-base font-bold text-gray-900">회원 정보 {isEditing ? '수정' : '확인'}</h2>
+              <h2 className="text-lg font-bold text-gray-900">회원 정보 {isEditing ? '수정' : '확인'}</h2>
+            </div>
+            {isEditing && (
+              <div className="flex items-center gap-1 px-2 py-1 bg-blue-100 rounded-full">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                <span className="text-xs text-blue-700 font-medium">수정 중</span>
+              </div>
+            )}
           </div>
 
           <form onSubmit={handleUpdate}>
             {/* 공통 정보 필드 */}
-            <FormField label="이메일 (ID)" name="email" value={profile.email} isEditable={false} />
-            <FormField label="이름" name="name" value={formData.name || ''} isEditable={isEditing} />
+            <FormField label="이메일 (ID)" name="email" value={profile.email} isEditable={false} onChange={handleInputChange} />
+            <FormField label="이름" name="name" value={formData.name || ''} isEditable={isEditing} onChange={handleInputChange} />
             {/* 생년월일 필드 추가 (수정 가능, Date 타입으로 표시) */}
-            <FormField label="생년월일" name="birth_date" value={formData.birth_date || ''} isEditable={isEditing} type="date" />
+            <FormField label="생년월일" name="birth_date" value={formData.birth_date || ''} isEditable={isEditing} type="date" onChange={handleInputChange} />
             {/* 나이 필드를 별도로 표시 (수정 가능) */}
-            <FormField label="나이" name="age" value={formData.age || ''} isEditable={isEditing} type="number" />
+            <FormField label="나이" name="age" value={formData.age || ''} isEditable={isEditing} type="number" onChange={handleInputChange} />
 
-            <FormField label="성별" name="sex" value={formData.sex || ''} isEditable={isEditing} />
-            <FormField label="가족력" name="family_history" value={formData.family_history || ''} isEditable={isEditing} />
+            <FormField label="성별" name="sex" value={formData.sex || ''} isEditable={isEditing} onChange={handleInputChange} />
+            <FormField label="가족력" name="family_history" value={formData.family_history || ''} isEditable={isEditing} onChange={handleInputChange} />
 
             {/* 역할별 추가 정보 */}
             {isDoctor ? <DoctorSpecificFields /> : <PatientSpecificFields />}
 
-            <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end space-x-2">
+            <div className={`mt-6 pt-4 border-t-2 flex justify-end gap-3 transition-all duration-200 ${
+              isEditing ? 'border-blue-200' : 'border-gray-200'
+            }`}>
               {isEditing ? (
                 <>
                   <button
@@ -456,15 +511,15 @@ const handleAccountDelete = async () => {
                             assigned_doctor: profile?.assigned_doctor || {},
                         });
                     }}
-                    className="px-3 py-1.5 border border-gray-300 text-gray-700 text-xs rounded-md hover:bg-gray-100 transition duration-150"
+                    className="px-5 py-2.5 border-2 border-gray-300 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-50 hover:border-gray-400 transition duration-150 active:scale-95"
                   >
-                    수정 취소
+                    취소
                   </button>
                   <button
                     type="submit" // 수정 완료 버튼 (form submit)
-                    className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-md hover:bg-blue-700 transition duration-150"
+                    className="px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 shadow-md hover:shadow-lg transition duration-150 active:scale-95"
                   >
-                    수정 완료
+                    저장하기
                   </button>
                 </>
               ) : (
@@ -476,7 +531,7 @@ const handleAccountDelete = async () => {
                       e.stopPropagation();
                       setShowDeleteModal(true);
                     }}
-                    className="px-3 py-1.5 border border-red-500 text-red-500 text-xs rounded-md hover:bg-red-50 transition duration-150"
+                    className="px-4 py-2 border-2 border-red-400 text-red-600 text-sm font-semibold rounded-lg hover:bg-red-50 hover:border-red-500 transition duration-150 active:scale-95"
                   >
                     회원 탈퇴
                   </button>
@@ -487,8 +542,11 @@ const handleAccountDelete = async () => {
                       e.stopPropagation();
                       setIsEditing(true);
                     }}
-                    className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-md hover:bg-blue-700 transition duration-150"
+                    className="px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 shadow-md hover:shadow-lg transition duration-150 active:scale-95 flex items-center gap-2"
                   >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
                     정보 수정
                   </button>
                 </>

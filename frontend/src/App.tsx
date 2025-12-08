@@ -1,7 +1,8 @@
-import React, { useEffect, useState  } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect, useState, useLayoutEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
 import { ToastProvider } from './contexts/ToastContext';
+import { refreshTokenIfNeeded } from './services/http';
 
 import BeforeLoginPage from './pages/BeforeLoginPage';
 import MainPage from './pages/dashboard/MainPage';
@@ -109,6 +110,101 @@ const HomeRedirector: React.FC = () => {
 };
 
 // -----------------------------------
+// 페이지 이동 시 최상단으로 스크롤하는 컴포넌트
+const ScrollToTop: React.FC = () => {
+  const { pathname } = useLocation();
+
+  // 모든 스크롤 가능한 요소를 찾아서 초기화하는 함수
+  const scrollToTop = () => {
+    // 1. window와 document 스크롤 초기화
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.documentElement.scrollLeft = 0;
+    document.body.scrollTop = 0;
+    document.body.scrollLeft = 0;
+    
+    // 2. 모든 가능한 스크롤 컨테이너 초기화
+    const scrollContainers = [
+      '.main-content',
+      'main',
+      '.app-container',
+      '#root',
+    ];
+    
+    scrollContainers.forEach(selector => {
+      try {
+        const elements = document.querySelectorAll(selector);
+        elements.forEach((el) => {
+          const htmlEl = el as HTMLElement;
+          if (htmlEl) {
+            htmlEl.scrollTop = 0;
+            htmlEl.scrollLeft = 0;
+          }
+        });
+      } catch (e) {
+        // selector 오류 무시
+      }
+    });
+    
+    // 3. overflow 속성이 scroll이나 auto인 모든 요소 찾아서 초기화
+    const allElements = document.querySelectorAll('*');
+    allElements.forEach((el) => {
+      const htmlEl = el as HTMLElement;
+      if (htmlEl && htmlEl.scrollTop !== undefined) {
+        const style = window.getComputedStyle(htmlEl);
+        const overflowY = style.overflowY;
+        const overflowX = style.overflowX;
+        if ((overflowY === 'scroll' || overflowY === 'auto') && htmlEl.scrollTop > 0) {
+          htmlEl.scrollTop = 0;
+        }
+        if ((overflowX === 'scroll' || overflowX === 'auto') && htmlEl.scrollLeft > 0) {
+          htmlEl.scrollLeft = 0;
+        }
+      }
+    });
+  };
+
+  // useLayoutEffect로 DOM 업데이트 전에 스크롤 초기화
+  useLayoutEffect(() => {
+    scrollToTop();
+  }, [pathname]);
+
+  // useEffect로 DOM 렌더링 완료 후에도 스크롤 초기화
+  useEffect(() => {
+    // 즉시 실행
+    scrollToTop();
+    
+    // requestAnimationFrame을 사용하여 DOM 렌더링 완료 후 실행
+    requestAnimationFrame(() => {
+      scrollToTop();
+      requestAnimationFrame(() => {
+        scrollToTop();
+      });
+    });
+    
+    // 약간의 딜레이 후 다시 실행 (DOM 렌더링 완료 보장)
+    const timeoutId = setTimeout(scrollToTop, 0);
+    const timeoutId2 = setTimeout(scrollToTop, 10);
+    const timeoutId3 = setTimeout(scrollToTop, 50);
+    const timeoutId4 = setTimeout(scrollToTop, 100);
+    const timeoutId5 = setTimeout(scrollToTop, 200);
+    const timeoutId6 = setTimeout(scrollToTop, 300);
+
+    return () => {
+      clearTimeout(timeoutId);
+      clearTimeout(timeoutId2);
+      clearTimeout(timeoutId3);
+      clearTimeout(timeoutId4);
+      clearTimeout(timeoutId5);
+      clearTimeout(timeoutId6);
+    };
+  }, [pathname]);
+
+  return null;
+};
+
+// -----------------------------------
 // App 컴포넌트 (라우팅)
 const App: React.FC = () => {
   useEffect(() => {
@@ -128,9 +224,22 @@ console.log("-----------------------------------------------------------------")
         console.log("-----------------------------------------------------------------");
   }, []);
 
+  // 페이지 포커스 시 토큰 갱신 체크
+  useEffect(() => {
+    const handleFocus = async () => {
+      await refreshTokenIfNeeded();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+
   return (
     <ToastProvider>
       <BrowserRouter>
+        <ScrollToTop />
         <Layout>
           <Routes>
           {/* 0) 로그인 전 랜딩 */}
@@ -156,10 +265,11 @@ console.log("-----------------------------------------------------------------")
           <Route path="/dashboard/history/:folderName" element={<RequireAuth><HistoryDetailPage /></RequireAuth>} />
           <Route path="/dashboard/history/:folderName/:resultId" element={<RequireAuth><HistoryResultPage /></RequireAuth>} />
           
-          {/* 진단 내역 - 의사용 */}
+          {/* 진단 내역 - 의사용 (URL 기반 라우팅) */}
           <Route path="/dashboard/doctor/history" element={<RequireAuth><DoctorHistoryPage /></RequireAuth>} />
-          <Route path="/dashboard/doctor/history/:folderName" element={<RequireAuth><HistoryDetailPage /></RequireAuth>} />
-          <Route path="/dashboard/doctor/history/:folderName/:resultId" element={<RequireAuth><HistoryResultPage /></RequireAuth>} />
+          <Route path="/dashboard/doctor/history/:userId" element={<RequireAuth><DoctorHistoryPage /></RequireAuth>} />
+          <Route path="/dashboard/doctor/history/:userId/:folderName" element={<RequireAuth><DoctorHistoryPage /></RequireAuth>} />
+          <Route path="/dashboard/doctor/history/:userId/:folderName/:resultId" element={<RequireAuth><HistoryResultPage /></RequireAuth>} />
           
           <Route path="/dashboard/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
           <Route path="/diagnosis/detail/:id" element={<RequireAuth><ResultDetailPage /></RequireAuth>} />

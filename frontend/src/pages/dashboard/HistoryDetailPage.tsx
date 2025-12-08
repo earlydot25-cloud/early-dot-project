@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { formatDateTime } from '../../utils/dateUtils';
 
 // API BASE URL (환경 변수 또는 기본값)
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
@@ -457,18 +458,25 @@ const HistoryDetailPage: React.FC = () => {
                     {riskSource} 위험도: {riskLevel || '정보 없음'}
                   </p>
                   <p className="text-xs text-gray-500">
-                    저장 날짜:{' '}
-                    {r.photo.capture_date
-                      ? r.photo.capture_date.split('T')[0]
-                      : r.analysis_date
-                      ? r.analysis_date.split('T')[0]
-                      : '정보 없음'}
+                    저장 날짜: {formatDateTime(r.photo.capture_date || r.analysis_date)}
                   </p>
                   {/* 신체 부위 (읽기 전용) */}
                   {r.photo.body_part && (
                     <p className="text-xs text-gray-500">
                       신체 부위: {r.photo.body_part}
                     </p>
+                  )}
+                  
+                  {/* 전문의 소견 작성 대기중 배지 (환자용, 소견이 없을 때만) */}
+                  {!userId && !hasDoctorNote && (
+                    <div className="mt-2">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        전문의 소견 작성 대기중
+                      </span>
+                    </div>
                   )}
                 </div>
 

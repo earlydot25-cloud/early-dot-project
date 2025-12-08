@@ -50,10 +50,26 @@ const LoginPage: React.FC = () => {
       const displayName = user?.name || user?.email || '';
       localStorage.setItem('userName', displayName);
 
-      // 🎯 [핵심 수정]: is_doctor가 boolean true/false일 때 "1"/"0"으로 저장
+      // �� [핵심 수정]: is_doctor 값을 안전하게 처리하여 "1"/"0"으로 저장
       let isDoctorStringValue = '0'; // 기본값 환자
-      if (user && typeof user.is_doctor === 'boolean') { // boolean 타입인지 확인
-          isDoctorStringValue = user.is_doctor ? '1' : '0'; // true면 "1", false면 "0"
+      if (user && 'is_doctor' in user) {
+          // boolean 타입인 경우
+          if (typeof user.is_doctor === 'boolean') {
+              isDoctorStringValue = user.is_doctor ? '1' : '0';
+          }
+          // 숫자 타입인 경우 (1 또는 0)
+          else if (typeof user.is_doctor === 'number') {
+              isDoctorStringValue = user.is_doctor ? '1' : '0';
+          }
+          // 문자열 타입인 경우 ("true", "1" 등)
+          else if (typeof user.is_doctor === 'string') {
+              const lowerValue = user.is_doctor.toLowerCase().trim();
+              isDoctorStringValue = (lowerValue === 'true' || lowerValue === '1') ? '1' : '0';
+          }
+          // 그 외의 경우 truthy/falsy로 판단
+          else {
+              isDoctorStringValue = user.is_doctor ? '1' : '0';
+          }
       }
       localStorage.setItem('isDoctor', isDoctorStringValue);
       
