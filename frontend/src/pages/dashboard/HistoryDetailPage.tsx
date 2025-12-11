@@ -1,5 +1,5 @@
 // frontend/src/pages/dashboard/HistoryDetailPage.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { formatDateTime } from '../../utils/dateUtils';
@@ -154,6 +154,9 @@ const HistoryDetailPage: React.FC = () => {
   const [editingFileName, setEditingFileName] = useState<number | null>(null);
   const [editFileName, setEditFileName] = useState<string>('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  
+  // 터치 이벤트 상태 관리 (각 카드마다 독립적)
+  const touchStatesRef = useRef<Map<number, { x: number; y: number; time: number; moved: boolean }>>(new Map());
 
   // ✅ 환자명 로드 (의사용일 때만)
   useEffect(() => {
@@ -336,30 +339,83 @@ const HistoryDetailPage: React.FC = () => {
               : r.risk_level || '분석 대기';
             const riskSource = hasDoctorNote ? '의사' : (r.disease ? 'AI' : '대기');
 
+            const handleRecordClick = () => {
+              // 의사는 조회만 가능하므로 항상 클릭 가능 (isEditMode가 false이거나 userId가 있으면)
+              if (!userId || !isEditMode) {
+                // 일반인용인지 의사용인지 확인
+                const isDoctorPath = window.location.pathname.includes('/doctor/');
+                const basePath = isDoctorPath ? '/dashboard/doctor/history' : '/dashboard/history';
+                navigate(
+                  `${basePath}/${folderName}/${r.id}${userId ? `?user=${userId}` : ''}`,
+                  {
+                    state: {
+                      userName,
+                      folderDisplay: finalFolderDisplay,
+                      diseaseName: r.disease?.name_ko || r.photo.file_name,
+                    },
+                  }
+                );
+              }
+            };
+
             return (
               <div
                 key={r.id}
-                onClick={() => {
-                  // 의사는 조회만 가능하므로 항상 클릭 가능 (isEditMode가 false이거나 userId가 있으면)
+                onClick={handleRecordClick}
+                onTouchStart={(e) => {
                   if (!userId || !isEditMode) {
-                    // 일반인용인지 의사용인지 확인
-                    const isDoctorPath = window.location.pathname.includes('/doctor/');
-                    const basePath = isDoctorPath ? '/dashboard/doctor/history' : '/dashboard/history';
-                    navigate(
-                      `${basePath}/${folderName}/${r.id}${userId ? `?user=${userId}` : ''}`,
-                      {
-                        state: {
-                          userName,
-                          folderDisplay: finalFolderDisplay,
-                          diseaseName: r.disease?.name_ko || r.photo.file_name,
-                        },
-                      }
-                    );
+                    const target = e.target as HTMLElement;
+                    if (target.tagName !== 'INPUT' && !target.closest('input')) {
+                      const touch = e.touches[0];
+                      touchStatesRef.current.set(r.id, {
+                        x: touch.clientX,
+                        y: touch.clientY,
+                        time: Date.now(),
+                        moved: false
+                      });
+                    }
                   }
+                }}
+                onTouchMove={(e) => {
+                  const touchState = touchStatesRef.current.get(r.id);
+                  if (touchState) {
+                    const touch = e.touches[0];
+                    const deltaX = Math.abs(touch.clientX - touchState.x);
+                    const deltaY = Math.abs(touch.clientY - touchState.y);
+                    
+                    // 10px 이상 움직이면 스크롤로 간주
+                    if (deltaX > 10 || deltaY > 10) {
+                      touchState.moved = true;
+                    }
+                  }
+                }}
+                onTouchEnd={(e) => {
+                  const touchState = touchStatesRef.current.get(r.id);
+                  if ((!userId || !isEditMode) && touchState && !touchState.moved) {
+                    const target = e.target as HTMLElement;
+                    if (target.tagName !== 'INPUT' && !target.closest('input')) {
+                      const touch = e.changedTouches[0];
+                      const deltaTime = Date.now() - touchState.time;
+                      const deltaX = Math.abs(touch.clientX - touchState.x);
+                      const deltaY = Math.abs(touch.clientY - touchState.y);
+                      
+                      // 300ms 이내이고 10px 이내 움직임이면 클릭으로 간주
+                      if (deltaTime < 300 && deltaX < 10 && deltaY < 10) {
+                        e.preventDefault();
+                        handleRecordClick();
+                      }
+                    }
+                  }
+                  touchStatesRef.current.delete(r.id);
                 }}
                 className={`flex items-center bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition gap-3 ${
                   (userId || !isEditMode) ? 'cursor-pointer' : 'cursor-default'
                 } ${selectedRecords.has(r.id) ? 'ring-2 ring-blue-500' : ''}`}
+                style={{ 
+                  touchAction: 'pan-y', 
+                  WebkitTapHighlightColor: 'transparent',
+                  userSelect: 'none'
+                }}
               >
                 {/* 체크박스 (수정 모드일 때만, 의사는 사용 불가) */}
                 {!userId && isEditMode && (
