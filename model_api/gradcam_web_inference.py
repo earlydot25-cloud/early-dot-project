@@ -172,7 +172,7 @@ def load_model(model_path, device=DEVICE):
     """모델 로드"""
     model = EnsembleModel(num_classes=NUM_CLASSES).to(device)
     
-    checkpoint = torch.load(model_path, map_location=device)
+    checkpoint = torch.load(model_path, map_location=device, weights_only=False)
     if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
         state_dict = checkpoint['model_state_dict']
         if any(k.startswith('module.') for k in state_dict.keys()):
@@ -185,13 +185,14 @@ def load_model(model_path, device=DEVICE):
     return model
 
 
-def preprocess_image(image_input, image_size=512):
+def preprocess_image(image_input, image_size=512, device=DEVICE):
     """
     이미지 전처리
     
     Args:
         image_input: PIL Image 객체 또는 이미지 경로
         image_size: 리사이즈할 크기 (기본값: 512)
+        device: 사용할 디바이스 (기본값: 전역 DEVICE)
     
     Returns:
         image_tensor: 전처리된 텐서 (1, 3, H, W)
@@ -212,7 +213,7 @@ def preprocess_image(image_input, image_size=512):
         transforms.Normalize(mean=MEAN, std=STD)
     ])
     
-    image_tensor = transform(image).unsqueeze(0).to(DEVICE)
+    image_tensor = transform(image).unsqueeze(0).to(device)
     
     # 역정규화된 이미지 (시각화용)
     image_denorm = image_tensor[0].cpu().numpy().transpose((1, 2, 0))
@@ -373,7 +374,7 @@ def generate_gradcam_overlay(
     model = load_model(model_path, device)
     
     # 이미지 전처리
-    image_tensor, image_denorm = preprocess_image(image_input, image_size)
+    image_tensor, image_denorm = preprocess_image(image_input, image_size, device)
     
     # 예측
     with torch.no_grad():

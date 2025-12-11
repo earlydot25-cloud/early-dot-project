@@ -1,5 +1,5 @@
 // frontend/src/pages/dashboard/DoctorHistoryPage.tsx
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { FaMars, FaVenus } from 'react-icons/fa';
@@ -174,6 +174,9 @@ const DoctorHistoryPage: React.FC = () => {
   const [currentFolderName, setCurrentFolderName] = useState<string | null>(null); // 현재 보고 있는 폴더명 저장
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState<'소견 필요순' | '위험도순' | '이름순'>('소견 필요순');
+  
+  // 터치 이벤트 상태 관리 (각 카드마다 독립적) - number 또는 string 키 지원
+  const touchStatesRef = useRef<Map<number | string, { x: number; y: number; time: number; moved: boolean }>>(new Map());
   
   // URL 기반으로 viewMode 결정
   const viewMode: 'patients' | 'folders' | 'records' = urlFolderName ? 'records' : (urlUserId ? 'folders' : 'patients');
@@ -1018,13 +1021,51 @@ const DoctorHistoryPage: React.FC = () => {
                     if (!isEditMode) {
                       const target = e.target as HTMLElement;
                       if (target.tagName !== 'INPUT' && !target.closest('input')) {
-                        console.log('Card touched, patient:', patient.name, 'needs_review:', patient.needs_review);
-                        handleCardClick();
+                        const touch = e.touches[0];
+                        touchStatesRef.current.set(patient.id, {
+                          x: touch.clientX,
+                          y: touch.clientY,
+                          time: Date.now(),
+                          moved: false
+                        });
                       }
                     }
                   }}
+                  onTouchMove={(e) => {
+                    const touchState = touchStatesRef.current.get(patient.id);
+                    if (touchState) {
+                      const touch = e.touches[0];
+                      const deltaX = Math.abs(touch.clientX - touchState.x);
+                      const deltaY = Math.abs(touch.clientY - touchState.y);
+                      
+                      // 10px 이상 움직이면 스크롤로 간주
+                      if (deltaX > 10 || deltaY > 10) {
+                        touchState.moved = true;
+                      }
+                    }
+                  }}
+                  onTouchEnd={(e) => {
+                    const touchState = touchStatesRef.current.get(patient.id);
+                    if (!isEditMode && touchState && !touchState.moved) {
+                      const target = e.target as HTMLElement;
+                      if (target.tagName !== 'INPUT' && !target.closest('input')) {
+                        const touch = e.changedTouches[0];
+                        const deltaTime = Date.now() - touchState.time;
+                        const deltaX = Math.abs(touch.clientX - touchState.x);
+                        const deltaY = Math.abs(touch.clientY - touchState.y);
+                        
+                        // 300ms 이내이고 10px 이내 움직임이면 클릭으로 간주
+                        if (deltaTime < 300 && deltaX < 10 && deltaY < 10) {
+                          e.preventDefault();
+                          console.log('Card touched, patient:', patient.name, 'needs_review:', patient.needs_review);
+                          handleCardClick();
+                        }
+                      }
+                    }
+                    touchStatesRef.current.delete(patient.id);
+                  }}
                   style={{ 
-                    touchAction: 'manipulation', 
+                    touchAction: 'pan-y', 
                     WebkitTapHighlightColor: 'transparent',
                     position: 'relative',
                     userSelect: 'none',
@@ -1138,14 +1179,64 @@ const DoctorHistoryPage: React.FC = () => {
           {folders.length > 0 ? (
             folders.map((folder, index) => {
               const hasNeedsOpinion = (folder.needs_opinion_count || 0) > 0;
+              const folderKey = `folder-${selectedPatientId}-${folder.folder_name}`;
               
               return (
               <div
                 key={index}
                 onClick={() => handleFolderClick(folder.folder_name)}
+                onTouchStart={(e) => {
+                  const target = e.target as HTMLElement;
+                  if (target.tagName !== 'INPUT' && !target.closest('input')) {
+                    const touch = e.touches[0];
+                    touchStatesRef.current.set(folderKey, {
+                      x: touch.clientX,
+                      y: touch.clientY,
+                      time: Date.now(),
+                      moved: false
+                    });
+                  }
+                }}
+                onTouchMove={(e) => {
+                  const touchState = touchStatesRef.current.get(folderKey);
+                  if (touchState) {
+                    const touch = e.touches[0];
+                    const deltaX = Math.abs(touch.clientX - touchState.x);
+                    const deltaY = Math.abs(touch.clientY - touchState.y);
+                    
+                    // 10px 이상 움직이면 스크롤로 간주
+                    if (deltaX > 10 || deltaY > 10) {
+                      touchState.moved = true;
+                    }
+                  }
+                }}
+                onTouchEnd={(e) => {
+                  const touchState = touchStatesRef.current.get(folderKey);
+                  if (touchState && !touchState.moved) {
+                    const target = e.target as HTMLElement;
+                    if (target.tagName !== 'INPUT' && !target.closest('input')) {
+                      const touch = e.changedTouches[0];
+                      const deltaTime = Date.now() - touchState.time;
+                      const deltaX = Math.abs(touch.clientX - touchState.x);
+                      const deltaY = Math.abs(touch.clientY - touchState.y);
+                      
+                      // 300ms 이내이고 10px 이내 움직임이면 클릭으로 간주
+                      if (deltaTime < 300 && deltaX < 10 && deltaY < 10) {
+                        e.preventDefault();
+                        handleFolderClick(folder.folder_name);
+                      }
+                    }
+                  }
+                  touchStatesRef.current.delete(folderKey);
+                }}
                   className={`flex items-center bg-white border rounded-lg shadow-sm p-4 hover:shadow-md hover:border-blue-300 cursor-pointer transition-all ${
                     hasNeedsOpinion ? 'border-l-4 border-l-red-500' : 'border-gray-200'
                   }`}
+                  style={{ 
+                    touchAction: 'pan-y', 
+                    WebkitTapHighlightColor: 'transparent',
+                    userSelect: 'none'
+                  }}
               >
                 <div className="flex-1 text-left">
                     <div className="flex items-center gap-2 mb-2">

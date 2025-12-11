@@ -303,7 +303,6 @@ const ResultDetailPage: React.FC = () => {
         backgroundColor: '#ffffff',
       });
       
-      const imgData = canvas.toDataURL('image/png', 0.95);
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       
       const pageWidth = 210; // A4 width in mm
@@ -311,21 +310,51 @@ const ResultDetailPage: React.FC = () => {
       const margin = 10; // 좌우 여백 10mm
       const contentWidth = pageWidth - (margin * 2); // 190mm
       
-      // 이미지 높이 계산
+      // 이미지 높이 계산 (mm 단위)
       const imgHeight = (canvas.height * contentWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = margin; // 상단 여백
-
-      // 첫 페이지 추가
-      pdf.addImage(imgData, 'PNG', margin, position, contentWidth, imgHeight);
-      heightLeft -= (pageHeight - margin - 10); // 하단 여백 10mm 고려
-
-      // 여러 페이지로 나누기
-      while (heightLeft > 0) {
-        position = -((imgHeight - heightLeft) - margin);
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', margin, position, contentWidth, imgHeight);
-        heightLeft -= (pageHeight - 10); // 하단 여백 고려
+      const availableHeight = pageHeight - (margin * 2); // 상하 여백 제외 (277mm)
+      
+      // 한 페이지에 모두 들어가는지 확인
+      if (imgHeight <= availableHeight) {
+        // 한 페이지에 모두 들어감
+        const imgData = canvas.toDataURL('image/png', 0.95);
+        pdf.addImage(imgData, 'PNG', margin, margin, contentWidth, imgHeight);
+      } else {
+        // 여러 페이지로 나누기 (중복 없이 정확하게)
+        const totalPages = Math.ceil(imgHeight / availableHeight);
+        
+        for (let i = 0; i < totalPages; i++) {
+          if (i > 0) {
+            pdf.addPage();
+          }
+          
+          // 현재 페이지에 표시할 이미지 부분 계산
+          const sourceY = (i * availableHeight * canvas.width / contentWidth); // 픽셀 기준
+          const sourceHeight = Math.min(
+            availableHeight * canvas.width / contentWidth,
+            canvas.height - sourceY
+          );
+          
+          // 임시 캔버스에 이미지의 해당 부분만 복사
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = canvas.width;
+          tempCanvas.height = sourceHeight;
+          const ctx = tempCanvas.getContext('2d');
+          
+          if (ctx) {
+            ctx.drawImage(
+              canvas,
+              0, sourceY, // 소스 시작 위치 (픽셀)
+              canvas.width, sourceHeight, // 소스 크기
+              0, 0, // 대상 시작 위치
+              canvas.width, sourceHeight // 대상 크기
+            );
+            
+            const pageImgData = tempCanvas.toDataURL('image/png', 0.95);
+            const pageImgHeight = (sourceHeight * contentWidth) / canvas.width;
+            pdf.addImage(pageImgData, 'PNG', margin, margin, contentWidth, pageImgHeight);
+          }
+        }
       }
 
       const fileName = `${data.user.name}_${data.disease?.name_ko || '진단결과'}_${formatDateTime(new Date().toISOString()).replace(' ', '_')}.pdf`;
