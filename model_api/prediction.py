@@ -64,6 +64,44 @@ KOREAN_TO_ENGLISH = {
 MEAN = [0.485, 0.456, 0.406]
 STD = [0.229, 0.224, 0.225]
 
+# 클래스 수
+NUM_CLASSES = 8
+
+# Soft Voting 앙상블 가중치 (CNN_weight, ViT_weight)
+# 환경변수로 변경 가능: ENSEMBLE_CNN_WEIGHT, ENSEMBLE_VIT_WEIGHT
+import os
+DEFAULT_CNN_WEIGHT = float(os.getenv('ENSEMBLE_CNN_WEIGHT', '0.5'))
+DEFAULT_VIT_WEIGHT = float(os.getenv('ENSEMBLE_VIT_WEIGHT', '0.5'))
+
+
+class SoftVotingEnsemble(nn.Module):
+    """Soft Voting 앙상블 모델 (CNN 앙상블 + ViT)"""
+    def __init__(self, cnn_model, vit_model, num_classes, weights=[0.5, 0.5]):
+        super().__init__()
+        self.cnn_model = cnn_model
+        self.vit_model = vit_model
+        self.num_classes = num_classes
+        # 가중치 정규화 (합이 1이 되도록)
+        weight_sum = sum(weights)
+        self.weights = [w / weight_sum for w in weights]
+        logger.info(f"[Ensemble] Soft Voting 가중치: CNN={self.weights[0]:.2f}, ViT={self.weights[1]:.2f}")
+        
+    def forward(self, x):
+        # CNN 앙상블 모델 예측
+        cnn_logits = self.cnn_model(x)
+        cnn_probs = F.softmax(cnn_logits, dim=1)
+        
+        # ViT 모델 예측
+        vit_logits = self.vit_model(x)
+        vit_probs = F.softmax(vit_logits, dim=1)
+        
+        # 가중 평균
+        ensemble_probs = self.weights[0] * cnn_probs + self.weights[1] * vit_probs
+        
+        # 확률을 logits로 변환 (다음 단계에서 softmax를 다시 적용할 수 있도록)
+        # 하지만 이미 확률이므로 그대로 반환
+        return ensemble_probs
+
 
 class PredictionPipeline:
     """
@@ -84,6 +122,8 @@ class PredictionPipeline:
         self.model = None
         self.is_loaded = False
         self.device = None
+        self.cnn_model = None
+        self.vit_model = None
     
     def _build_combined_model(self, state_dict, device):
         """
@@ -140,25 +180,9 @@ class PredictionPipeline:
                 )
             
             def forward(self, x):
-                # GradCAM을 위해 공간 특징을 보존하는 수동 forward
-                # ResNet50 forward
-                x_resnet = self.model_A.conv1(x)
-                x_resnet = self.model_A.bn1(x_resnet)
-                x_resnet = self.model_A.relu(x_resnet)
-                x_resnet = self.model_A.maxpool(x_resnet)
-                x_resnet = self.model_A.layer1(x_resnet)
-                x_resnet = self.model_A.layer2(x_resnet)
-                x_resnet = self.model_A.layer3(x_resnet)
-                x_resnet = self.model_A.layer4(x_resnet)  # [B, 2048, H, W] - 공간 특징
-                features_A = self.model_A.avgpool(x_resnet)  # [B, 2048, 1, 1]
-                features_A = torch.flatten(features_A, 1)  # [B, 2048]
-                
-                # EfficientNetB4 forward
-                features_B = self.model_B.features(x)  # [B, 1792, H, W] - 공간 특징
-                features_B = self.model_B.avgpool(features_B)  # [B, 1792, 1, 1]
-                features_B = torch.flatten(features_B, 1)  # [B, 1792]
-                
-                # 특징 결합
+                # ensemble_model_utils.py와 동일한 구조 (단순 forward)
+                features_A = self.model_A(x)
+                features_B = self.model_B(x)
                 combined_features = torch.cat((features_A, features_B), dim=1)
                 output = self.classifier(combined_features)
                 return output
@@ -204,152 +228,166 @@ class PredictionPipeline:
             logger.info(f"[Prediction] {len(pretrained_dict)}/{len(state_dict)} 키 로드 완료")
         
         return model
+    
+    def _get_vit_model_512(self, num_classes: int) -> nn.Module:
+        """
+        ViT-B/16 모델 생성 (512px 입력 크기)
+        Positional Embedding을 224px에서 512px로 interpolation
+        """
+        import math
+        from torchvision.models import vit_b_16, ViT_B_16_Weights
+        
+        logger.info("[Prediction] ViT-B/16 구조 생성 및 512px 리사이징 (Interpolation) 수행...")
+        
+        # 1. 기본 모델 로드
+        model = vit_b_16(weights=ViT_B_16_Weights.IMAGENET1K_V1)
+        model.image_size = 512
+        
+        # 2. Positional Embedding Interpolation (224 -> 512)
+        pos_embed_old = model.encoder.pos_embedding
+        
+        # Class Token과 Patch Token 분리
+        class_pos_embed = pos_embed_old[:, 0:1, :]
+        patch_pos_embed = pos_embed_old[:, 1:, :]
+        
+        # 기존 그리드 사이즈 (14x14)
+        num_patches_old = patch_pos_embed.shape[1]
+        grid_size_old = int(math.sqrt(num_patches_old))
+        
+        # [1, 196, 768] -> [1, 768, 14, 14]
+        patch_pos_embed = patch_pos_embed.reshape(1, grid_size_old, grid_size_old, 768).permute(0, 3, 1, 2)
+        
+        # 새로운 그리드 사이즈 (512 / 16 = 32)
+        grid_size_new = 512 // 16
+        
+        # Bicubic Interpolation
+        patch_pos_embed_new = F.interpolate(
+            patch_pos_embed,
+            size=(grid_size_new, grid_size_new),
+            mode='bicubic',
+            align_corners=False
+        )
+        
+        # 원래 형태로 복구: [1, 768, 32, 32] -> [1, 1024, 768]
+        patch_pos_embed_new = patch_pos_embed_new.permute(0, 2, 3, 1).reshape(1, grid_size_new * grid_size_new, 768)
+        
+        # Class Token과 합체
+        pos_embed_new = torch.cat((class_pos_embed, patch_pos_embed_new), dim=1)
+        
+        # 모델에 적용
+        model.encoder.pos_embedding = nn.Parameter(pos_embed_new)
+        
+        # 3. Head 교체
+        in_features = model.heads.head.in_features
+        model.heads.head = nn.Linear(in_features, num_classes)
+        
+        logger.info(f"[Prediction] ViT-B/16 모델 생성 완료 (512px, {num_classes} classes)")
+        return model
+    
+    def _load_cnn_ensemble_model(self, model_path: Path, device: torch.device) -> nn.Module:
+        """CNN 앙상블 모델 로드"""
+        logger.info(f"[Prediction] CNN 앙상블 모델 로드 시작: {model_path}")
+        
+        checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+        
+        # state_dict 추출
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            state_dict = checkpoint['model_state_dict']
+            logger.info(f"[Prediction] 체크포인트에서 model_state_dict 발견")
+        else:
+            state_dict = checkpoint
+        
+        # 모델 아키텍처 정의 및 로드
+        model = self._build_combined_model(state_dict, device)
+        model = model.to(device)
+        model.eval()
+        
+        logger.info("[Prediction] ✅ CNN 앙상블 모델 로드 완료")
+        return model
+    
+    def _load_vit_model(self, model_path: Path, device: torch.device) -> nn.Module:
+        """ViT 모델 로드"""
+        logger.info(f"[Prediction] ViT 모델 로드 시작: {model_path}")
+        
+        # ViT 모델 생성 (512px 구조)
+        model = self._get_vit_model_512(NUM_CLASSES)
+        model = model.to(device)
+        
+        checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+        
+        # state_dict 추출
+        state_dict = None
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            state_dict = checkpoint['model_state_dict']
+            logger.info(f"[Prediction] 체크포인트에서 model_state_dict 발견")
+        else:
+            state_dict = checkpoint
+        
+        # DataParallel 키 처리
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            name = k.replace("module.", "") if k.startswith("module.") else k
+            new_state_dict[name] = v
+        
+        model.load_state_dict(new_state_dict, strict=False)
+        model.eval()
+        
+        logger.info("[Prediction] ✅ ViT 모델 로드 완료")
+        return model
         
     def load_model(self):
         """
-        모델 로드 메서드
-        사용자가 모델 파일을 제공하면 이 메서드를 수정하여 모델을 로드합니다.
-        
-        예시:
-            import torch
-            model_path = self.models_dir / "prediction" / "your_model.pth"
-            self.model = torch.load(model_path)
-            self.model.eval()
+        하이브리드 모델 로드 메서드 (CNN 앙상블 + ViT Soft Voting)
         """
         import torch
-        import torch.nn as nn
         
         logger.info(f"[Prediction] 모델 디렉토리: {self.models_dir}")
         
         # 모델 파일 경로 확인
-        model_path = self.models_dir / "ensemble_finetune_best_60epochst.pt"
+        cnn_model_path = self.models_dir / "ensemble_finetune_best_60epochst.pt"
+        vit_model_path = self.models_dir / "vit_b16_512px_best_train_loss_86epochs.pt"
         
-        if not model_path.exists():
-            logger.error(f"[Prediction] 모델 파일을 찾을 수 없습니다: {model_path}")
-            raise FileNotFoundError(f"모델 파일을 찾을 수 없습니다: {model_path}")
+        if not cnn_model_path.exists():
+            logger.error(f"[Prediction] CNN 앙상블 모델 파일을 찾을 수 없습니다: {cnn_model_path}")
+            raise FileNotFoundError(f"CNN 앙상블 모델 파일을 찾을 수 없습니다: {cnn_model_path}")
         
-        logger.info(f"[Prediction] 모델 파일 로드 시작: {model_path}")
+        if not vit_model_path.exists():
+            logger.error(f"[Prediction] ViT 모델 파일을 찾을 수 없습니다: {vit_model_path}")
+            raise FileNotFoundError(f"ViT 모델 파일을 찾을 수 없습니다: {vit_model_path}")
         
         try:
             # 디바이스 선택
             if torch.cuda.is_available():
                 device = torch.device("cuda")
                 logger.info("[Prediction] CUDA 사용 가능, GPU 사용")
+            elif torch.backends.mps.is_available():
+                device = torch.device("mps")
+                logger.info("[Prediction] MPS 사용 가능, Apple Silicon GPU 사용")
             else:
                 device = torch.device("cpu")
                 logger.info("[Prediction] CPU 사용")
             
-            # 모델 로드 (map_location으로 CPU/GPU 자동 선택)
-            checkpoint = torch.load(model_path, map_location=device)
-            
-            logger.info(f"[Prediction] 체크포인트 타입: {type(checkpoint)}")
-            if isinstance(checkpoint, dict):
-                logger.info(f"[Prediction] 체크포인트 키: {list(checkpoint.keys())[:10]}")  # 처음 10개만
-            
-            # 체크포인트 형식 확인 및 모델 추출
-            model_to_load = None
-            
-            if isinstance(checkpoint, dict):
-                # 1. 'model' 키가 있는 경우 (모델 객체)
-                if 'model' in checkpoint:
-                    model_to_load = checkpoint['model']
-                    logger.info("[Prediction] 'model' 키에서 모델 객체 발견")
-                # 2. 'net' 키가 있는 경우
-                elif 'net' in checkpoint:
-                    model_to_load = checkpoint['net']
-                    logger.info("[Prediction] 'net' 키에서 모델 객체 발견")
-                # 3. 'network' 키가 있는 경우
-                elif 'network' in checkpoint:
-                    model_to_load = checkpoint['network']
-                    logger.info("[Prediction] 'network' 키에서 모델 객체 발견")
-                # 4. 'model_state_dict' 키가 있는 경우 - 모델 아키텍처 필요
-                elif 'model_state_dict' in checkpoint:
-                    logger.info("[Prediction] 'model_state_dict' 키 발견. 모델 아키텍처를 정의합니다.")
-                    try:
-                        model_to_load = self._build_combined_model(checkpoint['model_state_dict'], device)
-                        logger.info("[Prediction] 모델 아키텍처를 정의하여 로드했습니다.")
-                    except Exception as build_error:
-                        logger.error(f"[Prediction] 모델 아키텍처 정의 실패: {build_error}")
-                        raise RuntimeError(
-                            "모델 파일에 model_state_dict만 저장되어 있습니다. "
-                            "모델 아키텍처를 정의하고 load_state_dict()를 사용해야 합니다. "
-                            f"에러: {str(build_error)}"
-                        )
-                # 5. 'state_dict'만 있는 경우 - 모델 아키텍처 필요
-                elif 'state_dict' in checkpoint:
-                    logger.error("[Prediction] 'state_dict'만 발견됨. 모델 아키텍처가 필요합니다.")
-                    logger.error("[Prediction] 체크포인트에 'model', 'net', 'network' 키가 없습니다.")
-                    raise RuntimeError(
-                        "모델 파일에 state_dict만 저장되어 있습니다. "
-                        "모델 아키텍처를 정의하거나, 모델 객체가 포함된 체크포인트를 사용해야 합니다. "
-                        f"체크포인트 키: {list(checkpoint.keys())}"
-                    )
-                # 5. dict의 모든 값이 모델 객체일 수 있음 (직접 모델이 저장된 경우)
-                else:
-                    # dict의 값 중 nn.Module을 상속받은 객체 찾기
-                    for key, value in checkpoint.items():
-                        if isinstance(value, torch.nn.Module):
-                            model_to_load = value
-                            logger.info(f"[Prediction] '{key}' 키에서 모델 객체 발견")
-                            break
-                    
-                    # 찾지 못한 경우
-                    if model_to_load is None:
-                        # OrderedDict인 경우 (state_dict만 있는 경우)
-                        from collections import OrderedDict
-                        if isinstance(checkpoint, OrderedDict):
-                            logger.error("[Prediction] OrderedDict (state_dict)만 발견됨. 모델 아키텍처가 필요합니다.")
-                            logger.error(f"[Prediction] state_dict 키 샘플 (처음 5개): {list(checkpoint.keys())[:5]}")
-                            
-                            # state_dict의 키를 분석하여 모델 구조 추론 시도
-                            state_dict_keys = list(checkpoint.keys())
-                            logger.info(f"[Prediction] state_dict 총 키 개수: {len(state_dict_keys)}")
-                            
-                            # 모델 아키텍처 정의 필요
-                            # combined_resnet50_effnetb4 모델 구조 정의 시도
-                            try:
-                                model_to_load = self._build_combined_model(checkpoint, device)
-                                logger.info("[Prediction] 모델 아키텍처를 정의하여 로드했습니다.")
-                            except Exception as build_error:
-                                logger.error(f"[Prediction] 모델 아키텍처 정의 실패: {build_error}")
-                                raise RuntimeError(
-                                    "모델 파일이 state_dict만 포함하고 있습니다. "
-                                    "모델 아키텍처를 정의하고 load_state_dict()를 사용해야 합니다. "
-                                    f"에러: {str(build_error)}"
-                                )
-                        else:
-                            # 알 수 없는 형식
-                            logger.warning("[Prediction] 알 수 없는 체크포인트 형식. 전체를 모델로 시도합니다.")
-                            model_to_load = checkpoint
-            else:
-                # 체크포인트가 모델 객체 자체인 경우
-                if isinstance(checkpoint, torch.nn.Module):
-                    model_to_load = checkpoint
-                    logger.info("[Prediction] 체크포인트가 모델 객체입니다.")
-                else:
-                    raise RuntimeError(f"알 수 없는 체크포인트 형식: {type(checkpoint)}")
-            
-            # 모델이 찾아졌는지 확인
-            if model_to_load is None:
-                raise RuntimeError("모델을 찾을 수 없습니다. 체크포인트 구조를 확인해주세요.")
-            
-            # 모델이 nn.Module인지 확인
-            if not isinstance(model_to_load, torch.nn.Module):
-                raise RuntimeError(
-                    f"모델이 torch.nn.Module이 아닙니다. 타입: {type(model_to_load)}. "
-                    "모델 아키텍처를 정의하고 load_state_dict()를 사용해야 할 수 있습니다."
-                )
-            
-            self.model = model_to_load
-            
-            # 모델을 eval 모드로 설정
-            self.model.eval()
-            
-            # 모델을 디바이스로 이동
-            self.model = self.model.to(device)
             self.device = device
             
-            logger.info("[Prediction] ✅ 모델 로드 완료")
+            # 1. CNN 앙상블 모델 로드
+            logger.info("[Prediction] ========== 하이브리드 모델 로드 시작 ==========")
+            self.cnn_model = self._load_cnn_ensemble_model(cnn_model_path, device)
+            
+            # 2. ViT 모델 로드
+            self.vit_model = self._load_vit_model(vit_model_path, device)
+            
+            # 3. Soft Voting 앙상블 생성
+            logger.info("[Prediction] Soft Voting 앙상블 모델 생성 중...")
+            self.model = SoftVotingEnsemble(
+                cnn_model=self.cnn_model,
+                vit_model=self.vit_model,
+                num_classes=NUM_CLASSES,
+                weights=[DEFAULT_CNN_WEIGHT, DEFAULT_VIT_WEIGHT]
+            )
+            self.model = self.model.to(device)
+            self.model.eval()
+            
+            logger.info("[Prediction] ✅ 하이브리드 모델 로드 완료 (CNN 앙상블 + ViT)")
             self.is_loaded = True
         except Exception as e:
             logger.error(f"[Prediction] 모델 로드 실패: {e}", exc_info=True)
@@ -446,37 +484,20 @@ class PredictionPipeline:
             image_tensor = transform(image).unsqueeze(0).to(self.device)
             logger.info(f"[Prediction] [2/3] 이미지 전처리 완료: {image_tensor.shape}")
             
-            # 모델 예측
-            logger.info("[Prediction] [3/3] 모델 예측 시작")
+            # 모델 예측 (Soft Voting 앙상블)
+            logger.info("[Prediction] [3/3] 하이브리드 모델 예측 시작 (CNN + ViT)")
             with torch.no_grad():
-                # 모델이 dict인 경우 실제 모델 객체 찾기
-                model_to_use = self.model
-                if isinstance(self.model, dict):
-                    for key in ['model', 'net', 'network', 'state_dict']:
-                        if key in self.model and hasattr(self.model[key], '__call__'):
-                            model_to_use = self.model[key]
-                            break
-                    # dict에서 직접 호출 가능한 경우
-                    if not hasattr(model_to_use, '__call__'):
-                        # state_dict만 있는 경우는 예외 발생
-                        raise RuntimeError("모델 구조를 찾을 수 없습니다. 모델 아키텍처가 필요합니다.")
+                # Soft Voting 앙상블은 이미 확률을 반환함
+                ensemble_probs = self.model(image_tensor)
                 
-                # 예측 수행
-                output = model_to_use(image_tensor)
-                logger.info(f"[Prediction] [3/3] 모델 출력 형태: {output.shape if hasattr(output, 'shape') else type(output)}")
-                
-                # 출력 처리
-                if isinstance(output, (list, tuple)):
-                    output = output[0]  # 첫 번째 요소 사용
-                
-                # Softmax 적용하여 확률로 변환
-                if hasattr(output, 'shape') and len(output.shape) > 1:
-                    probs = torch.softmax(output, dim=1)[0]  # 첫 번째 배치 사용
+                # 배치 차원 제거 (첫 번째 샘플만 사용)
+                if len(ensemble_probs.shape) > 1:
+                    probs = ensemble_probs[0]  # [num_classes]
                 else:
-                    probs = torch.softmax(output, dim=0)
+                    probs = ensemble_probs
                 
                 probs_np = probs.cpu().numpy()
-                logger.info(f"[Prediction] [3/3] 확률 분포: {probs_np}")
+                logger.info(f"[Prediction] [3/3] 앙상블 확률 분포: {probs_np}")
             
             # 클래스 인덱스를 확률로 변환
             # 모델은 8개 클래스만 분류함
@@ -607,7 +628,7 @@ class PredictionPipeline:
             
             logger.info("[GradCAM] GradCAM 생성 시작 (gradcam_web_inference 모듈 사용)")
             
-            # 모델 경로 확인
+            # GradCAM은 CNN 앙상블 모델 사용 (기존 로직 유지)
             model_path = self.models_dir / "ensemble_finetune_best_60epochst.pt"
             if not model_path.exists():
                 logger.error(f"[GradCAM] 모델 파일을 찾을 수 없습니다: {model_path}")
@@ -622,18 +643,51 @@ class PredictionPipeline:
                 device=self.device
             )
             
-            # numpy array를 PIL Image로 변환
-            cam_pil = PILImage.fromarray(overlay_image)
+            # numpy array 검증 및 PIL Image로 변환
+            logger.info(f"[GradCAM] overlay_image shape: {overlay_image.shape}, dtype: {overlay_image.dtype}")
+            
+            # dtype이 uint8이 아니면 변환
+            if overlay_image.dtype != np.uint8:
+                logger.warning(f"[GradCAM] dtype이 uint8이 아닙니다: {overlay_image.dtype}, 변환합니다.")
+                overlay_image = np.clip(overlay_image, 0, 255).astype(np.uint8)
+            
+            # shape 검증 (H, W, 3) 또는 (H, W)
+            if len(overlay_image.shape) == 2:
+                # Grayscale인 경우 RGB로 변환
+                overlay_image = np.stack([overlay_image] * 3, axis=-1)
+                logger.info("[GradCAM] Grayscale 이미지를 RGB로 변환했습니다.")
+            elif len(overlay_image.shape) == 3 and overlay_image.shape[2] != 3:
+                logger.error(f"[GradCAM] 예상치 못한 이미지 shape: {overlay_image.shape}")
+                return None
+            
+            # PIL Image로 변환 (RGB 모드 명시)
+            try:
+                cam_pil = PILImage.fromarray(overlay_image, mode='RGB')
+            except Exception as e:
+                logger.error(f"[GradCAM] PIL Image 변환 실패: {e}")
+                logger.error(f"[GradCAM] overlay_image shape: {overlay_image.shape}, dtype: {overlay_image.dtype}, min: {overlay_image.min()}, max: {overlay_image.max()}")
+                return None
             
             # 바이트로 변환
             buffer = io.BytesIO()
-            cam_pil.save(buffer, format='PNG')
-            grad_cam_bytes = buffer.getvalue()
-            
-            logger.info(f"[GradCAM] 이미지 변환 완료: {len(grad_cam_bytes)} bytes")
+            try:
+                cam_pil.save(buffer, format='PNG')
+                buffer.seek(0)  # 버퍼 위치를 처음으로 리셋
+                grad_cam_bytes = buffer.getvalue()
+                
+                # PNG 헤더 검증 (첫 8바이트: 89 50 4E 47 0D 0A 1A 0A)
+                if len(grad_cam_bytes) < 8 or grad_cam_bytes[:8] != b'\x89PNG\r\n\x1a\n':
+                    logger.error(f"[GradCAM] PNG 헤더가 올바르지 않습니다. 첫 8바이트: {grad_cam_bytes[:8]}")
+                    return None
+                
+                logger.info(f"[GradCAM] 이미지 변환 완료: {len(grad_cam_bytes)} bytes (PNG 검증 통과)")
+            except Exception as e:
+                logger.error(f"[GradCAM] PNG 저장 실패: {e}", exc_info=True)
+                return None
             
             return grad_cam_bytes
             
         except Exception as e:
             logger.error(f"[GradCAM] 생성 중 오류: {e}", exc_info=True)
             return None
+
